@@ -1,0 +1,15 @@
+# Generated intentionally, not by `--generate-ignore-file`.
+#
+# Each entry is a probe endpoint with no error response to document (§69.2).
+# Keeping the list explicit means a newly added endpoint that forgets its error
+# responses still fails review.
+implementation_examples/openapi.yaml:
+  operation-4xx-response:
+    - '#/paths/~1healthz/get/responses'
+    - '#/paths/~1readyz/get/responses'
+    - '#/paths/~1.well-known~1oolix-manifest-jwks.json/get/responses'
+  no-server-example.com:
+    # The localhost entry is the documented local stack (65, 95's dev seed), not
+    # a placeholder someone forgot to replace. Deployed hosts are supplied
+    # through server variables so no real domain is hard-coded.
+    - '#/servers/0/url'

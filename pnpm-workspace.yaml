@@ -1,0 +1,19 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# pnpm 10 requires postinstall scripts to be opted in explicitly. These four
+# genuinely need them: Prisma fetches/builds its query engine, and esbuild and
+# unrs-resolver install a platform-native binary.
+onlyBuiltDependencies:
+  - '@prisma/client'
+  - '@prisma/engines'
+  - esbuild
+  - prisma
+  - unrs-resolver
+
+# @nestjs/platform-fastify and our direct `fastify` dependency resolved to two
+# different 5.x releases, which makes FastifyRequest/FastifyReply structurally
+# incompatible across the boundary. Pin one version for the whole workspace.
+overrides:
+  fastify: '5.11.3'

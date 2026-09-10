@@ -1,0 +1,9 @@
+{
+  // The build tsconfig excludes specs so they never reach `dist`. Without this
+  // second project they would also escape the typecheck gate, and vitest only
+  // strips types -- it does not check them.
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

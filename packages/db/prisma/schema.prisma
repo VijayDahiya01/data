@@ -1,0 +1,1601 @@
+// ===========================================================================
+// Oolix central control-plane schema -- spec v5 §73 (canonical), §96 (inline
+// critical SQL). §73 supersedes the earlier §20 and §54 field lists.
+//
+// THE CENTRAL DB EXCLUSION (§54, §73) IS A HARD ARCHITECTURAL RULE:
+//   There is no `customers` table.
+//   There is no `audience_members` / `segment_members` table.
+//   There is no `partner_transactions` or `partner_purchase_history` table.
+//   There is no cross-partner identity graph.
+//   No column anywhere stores a partner_user_id.
+// Customer membership and user-level ad decisions stay inside the Data
+// Partner (§3, §12). If a future migration proposes a table keyed by a
+// partner's user identifier, it contradicts the product's core claim.
+//
+// Conventions (§73):
+//   - UUID primary keys.
+//   - Money = BIGINT minor units + CHAR(3) currency. Never Float/Decimal.
+//   - Timestamps are TIMESTAMPTZ, always UTC (§53).
+//   - Migrations are expand/contract for zero-downtime.
+// ===========================================================================
+
+// Prisma 7: the generated client lives in the repo tree and the connection
+// URL moved to prisma.config.ts (see that file). The client connects through
+// a driver adapter, configured in src/prisma/prisma.service.ts.
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums -- mirror @oolix/contracts. The TypeScript enums in that package and
+// these database enums must stay in lockstep; a drift test asserts it.
+// ---------------------------------------------------------------------------
+
+enum OrganizationType {
+  BUYER
+  DATA_PARTNER
+  BUYER_AND_PARTNER
+  NETWORK_SPONSOR
+  AGENCY
+}
+
+enum VerificationStatus {
+  SIGNUP_STARTED
+  EMAIL_VERIFIED
+  ORGANIZATION_CREATED
+  BUSINESS_VERIFICATION_PENDING
+  BUSINESS_VERIFIED
+  ROLE_ONBOARDING
+  ACTIVE
+  SUSPENDED
+}
+
+enum UserStatus {
+  PENDING_EMAIL_VERIFICATION
+  ACTIVE
+  DISABLED
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REMOVED
+}
+
+// §66.1 canonical role enum.
+enum Role {
+  BUYER_ADMIN
+  BUYER_OPERATOR
+  PARTNER_ADMIN
+  PARTNER_SECURITY_ADMIN
+  PARTNER_CAMPAIGN_APPROVER
+  NETWORK_ADMIN
+  FINANCE
+  ANALYST
+  OOLIX_ADMIN
+}
+
+// §66.2 network admission modes.
+enum NetworkMode {
+  PRIVATE
+  CURATED
+  MARKETPLACE
+}
+
+enum NetworkMembershipStatus {
+  INVITED
+  ACTIVE
+  DECLINED
+  REMOVED
+}
+
+// §89 canonical channel enum. Exactly these four strings, everywhere.
+enum Channel {
+  PARTNER_WEB
+  PARTNER_APP
+  META
+  GOOGLE
+}
+
+enum ChannelProvider {
+  META
+  GOOGLE
+}
+
+enum Objective {
+  QUALIFIED_LEADS
+  CONVERSIONS
+  CLICKS
+  AWARENESS
+}
+
+enum PricingModel {
+  CPM
+  CPC
+  CPL
+  CPQL
+  FIXED
+  HYBRID
+}
+
+enum Surface {
+  web
+  ios
+  android
+  react_native
+  flutter
+  backend_native
+}
+
+enum PlacementFormat {
+  banner
+  native_card
+  carousel
+  inline
+  modal
+}
+
+enum PlacementStatus {
+  DRAFT
+  ACTIVE
+  DISABLED
+}
+
+enum PlacementFallback {
+  NO_AD
+  HOUSE_CONTENT
+}
+
+enum SegmentStatus {
+  DRAFT
+  PUBLISHED
+  SUSPENDED
+  ARCHIVED
+}
+
+enum ReachBucket {
+  UNDER_10K
+  TEN_K_50K        @map("10K_50K")
+  FIFTY_K_100K     @map("50K_100K")
+  HUNDRED_K_250K   @map("100K_250K")
+  TWOFIFTY_K_500K  @map("250K_500K")
+  FIVEHUNDRED_K_1M @map("500K_1M")
+  OVER_1M
+}
+
+enum RefreshFrequency {
+  FIFTEEN_MIN @map("15m")
+  HOURLY      @map("hourly")
+  SIX_HOURS   @map("6h")
+  DAILY       @map("daily")
+  WEEKLY      @map("weekly")
+}
+
+enum ConsentEligibility {
+  ELIGIBLE
+  MIXED
+  UNAVAILABLE
+}
+
+enum ListingVisibility {
+  PRIVATE_NETWORK
+  CURATED
+  MARKETPLACE
+}
+
+// §76 canonical states.
+enum CampaignStatus {
+  DRAFT
+  SUBMITTED
+  PARTIALLY_APPROVED
+  READY
+  PARTIALLY_LIVE
+  LIVE
+  PAUSED
+  ENDED
+  SETTLED
+}
+
+// §76 + §101. PARTNER_REVIEW is canonical; PENDING_APPROVAL does not exist.
+enum PartnerRequestStatus {
+  DRAFT
+  PARTNER_REVIEW
+  CHANGE_REQUESTED
+  APPROVED
+  REJECTED
+  REVOKED
+  EXPIRED
+}
+
+enum ActivationStatus {
+  PENDING_CHANNEL_CHECK
+  READY
+  SYNCING
+  LIVE
+  PAUSED
+  FAILED
+  ENDING
+  ENDED
+}
+
+enum ExternalSyncStatus {
+  NOT_STARTED
+  PREPARING
+  UPLOADING
+  PROCESSING
+  READY
+  FAILED
+  REMOVING
+  REMOVED
+}
+
+enum PayoutStatus {
+  PENDING
+  CALCULATED
+  REVIEWED
+  APPROVED
+  PAID
+  DISPUTED
+  ADJUSTED
+  REJECTED_DISPUTE
+}
+
+enum LeadState {
+  UNREDEEMED
+  RECEIVED
+  VALID
+  QUALIFIED
+  CONVERTED
+  REJECTED
+}
+
+enum PartnerDecision {
+  APPROVE
+  REQUEST_CHANGE
+  REJECT
+  REVOKE
+}
+
+enum CreativeType {
+  IMAGE
+  NATIVE_CARD
+}
+
+enum CreativeStatus {
+  UPLOADING
+  READY
+  REJECTED
+}
+
+enum CreativeDecisionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AgentStatus {
+  ACTIVE
+  REVOKED
+  BLOCKED
+}
+
+enum ChannelConnectionStatus {
+  NOT_CONNECTED
+  PENDING
+  CONNECTED
+  EXPIRED
+  REVOKED
+  ERROR
+}
+
+enum PartnerReadiness {
+  PROFILE_INCOMPLETE
+  POLICY_PENDING
+  AGENT_PENDING
+  CONNECTOR_PENDING
+  SEGMENTS_PENDING
+  PLACEMENTS_PENDING
+  TEST_CAMPAIGN_PENDING
+  READY_FOR_CAMPAIGNS
+  SUSPENDED
+}
+
+enum FinancialEventType {
+  MEDIA_ACCRUAL
+  OUTCOME_ACCRUAL
+  PLATFORM_FEE
+  PARTNER_PAYOUT_BASIS
+  ADJUSTMENT
+  TAX
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  VOID
+  REVIEW_REQUIRED
+}
+
+enum KillSwitchScope {
+  AGENT
+  PLACEMENT
+  ACTIVATION
+  CHANNEL
+  PARTNER_ALL
+}
+
+enum ReconciliationStatus {
+  PASS
+  REVIEW_REQUIRED
+  RESOLVED
+}
+
+// ===========================================================================
+// v6 — Buyer-defined audiences and Partner capability matching
+//
+// The v6 change spec inverts the Buyer flow: instead of browsing Partner
+// segments, the Buyer describes the audience they want and Oolix finds which
+// Partners can EVALUATE that description. The privacy line does not move —
+// Oolix stores the rule and the Partner's capability metadata; which people
+// match stays inside the Partner (v6 §17).
+// ===========================================================================
+
+/// v6 §4: the taxonomy is Oolix-controlled. Buyers pick from it and never
+/// write an expression, which is what keeps arbitrary SQL out of a Partner's
+/// database.
+enum AttributeCategory {
+  DEMOGRAPHIC
+  GEOGRAPHY
+  COMMERCE
+  PAYMENT_BEHAVIOUR
+  TRAVEL
+  ENGAGEMENT
+}
+
+enum AttributeDataType {
+  NUMBER
+  ENUM
+  BOOLEAN
+  ID
+}
+
+/// v6 §4 MVP operator set. Deliberately small: every operator here is one a
+/// Partner can evaluate against a restricted view without a general query
+/// engine.
+enum RuleOperator {
+  EQ
+  IN
+  LTE
+  GTE
+  BETWEEN
+}
+
+/// v6 §4: "Do not enable highly sensitive classes in the MVP without explicit
+/// legal/policy design." The class travels with the attribute so that decision
+/// is enforceable rather than remembered.
+enum PolicyClass {
+  GENERAL
+  RESTRICTED
+  SENSITIVE
+}
+
+enum AudienceGroupStatus {
+  DRAFT
+  READY
+  ARCHIVED
+}
+
+/// v6 §16: editing a READY version creates a new one. Live campaigns stay on
+/// the version their Partner approved.
+enum AudienceVersionStatus {
+  DRAFT
+  READY
+  SUPERSEDED
+}
+
+enum MatchStatus {
+  COMPATIBLE
+  INCOMPATIBLE
+}
+
+/// v6 §16. BELOW_THRESHOLD is a successful evaluation, not a failure: the
+/// Partner ran the rule and the cohort was too small to publish (§72).
+enum ReachEstimateStatus {
+  REQUESTED
+  PROCESSING
+  READY
+  BELOW_THRESHOLD
+  UNAVAILABLE
+  FAILED
+  EXPIRED
+}
+
+enum CapabilityStatus {
+  ACTIVE
+  SUPERSEDED
+}
+
+/// v6 §19 migration compatibility. Prebuilt Partner segments remain valid
+/// supply for Partners with an existing CDP; the Audience Builder is simply
+/// the primary path now.
+enum TargetingSource {
+  AUDIENCE_GROUP
+  PREBUILT_SEGMENT
+}
+
+// ---------------------------------------------------------------------------
+// Identity, organizations and networks (§66, §73)
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  /// OIDC subject. Identity lives in the IdP; Oolix stores only the subject
+  /// claim so the provider can be swapped without touching authorization.
+  authSubject  String     @unique @map("auth_subject")
+  email        String     @unique
+  name         String
+  status       UserStatus @default(PENDING_EMAIL_VERIFICATION)
+  /// §35.1: the accepted terms version is retained for audit.
+  termsVersion String?    @map("terms_version")
+  acceptedAt   DateTime?  @map("accepted_at") @db.Timestamptz(6)
+  country      String?    @db.Char(2)
+  mfaEnrolled  Boolean    @default(false) @map("mfa_enrolled")
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  memberships      OrganizationMember[]
+  approvals        Approval[]
+  createdCampaigns Campaign[]            @relation("CampaignCreatedBy")
+  bootstrapTokens  AgentBootstrapToken[]
+
+  /// v6 §3: audience groups this user created.
+  audienceGroups AudienceGroup[]
+
+  @@map("users")
+}
+
+model Organization {
+  id                 String             @id @default(uuid()) @db.Uuid
+  type               OrganizationType
+  name               String
+  /// Verified company domain -- the basis of §66.3 manual verification.
+  domain             String
+  verificationStatus VerificationStatus @default(SIGNUP_STARTED) @map("verification_status")
+  country            String             @db.Char(2)
+  industry           String?
+  taxId              String?            @map("tax_id")
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  members            OrganizationMember[]
+  partnerProfile     PartnerProfile?
+  buyerProfile       BuyerProfile?
+  sponsoredNetworks  Network[]             @relation("NetworkSponsor")
+  networkMemberships NetworkMembership[]
+  segments           Segment[]
+  placements         Placement[]
+  campaigns          Campaign[]
+  partnerRequests    PartnerRequest[]
+  agents             Agent[]
+  bootstrapTokens    AgentBootstrapToken[]
+  channelConnections ChannelConnection[]
+  attributionTokens  AttributionToken[]
+  leadEvents         LeadEvent[]
+  invoices           Invoice[]
+  payouts            Payout[]
+  auditEvents        AuditEvent[]
+  killSwitches       KillSwitch[]
+  billingProfiles    BillingProfile[]
+  brands             Brand[]
+  partnerPolicies    PartnerPolicy[]
+  deliveryBatches    DeliveryBatch[]
+  notifications      Notification[]
+
+  // v6: Buyer-defined audiences and the capability metadata that matches them.
+  audienceGroups      AudienceGroup[]
+  partnerCapabilities PartnerCapability[]
+  partnerMatches      PartnerMatchSnapshot[]
+  reachEstimates      ReachEstimate[]
+
+  @@index([type, verificationStatus])
+  @@index([domain])
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  orgId     String           @map("org_id") @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  role      Role
+  status    MembershipStatus @default(ACTIVE)
+  invitedAt DateTime         @default(now()) @map("invited_at") @db.Timestamptz(6)
+  updatedAt DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// A user may hold several roles in one organization (§66); the role is
+  /// therefore part of the key rather than a single column per membership.
+  @@id([orgId, userId, role])
+  @@index([userId])
+  @@map("organization_members")
+}
+
+model Network {
+  id            String      @id @default(uuid()) @db.Uuid
+  sponsorOrgId  String      @map("sponsor_org_id") @db.Uuid
+  name          String
+  mode          NetworkMode
+  policyVersion String      @default("N-1") @map("policy_version")
+  status        String      @default("ACTIVE")
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  sponsor     Organization        @relation("NetworkSponsor", fields: [sponsorOrgId], references: [id])
+  memberships NetworkMembership[]
+  offers      SegmentOffer[]
+
+  @@index([sponsorOrgId])
+  @@map("networks")
+}
+
+model NetworkMembership {
+  networkId String                  @map("network_id") @db.Uuid
+  orgId     String                  @map("org_id") @db.Uuid
+  status    NetworkMembershipStatus @default(INVITED)
+  /// §66.2: an org may participate as buyer, partner, or both in one network.
+  roleFlags Json                    @default("{}") @map("role_flags")
+  invitedAt DateTime                @default(now()) @map("invited_at") @db.Timestamptz(6)
+  joinedAt  DateTime?               @map("joined_at") @db.Timestamptz(6)
+
+  network      Network      @relation(fields: [networkId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@id([networkId, orgId])
+  @@index([orgId, status])
+  @@map("network_memberships")
+}
+
+// ---------------------------------------------------------------------------
+// Profiles (§37, §36, §50)
+// ---------------------------------------------------------------------------
+
+model PartnerProfile {
+  orgId               String           @id @map("org_id") @db.Uuid
+  readinessStatus     PartnerReadiness @default(PROFILE_INCOMPLETE) @map("readiness_status")
+  activePolicyId      String?          @map("active_policy_id") @db.Uuid
+  payoutProfileId     String?          @map("payout_profile_id") @db.Uuid
+  /// Approval SLA in days (§101 default 7).
+  approvalSlaDays     Int              @default(7) @map("approval_sla_days")
+  /// §72: a Partner may raise, never lower, the publishable cohort floor.
+  minPublishableReach Int              @default(1000) @map("min_publishable_reach")
+  createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("partner_profiles")
+}
+
+/// Versioned Partner advertising policy (§37 step 2, §41).
+/// Approvals bind to a policy_version so a later policy edit cannot silently
+/// re-scope an already-approved campaign.
+model PartnerPolicy {
+  id                 String   @id @default(uuid()) @db.Uuid
+  partnerOrgId       String   @map("partner_org_id") @db.Uuid
+  version            Int
+  allowedCategories  String[] @map("allowed_categories")
+  blockedCategories  String[] @map("blocked_categories")
+  blockedAdvertisers String[] @map("blocked_advertisers")
+  geographies        String[]
+  prohibitedUse      String[] @map("prohibited_use")
+  /// Free-form commercial rules that do not warrant their own columns yet.
+  commercialPolicy   Json     @default("{}") @map("commercial_policy")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [partnerOrgId], references: [id], onDelete: Cascade)
+
+  @@unique([partnerOrgId, version])
+  @@map("partner_policies")
+}
+
+model BuyerProfile {
+  orgId            String   @id @map("org_id") @db.Uuid
+  billingProfileId String?  @map("billing_profile_id") @db.Uuid
+  defaultBrandId   String?  @map("default_brand_id") @db.Uuid
+  /// §36 onboarding status drives what the Buyer may do (draft vs submit).
+  onboardingStatus String   @default("PROFILE_INCOMPLETE") @map("onboarding_status")
+  crmWebhookUrl    String?  @map("crm_webhook_url")
+  /// Hashed at rest (§71). The plaintext key is shown once at creation.
+  crmApiKeyHash    Bytes?   @map("crm_api_key_hash")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("buyer_profiles")
+}
+
+model Brand {
+  id            String   @id @default(uuid()) @db.Uuid
+  buyerOrgId    String   @map("buyer_org_id") @db.Uuid
+  name          String
+  logoUri       String?  @map("logo_uri")
+  category      String
+  website       String
+  /// §40.2: click/lead campaigns may only point at an allow-listed domain.
+  landingDomain String   @map("landing_domain")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [buyerOrgId], references: [id], onDelete: Cascade)
+  campaigns    Campaign[]
+
+  @@index([buyerOrgId])
+  @@map("brands")
+}
+
+model BillingProfile {
+  id               String   @id @default(uuid()) @db.Uuid
+  orgId            String   @map("org_id") @db.Uuid
+  legalName        String   @map("legal_name")
+  address          Json
+  taxId            String?  @map("tax_id")
+  currency         String   @db.Char(3)
+  /// Reference into the payment provider. Oolix never stores card data.
+  paymentMethodRef String?  @map("payment_method_ref")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@map("billing_profiles")
+}
+
+// ---------------------------------------------------------------------------
+// Partner supply: segments and placements (§38, §43, §72, §73)
+// ---------------------------------------------------------------------------
+
+model Segment {
+  id                     String             @id @default(uuid()) @db.Uuid
+  partnerOrgId           String             @map("partner_org_id") @db.Uuid
+  /// Partner-internal segment key (e.g. RECENT_TRAVELLER_60D). The Partner
+  /// Agent resolves membership by THIS value against its own store; Oolix
+  /// never resolves it to people.
+  internalKey            String             @map("internal_key")
+  displayName            String             @map("display_name")
+  description            String
+  /// Safe, Buyer-visible metadata only (§38.1). Never a member list.
+  safeMetadata           Json               @map("safe_metadata")
+  category               String
+  geographies            String[]
+  reachBucket            ReachBucket        @map("reach_bucket")
+  /// §72: bucket republication is rate-limited to defeat count differencing.
+  reachBucketPublishedAt DateTime?          @map("reach_bucket_published_at") @db.Timestamptz(6)
+  freshnessAt            DateTime?          @map("freshness_at") @db.Timestamptz(6)
+  refreshFrequency       RefreshFrequency   @map("refresh_frequency")
+  consentEligibility     ConsentEligibility @default(ELIGIBLE) @map("consent_eligibility")
+  allowedChannels        Channel[]          @map("allowed_channels")
+  allowedCategories      String[]           @map("allowed_categories")
+  blockedCategories      String[]           @map("blocked_categories")
+  status                 SegmentStatus      @default(DRAFT)
+  version                Int                @default(1)
+  createdAt              DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization    Organization     @relation(fields: [partnerOrgId], references: [id], onDelete: Cascade)
+  offers          SegmentOffer[]
+  partnerRequests PartnerRequest[]
+
+  @@unique([partnerOrgId, internalKey])
+  @@index([status, reachBucket])
+  @@index([partnerOrgId, status])
+  @@map("segments")
+}
+
+/// §66.2 / §73: network-specific price and visibility overrides. The base
+/// Partner listing is never duplicated -- an offer with networkId = null is
+/// the default listing.
+model SegmentOffer {
+  id             String            @id @default(uuid()) @db.Uuid
+  segmentId      String            @map("segment_id") @db.Uuid
+  networkId      String?           @map("network_id") @db.Uuid
+  pricingModel   PricingModel      @map("pricing_model")
+  unitPriceMinor BigInt            @map("unit_price_minor")
+  currency       String            @db.Char(3)
+  visibility     ListingVisibility @default(PRIVATE_NETWORK)
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  segment Segment  @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  network Network? @relation(fields: [networkId], references: [id], onDelete: Cascade)
+
+  @@unique([segmentId, networkId])
+  @@index([visibility])
+  @@map("segment_offers")
+}
+
+model Placement {
+  id                  String            @id @default(uuid()) @db.Uuid
+  partnerOrgId        String            @map("partner_org_id") @db.Uuid
+  /// Stable machine key used by the SDK, e.g. booking_success_offer (§43).
+  placementKey        String            @map("placement_key")
+  displayName         String            @map("display_name")
+  surface             Surface
+  format              PlacementFormat
+  width               Int?
+  height              Int?
+  contextTags         String[]          @map("context_tags")
+  allowedCategories   String[]          @map("allowed_categories")
+  blockedCategories   String[]          @map("blocked_categories")
+  /// §43: default cap applied when a campaign does not request a stricter one.
+  maxFrequencyDefault Int               @default(2) @map("max_frequency_default")
+  fallback            PlacementFallback @default(NO_AD)
+  policy              Json              @default("{}")
+  status              PlacementStatus   @default(DRAFT)
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization      Organization       @relation(fields: [partnerOrgId], references: [id], onDelete: Cascade)
+  activations       Activation[]
+  attributionTokens AttributionToken[]
+
+  @@unique([partnerOrgId, placementKey])
+  @@index([partnerOrgId, status])
+  @@map("placements")
+}
+
+// ---------------------------------------------------------------------------
+// Campaigns, creatives, requests, approvals, activations (§40, §41, §70, §73)
+// ---------------------------------------------------------------------------
+
+model Campaign {
+  id             String         @id @default(uuid()) @db.Uuid
+  buyerOrgId     String         @map("buyer_org_id") @db.Uuid
+  brandId        String?        @map("brand_id") @db.Uuid
+  name           String         @db.VarChar(120)
+  objective      Objective
+  category       String
+  /// §81: purpose is explicit and versioned, never a permanent "eligible"
+  /// boolean. It is carried into the signed manifest and the consent check.
+  purposeId      String         @map("purpose_id")
+  budgetMinor    BigInt         @map("budget_minor")
+  currency       String         @db.Char(3)
+  status         CampaignStatus @default(DRAFT)
+  startAt        DateTime       @map("start_at") @db.Timestamptz(6)
+  endAt          DateTime       @map("end_at") @db.Timestamptz(6)
+  geographies    String[]
+  landingUrl     String?        @map("landing_url")
+  /// §40.8 lead definition: qualified statuses and duplicate window.
+  leadDefinition Json           @default("{}") @map("lead_definition")
+  version        Int            @default(1)
+  createdBy      String         @map("created_by") @db.Uuid
+  submittedAt    DateTime?      @map("submitted_at") @db.Timestamptz(6)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization     Organization      @relation(fields: [buyerOrgId], references: [id], onDelete: Cascade)
+  brand            Brand?            @relation(fields: [brandId], references: [id])
+  creator          User              @relation("CampaignCreatedBy", fields: [createdBy], references: [id])
+  creatives        Creative[]
+  creativeVersions CreativeVersion[]
+  partnerRequests  PartnerRequest[]
+  invoices         Invoice[]
+
+  /// v6 §9: the audience version this campaign is frozen to.
+  audienceLinks CampaignAudienceLink[]
+
+  @@index([buyerOrgId, status])
+  @@index([startAt, endAt])
+  @@map("campaigns")
+}
+
+model Creative {
+  id         String       @id @default(uuid()) @db.Uuid
+  campaignId String       @map("campaign_id") @db.Uuid
+  name       String
+  type       CreativeType
+  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  campaign Campaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  versions CreativeVersion[]
+
+  @@index([campaignId])
+  @@map("creatives")
+}
+
+/// §70: every edit creates an immutable version. Partner approval binds to a
+/// specific version AND its content hash, so swapping bytes behind an
+/// approved creative is detectable. Rollback selects an earlier approved
+/// version and generates a NEW manifest version -- it never mutates in place.
+model CreativeVersion {
+  id              String         @id @default(uuid()) @db.Uuid
+  creativeId      String         @map("creative_id") @db.Uuid
+  campaignId      String         @map("campaign_id") @db.Uuid
+  version         Int
+  type            CreativeType
+  assetUri        String?        @map("asset_uri")
+  thumbnailUri    String?        @map("thumbnail_uri")
+  mimeType        String?        @map("mime_type")
+  width           Int?
+  height          Int?
+  fileSizeBytes   Int?           @map("file_size_bytes")
+  headline        String?
+  body            String?
+  cta             String?
+  destinationUrl  String?        @map("destination_url")
+  legalDisclaimer String?        @map("legal_disclaimer")
+  status          CreativeStatus @default(UPLOADING)
+  contentSha256   Bytes?         @map("content_sha256")
+  metadata        Json           @default("{}")
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  creative  Creative                  @relation(fields: [creativeId], references: [id], onDelete: Cascade)
+  campaign  Campaign                  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  decisions PartnerCreativeDecision[]
+  tokens    AttributionToken[]
+
+  @@unique([creativeId, version])
+  @@index([campaignId, status])
+  @@map("creative_versions")
+}
+
+model PartnerRequest {
+  id                       String               @id @default(uuid()) @db.Uuid
+  campaignId               String               @map("campaign_id") @db.Uuid
+  partnerOrgId             String               @map("partner_org_id") @db.Uuid
+  /// v6 §19: legacy prebuilt-segment targeting. Nullable because the primary
+  /// path is now an Audience Group; a Partner with an existing CDP audience can
+  /// still be requested this way.
+  segmentId                String?              @map("segment_id") @db.Uuid
+  targetingSource          TargetingSource      @default(PREBUILT_SEGMENT) @map("targeting_source")
+  /// v6 §10: approval binds to the audience version AND its rule hash, so a
+  /// later edit cannot silently change what the Partner agreed to serve.
+  audienceGroupId          String?              @map("audience_group_id") @db.Uuid
+  audienceVersion          Int?                 @map("audience_version")
+  audienceRuleHash         String?              @map("audience_rule_hash") @db.Char(64)
+  reachEstimateId          String?              @map("reach_estimate_id") @db.Uuid
+  requestVersion           Int                  @default(1) @map("request_version")
+  status                   PartnerRequestStatus @default(DRAFT)
+  /// §40.9: immutable snapshot frozen at submit. The Partner approves THIS,
+  /// not a live join that could change under them.
+  snapshotJson             Json                 @map("snapshot_json")
+  audienceExpansionAllowed Boolean              @default(false) @map("audience_expansion_allowed")
+  submittedAt              DateTime?            @map("submitted_at") @db.Timestamptz(6)
+  /// §101: 7-day review window; expiry is neither approval nor rejection.
+  expiresAt                DateTime?            @map("expires_at") @db.Timestamptz(6)
+  extensionCount           Int                  @default(0) @map("extension_count") @db.SmallInt
+  createdAt                DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  campaign           Campaign                  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  organization       Organization              @relation(fields: [partnerOrgId], references: [id], onDelete: Cascade)
+  segment            Segment?                  @relation(fields: [segmentId], references: [id])
+  audienceGroup      AudienceGroup?            @relation(fields: [audienceGroupId], references: [id])
+  audienceVersionRef AudienceGroupVersion?     @relation(fields: [audienceGroupId, audienceVersion], references: [audienceGroupId, version])
+  reachEstimate      ReachEstimate?            @relation(fields: [reachEstimateId], references: [id])
+  channelRequests    ChannelRequest[]
+  approvals          Approval[]
+  activations        Activation[]
+  creativeDecisions  PartnerCreativeDecision[]
+  commercialTerms    CommercialTerms?
+
+  @@unique([campaignId, partnerOrgId, requestVersion])
+  @@index([partnerOrgId, status])
+  @@index([status, expiresAt])
+  @@map("partner_requests")
+}
+
+/// One row per requested channel within a Partner request (§40.5). Each
+/// becomes its own Activation on approval -- §40.5 forbids a single
+/// ambiguous activation spanning channels.
+model ChannelRequest {
+  id                 String   @id @default(uuid()) @db.Uuid
+  requestId          String   @map("request_id") @db.Uuid
+  channel            Channel
+  placementIds       String[] @map("placement_ids")
+  allocationMinor    BigInt   @map("allocation_minor")
+  frequencyCap       Json     @map("frequency_cap")
+  creativeVersionIds String[] @map("creative_version_ids")
+
+  request PartnerRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, channel])
+  @@map("channel_requests")
+}
+
+model Approval {
+  id                   String          @id @default(uuid()) @db.Uuid
+  requestId            String          @map("request_id") @db.Uuid
+  actorUserId          String          @map("actor_user_id") @db.Uuid
+  decision             PartnerDecision
+  decisionVersion      Int             @map("decision_version")
+  reason               String?
+  /// §83: every decision records the exact policy and creative it bound to.
+  policyVersion        String          @map("policy_version")
+  requestVersion       Int             @map("request_version")
+  approvedChannels     Channel[]       @map("approved_channels")
+  approvedPlacementIds String[]        @map("approved_placement_ids")
+  approvedBudgetMinor  BigInt?         @map("approved_budget_minor")
+  approvedAt           DateTime        @default(now()) @map("approved_at") @db.Timestamptz(6)
+
+  request PartnerRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  actor   User           @relation(fields: [actorUserId], references: [id])
+
+  @@unique([requestId, decisionVersion])
+  @@index([requestId])
+  @@map("approvals")
+}
+
+model PartnerCreativeDecision {
+  id                String                 @id @default(uuid()) @db.Uuid
+  partnerRequestId  String                 @map("partner_request_id") @db.Uuid
+  creativeVersionId String                 @map("creative_version_id") @db.Uuid
+  status            CreativeDecisionStatus @default(PENDING)
+  reason            String?
+  reviewedAt        DateTime?              @map("reviewed_at") @db.Timestamptz(6)
+
+  request         PartnerRequest  @relation(fields: [partnerRequestId], references: [id], onDelete: Cascade)
+  creativeVersion CreativeVersion @relation(fields: [creativeVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([partnerRequestId, creativeVersionId])
+  @@map("partner_creative_decisions")
+}
+
+/// §13: one activation per Partner x channel. Never collapse these.
+model Activation {
+  id              String           @id @default(uuid()) @db.Uuid
+  requestId       String           @map("request_id") @db.Uuid
+  channel         Channel
+  placementId     String?          @map("placement_id") @db.Uuid
+  status          ActivationStatus @default(PENDING_CHANNEL_CHECK)
+  /// Increments on every re-signature; the Agent uses it to detect drift.
+  manifestVersion Int              @default(0) @map("manifest_version")
+  budgetMinor     BigInt           @map("budget_minor")
+  currency        String           @db.Char(3)
+  /// §77: why an activation is not running, using the canonical error codes.
+  statusReason    String?          @map("status_reason")
+  startedAt       DateTime?        @map("started_at") @db.Timestamptz(6)
+  endedAt         DateTime?        @map("ended_at") @db.Timestamptz(6)
+
+  /// v6 §11: what the Partner's own Agent has compiled locally, so §18.2's
+  /// Activation page can show materialization freshness and version.
+  ///
+  /// These three are the WHOLE of what §11 lets Oolix keep: "status/version/
+  /// freshness/aggregate outcomes". There is deliberately no member count and
+  /// no member here — the compiled audience never leaves the Partner.
+  materializationStatus  String?   @map("materialization_status") @db.VarChar(24)
+  materializationVersion Int?      @map("materialization_version")
+  materializedAt         DateTime? @map("materialized_at") @db.Timestamptz(6)
+
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  request           PartnerRequest     @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  placement         Placement?         @relation(fields: [placementId], references: [id])
+  manifests         Manifest[]
+  externalResources ExternalResource[]
+  metrics           AggregateMetric[]
+  tokens            AttributionToken[]
+  financialEvents   FinancialEvent[]
+  payouts           Payout[]
+  reconciliations   Reconciliation[]
+
+  @@index([requestId])
+  @@index([status])
+  @@map("activations")
+}
+
+/// §75: the signed, versioned, partner-bound manifest. Persisted so the
+/// control plane can serve the exact bytes the Agent verified, and so an
+/// audit can reconstruct what was authorised at any point in time.
+model Manifest {
+  id              String    @id @default(uuid()) @db.Uuid
+  activationId    String    @map("activation_id") @db.Uuid
+  manifestVersion Int       @map("manifest_version")
+  /// Compact JWS (ES256). The payload is canonical JSON with sorted keys.
+  jws             String
+  kid             String
+  issuedAt        DateTime  @map("issued_at") @db.Timestamptz(6)
+  configExpiresAt DateTime  @map("config_expires_at") @db.Timestamptz(6)
+  payloadSha256   Bytes     @map("payload_sha256")
+  revokedAt       DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  activation Activation @relation(fields: [activationId], references: [id], onDelete: Cascade)
+
+  @@unique([activationId, manifestVersion])
+  @@index([configExpiresAt])
+  @@map("manifests")
+}
+
+// ---------------------------------------------------------------------------
+// Partner Agent identity (§69, §92, §96)
+// ---------------------------------------------------------------------------
+
+model Agent {
+  id                String      @id @default(uuid()) @db.Uuid
+  partnerOrgId      String      @map("partner_org_id") @db.Uuid
+  clientId          String      @unique @map("client_id") @db.VarChar(120)
+  /// The Agent's P-256 PUBLIC key. The private key never leaves Partner
+  /// infrastructure (§69.3) -- Oolix cannot impersonate an Agent.
+  publicJwk         Json        @map("public_jwk")
+  version           String      @db.VarChar(32)
+  capabilities      Channel[]
+  status            AgentStatus @default(ACTIVE)
+  /// §78.2: heartbeat older than 5 minutes alerts.
+  lastHeartbeatAt   DateTime?   @map("last_heartbeat_at") @db.Timestamptz(6)
+  lastConfigVersion Int         @default(0) @map("last_config_version")
+  configAgeSeconds  Int?        @map("config_age_seconds")
+  /// Populated during a key rotation's 24h dual-key overlap (§69.3).
+  previousPublicJwk Json?       @map("previous_public_jwk")
+  keyRotatedAt      DateTime?   @map("key_rotated_at") @db.Timestamptz(6)
+  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  revokedAt         DateTime?   @map("revoked_at") @db.Timestamptz(6)
+
+  organization    Organization    @relation(fields: [partnerOrgId], references: [id], onDelete: Cascade)
+  deliveryBatches DeliveryBatch[]
+
+  @@index([partnerOrgId, status])
+  @@map("agents")
+}
+
+/// §92.1: single-use, 15-minute bootstrap token. Only SHA-256(token) is
+/// stored -- the plaintext is displayed once and never recoverable.
+model AgentBootstrapToken {
+  id           String    @id @default(uuid()) @db.Uuid
+  partnerOrgId String    @map("partner_org_id") @db.Uuid
+  tokenHash    Bytes     @unique @map("token_hash")
+  generatedBy  String    @map("generated_by") @db.Uuid
+  generatedAt  DateTime  @default(now()) @map("generated_at") @db.Timestamptz(6)
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt       DateTime? @map("used_at") @db.Timestamptz(6)
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [partnerOrgId], references: [id], onDelete: Cascade)
+  generator    User         @relation(fields: [generatedBy], references: [id])
+
+  @@index([partnerOrgId])
+  @@index([expiresAt])
+  @@map("agent_bootstrap_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// External channels (§17, §46, §73)
+// ---------------------------------------------------------------------------
+
+/// §17: Oolix stores account IDs, authorization state and scopes. It never
+/// stores Partner usernames or passwords, and credentials that execute an
+/// upload live in the Partner secret store alongside the Agent.
+model ChannelConnection {
+  id              String                  @id @default(uuid()) @db.Uuid
+  partnerOrgId    String                  @map("partner_org_id") @db.Uuid
+  provider        ChannelProvider
+  accountIds      Json                    @map("account_ids")
+  status          ChannelConnectionStatus @default(NOT_CONNECTED)
+  scopes          Json                    @default("[]")
+  /// §47/§48 capability flags discovered per account, never assumed.
+  capabilityFlags Json                    @default("{}") @map("capability_flags")
+  expiresAt       DateTime?               @map("expires_at") @db.Timestamptz(6)
+  lastCheckedAt   DateTime?               @map("last_checked_at") @db.Timestamptz(6)
+  statusReason    String?                 @map("status_reason")
+  createdAt       DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [partnerOrgId], references: [id], onDelete: Cascade)
+
+  @@unique([partnerOrgId, provider])
+  @@map("channel_connections")
+}
+
+/// §47.11 / §48.9: only resource IDs and status. The raw matching payload is
+/// never persisted centrally -- it goes Partner Agent -> provider directly.
+model ExternalResource {
+  id                 String             @id @default(uuid()) @db.Uuid
+  activationId       String             @map("activation_id") @db.Uuid
+  provider           ChannelProvider
+  audienceId         String?            @map("audience_id")
+  externalCampaignId String?            @map("external_campaign_id")
+  resourceStatus     ExternalSyncStatus @default(NOT_STARTED) @map("resource_status")
+  audienceVersion    Int                @default(1) @map("audience_version")
+  metadata           Json               @default("{}")
+  lastSyncedAt       DateTime?          @map("last_synced_at") @db.Timestamptz(6)
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  activation Activation @relation(fields: [activationId], references: [id], onDelete: Cascade)
+
+  @@unique([activationId, provider])
+  @@index([resourceStatus, updatedAt])
+  @@map("external_resources")
+}
+
+// ---------------------------------------------------------------------------
+// Delivery, attribution and outcomes (§71, §77.3, §90, §96)
+// ---------------------------------------------------------------------------
+
+/// §90: the click token is OPAQUE -- 32 random bytes, base64url. It encodes
+/// nothing. Everything meaningful lives here, keyed by SHA-256(token).
+/// The raw token is returned to the browser once and never stored or logged.
+model AttributionToken {
+  tokenHash         Bytes     @id @map("token_hash")
+  activationId      String    @map("activation_id") @db.Uuid
+  partnerOrgId      String    @map("partner_org_id") @db.Uuid
+  placementId       String?   @map("placement_id") @db.Uuid
+  creativeVersionId String?   @map("creative_version_id") @db.Uuid
+  issuedAt          DateTime  @map("issued_at") @db.Timestamptz(6)
+  expiresAt         DateTime  @map("expires_at") @db.Timestamptz(6)
+  firstClickedAt    DateTime? @map("first_clicked_at") @db.Timestamptz(6)
+  leadState         LeadState @default(UNREDEEMED) @map("lead_state")
+  revokedAt         DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  activation      Activation       @relation(fields: [activationId], references: [id], onDelete: Cascade)
+  organization    Organization     @relation(fields: [partnerOrgId], references: [id])
+  placement       Placement?       @relation(fields: [placementId], references: [id])
+  creativeVersion CreativeVersion? @relation(fields: [creativeVersionId], references: [id])
+  leadEvents      LeadEvent[]
+
+  @@index([activationId])
+  @@index([expiresAt])
+  @@map("attribution_tokens")
+}
+
+/// §71: CRM callbacks. Idempotent on (buyer_org_id, crm_event_id) so a CRM
+/// retry storm cannot inflate lead counts -- and therefore payout.
+model LeadEvent {
+  id             String     @id @default(uuid()) @db.Uuid
+  tokenHash      Bytes      @map("token_hash")
+  buyerOrgId     String     @map("buyer_org_id") @db.Uuid
+  crmEventId     String     @map("crm_event_id")
+  status         LeadState
+  previousStatus LeadState? @map("previous_status")
+  eventTime      DateTime   @map("event_time") @db.Timestamptz(6)
+  leadReference  String?    @map("lead_reference")
+  metadata       Json       @default("{}")
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  token        AttributionToken @relation(fields: [tokenHash], references: [tokenHash], onDelete: Cascade)
+  organization Organization     @relation(fields: [buyerOrgId], references: [id], onDelete: Cascade)
+
+  @@unique([buyerOrgId, crmEventId])
+  @@index([tokenHash])
+  @@map("lead_events")
+}
+
+/// §18: aggregate only. There is deliberately no per-impression central event
+/// table -- that would reintroduce user-level central data (§45 "No per-user
+/// central event") and would not scale to the pilot's batching model.
+model AggregateMetric {
+  activationId   String   @map("activation_id") @db.Uuid
+  bucketStart    DateTime @map("bucket_start") @db.Timestamptz(6)
+  impressions    BigInt   @default(0)
+  clicks         BigInt   @default(0)
+  spendMinor     BigInt   @default(0) @map("spend_minor")
+  leads          BigInt   @default(0)
+  qualifiedLeads BigInt   @default(0) @map("qualified_leads")
+  conversions    BigInt   @default(0)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  activation Activation @relation(fields: [activationId], references: [id], onDelete: Cascade)
+
+  @@id([activationId, bucketStart])
+  @@index([bucketStart])
+  @@map("aggregate_metrics")
+}
+
+/// §57: reporting batches are deduplicated by (partner_org_id, batch_id) so a
+/// retried upload with the same idempotency key cannot double-count metrics.
+model DeliveryBatch {
+  id            String   @id @default(uuid()) @db.Uuid
+  partnerOrgId  String   @map("partner_org_id") @db.Uuid
+  agentId       String?  @map("agent_id") @db.Uuid
+  batchId       String   @map("batch_id")
+  counterCount  Int      @map("counter_count")
+  acceptedAt    DateTime @default(now()) @map("accepted_at") @db.Timestamptz(6)
+  correlationId String?  @map("correlation_id")
+
+  organization Organization @relation(fields: [partnerOrgId], references: [id], onDelete: Cascade)
+  agent        Agent?       @relation(fields: [agentId], references: [id])
+
+  @@unique([partnerOrgId, batchId])
+  @@index([acceptedAt])
+  @@map("delivery_batches")
+}
+
+/// §77.3: differences above tolerance raise a review; they never silently
+/// alter Partner payout.
+model Reconciliation {
+  id            String               @id @default(uuid()) @db.Uuid
+  activationId  String               @map("activation_id") @db.Uuid
+  bucketDate    DateTime             @map("bucket_date") @db.Date
+  agentCount    BigInt               @map("agent_count")
+  centralCount  BigInt               @map("central_count")
+  differenceAbs BigInt               @map("difference_abs")
+  tolerance     BigInt
+  status        ReconciliationStatus
+  reason        String?
+  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  activation Activation @relation(fields: [activationId], references: [id], onDelete: Cascade)
+
+  @@unique([activationId, bucketDate])
+  @@map("reconciliations")
+}
+
+// ---------------------------------------------------------------------------
+// Commercials (§50, §83, §102)
+// ---------------------------------------------------------------------------
+
+/// §50: terms agreed at approval time, frozen. Payout is recomputed from
+/// these plus verified outcomes, never from live catalogue prices.
+model CommercialTerms {
+  id             String       @id @default(uuid()) @db.Uuid
+  requestId      String       @unique @map("request_id") @db.Uuid
+  pricingModel   PricingModel @map("pricing_model")
+  unitPriceMinor BigInt       @map("unit_price_minor")
+  currency       String       @db.Char(3)
+  /// Basis points, so no fractional-percent float ever enters settlement.
+  platformFeeBps Int          @default(1000) @map("platform_fee_bps")
+  maxBudgetMinor BigInt       @map("max_budget_minor")
+  taxTreatment   String?      @map("tax_treatment")
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  request PartnerRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@map("commercial_terms")
+}
+
+/// §19 / §83.1: immutable. Corrections append an ADJUSTMENT row; historical
+/// events are never edited in place.
+model FinancialEvent {
+  id             String             @id @default(uuid()) @db.Uuid
+  activationId   String             @map("activation_id") @db.Uuid
+  eventType      FinancialEventType @map("event_type")
+  quantity       BigInt             @default(0)
+  amountMinor    BigInt             @map("amount_minor")
+  currency       String             @db.Char(3)
+  /// Reference to the settlement input that produced this row (§50).
+  sourceRef      String             @map("source_ref")
+  periodStart    DateTime?          @map("period_start") @db.Timestamptz(6)
+  periodEnd      DateTime?          @map("period_end") @db.Timestamptz(6)
+  /// Set on an ADJUSTMENT to point at the event it corrects.
+  adjustsEventId String?            @map("adjusts_event_id") @db.Uuid
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  activation Activation @relation(fields: [activationId], references: [id], onDelete: Cascade)
+
+  @@unique([activationId, eventType, sourceRef])
+  @@index([activationId, createdAt])
+  @@map("financial_events")
+}
+
+model Invoice {
+  id            String        @id @default(uuid()) @db.Uuid
+  buyerOrgId    String        @map("buyer_org_id") @db.Uuid
+  campaignId    String        @map("campaign_id") @db.Uuid
+  subtotalMinor BigInt        @map("subtotal_minor")
+  taxMinor      BigInt        @default(0) @map("tax_minor")
+  totalMinor    BigInt        @map("total_minor")
+  currency      String        @db.Char(3)
+  status        InvoiceStatus @default(DRAFT)
+  periodStart   DateTime      @map("period_start") @db.Timestamptz(6)
+  periodEnd     DateTime      @map("period_end") @db.Timestamptz(6)
+  issuedAt      DateTime?     @map("issued_at") @db.Timestamptz(6)
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [buyerOrgId], references: [id])
+  campaign     Campaign     @relation(fields: [campaignId], references: [id])
+
+  @@index([buyerOrgId, status])
+  @@map("invoices")
+}
+
+model Payout {
+  id                  String       @id @default(uuid()) @db.Uuid
+  partnerOrgId        String       @map("partner_org_id") @db.Uuid
+  activationId        String       @map("activation_id") @db.Uuid
+  eligibleAmountMinor BigInt       @map("eligible_amount_minor")
+  adjustmentMinor     BigInt       @default(0) @map("adjustment_minor")
+  currency            String       @db.Char(3)
+  status              PayoutStatus @default(PENDING)
+  disputeReason       String?      @map("dispute_reason")
+  periodStart         DateTime     @map("period_start") @db.Timestamptz(6)
+  periodEnd           DateTime     @map("period_end") @db.Timestamptz(6)
+  calculatedAt        DateTime?    @map("calculated_at") @db.Timestamptz(6)
+  paidAt              DateTime?    @map("paid_at") @db.Timestamptz(6)
+  createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [partnerOrgId], references: [id])
+  activation   Activation   @relation(fields: [activationId], references: [id])
+
+  @@unique([activationId, periodStart, periodEnd])
+  @@index([partnerOrgId, status])
+  @@map("payouts")
+}
+
+// ---------------------------------------------------------------------------
+// Platform: audit, notifications, idempotency, kill switches
+// ---------------------------------------------------------------------------
+
+/// §56: append-only business and security timeline. Rows are never updated
+/// or deleted; retention is 24 months by default (§81).
+model AuditEvent {
+  id            String   @id @default(uuid()) @db.Uuid
+  actor         String
+  actorType     String   @default("USER") @map("actor_type")
+  orgId         String?  @map("org_id") @db.Uuid
+  entityType    String   @map("entity_type")
+  entityId      String   @map("entity_id")
+  action        String
+  metadata      Json     @default("{}")
+  correlationId String?  @map("correlation_id")
+  timestamp     DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization? @relation(fields: [orgId], references: [id])
+
+  @@index([orgId, timestamp])
+  @@index([entityType, entityId])
+  @@map("audit_events")
+}
+
+model Notification {
+  id              String    @id @default(uuid()) @db.Uuid
+  orgId           String    @map("org_id") @db.Uuid
+  recipientUserId String?   @map("recipient_user_id") @db.Uuid
+  eventType       String    @map("event_type")
+  payload         Json      @default("{}")
+  readAt          DateTime? @map("read_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt])
+  @@map("notifications")
+}
+
+/// §99: same key + same logical request replays the stored result; same key +
+/// different payload is a 409 IDEMPOTENCY_CONFLICT. The request hash is what
+/// makes "different payload" detectable.
+model IdempotencyRecord {
+  key            String   @id
+  orgId          String?  @map("org_id") @db.Uuid
+  endpoint       String
+  requestHash    Bytes    @map("request_hash")
+  responseStatus Int      @map("response_status")
+  responseBody   Json     @map("response_body")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt      DateTime @map("expires_at") @db.Timestamptz(6)
+
+  @@index([expiresAt])
+  @@map("idempotency_records")
+}
+
+/// §24 / §56: the Partner can stop serving immediately at several scopes.
+/// Every activation is audited (§78.2 "Kill switch: every production
+/// activation; immediate audit notification").
+model KillSwitch {
+  id           String          @id @default(uuid()) @db.Uuid
+  partnerOrgId String          @map("partner_org_id") @db.Uuid
+  scope        KillSwitchScope
+  /// Placement / activation / channel id the switch applies to; null for
+  /// PARTNER_ALL and AGENT scopes.
+  targetId     String?         @map("target_id")
+  active       Boolean         @default(true)
+  reason       String?
+  activatedBy  String          @map("activated_by") @db.Uuid
+  activatedAt  DateTime        @default(now()) @map("activated_at") @db.Timestamptz(6)
+  releasedAt   DateTime?       @map("released_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [partnerOrgId], references: [id], onDelete: Cascade)
+
+  @@index([partnerOrgId, active])
+  @@map("kill_switches")
+}
+
+// ===========================================================================
+// v6 models
+// ===========================================================================
+
+/// v6 §4: one entry in the Oolix-controlled attribute taxonomy.
+///
+/// Versioned, because a campaign request binds to the exact taxonomy version
+/// the Partner approved — changing what `purchase_recency_days` means must not
+/// retroactively change what a Partner agreed to serve.
+model AttributeDefinition {
+  id                String            @id @default(uuid()) @db.Uuid
+  key               String
+  displayName       String            @map("display_name")
+  description       String?
+  category          AttributeCategory
+  dataType          AttributeDataType @map("data_type")
+  /// Operators a Buyer may use with this attribute (v6 §4).
+  operatorsJson     Json              @map("operators_json")
+  /// Permitted values for ENUM attributes; null for NUMBER and BOOLEAN.
+  allowedValuesJson Json?             @map("allowed_values_json")
+  /// Inclusive bounds for NUMBER attributes, so a rule cannot ask for an
+  /// absurd range that no Partner could evaluate meaningfully.
+  minValue          Int?              @map("min_value")
+  maxValue          Int?              @map("max_value")
+  unit              String?
+  policyClass       PolicyClass       @default(GENERAL) @map("policy_class")
+  version           Int               @default(1)
+  active            Boolean           @default(true)
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([key, version])
+  @@index([category, active])
+  @@map("attribute_definitions")
+}
+
+/// v6 §5: what standardized attributes a Partner can evaluate.
+///
+/// METADATA ONLY. There is deliberately no column for the Partner's local
+/// field name — v6 §5.2 keeps the mapping from `payment_method` to `pay_mode`
+/// inside the Partner, and §17 states plainly that Oolix stores "Partner
+/// capability metadata, not Partner customer records or Partner local field
+/// names".
+model PartnerCapability {
+  id                String           @id @default(uuid()) @db.Uuid
+  partnerOrgId      String           @map("partner_org_id") @db.Uuid
+  capabilityVersion Int              @map("capability_version")
+  /// [{ attribute_key, operators[], status }] — v6 §5.1.
+  attributesJson    Json             @map("attributes_json")
+  geographiesJson   Json             @map("geographies_json")
+  channelsJson      Json             @map("channels_json")
+  status            CapabilityStatus @default(ACTIVE)
+  /// v6 §11: the Agent reports which mapping version it compiled against, so a
+  /// reach estimate can be tied to the mapping that produced it.
+  mappingVersion    Int?             @map("mapping_version")
+  publishedAt       DateTime         @default(now()) @map("published_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [partnerOrgId], references: [id], onDelete: Cascade)
+
+  @@unique([partnerOrgId, capabilityVersion])
+  @@index([partnerOrgId, status])
+  @@map("partner_capabilities")
+}
+
+/// v6 §3: a reusable Buyer-defined audience intent.
+model AudienceGroup {
+  id             String              @id @default(uuid()) @db.Uuid
+  buyerOrgId     String              @map("buyer_org_id") @db.Uuid
+  name           String              @db.VarChar(120)
+  description    String?
+  status         AudienceGroupStatus @default(DRAFT)
+  currentVersion Int                 @default(1) @map("current_version")
+  createdBy      String              @map("created_by") @db.Uuid
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization    Organization           @relation(fields: [buyerOrgId], references: [id], onDelete: Cascade)
+  creator         User                   @relation(fields: [createdBy], references: [id])
+  versions        AudienceGroupVersion[]
+  matches         PartnerMatchSnapshot[]
+  estimates       ReachEstimate[]
+  links           CampaignAudienceLink[]
+  partnerRequests PartnerRequest[]
+
+  @@unique([buyerOrgId, name])
+  @@index([buyerOrgId, status])
+  @@map("audience_groups")
+}
+
+/// v6 §16: an immutable version of the rules.
+///
+/// `ruleHash` is what a Partner's approval actually binds to (v6 §10). Two
+/// audiences with identical rules produce the same hash, so an Agent can
+/// confirm it is materializing exactly what was approved.
+model AudienceGroupVersion {
+  audienceGroupId String                @map("audience_group_id") @db.Uuid
+  version         Int
+  /// [{ attribute, operator, value, required, weight }] — v6 §6.3.
+  rulesJson       Json                  @map("rules_json")
+  ruleHash        String                @map("rule_hash") @db.Char(64)
+  /// The taxonomy version these rules were validated against (v6 §4).
+  taxonomyVersion Int                   @default(1) @map("taxonomy_version")
+  status          AudienceVersionStatus @default(DRAFT)
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  audienceGroup   AudienceGroup          @relation(fields: [audienceGroupId], references: [id], onDelete: Cascade)
+  matches         PartnerMatchSnapshot[]
+  estimates       ReachEstimate[]
+  links           CampaignAudienceLink[]
+  partnerRequests PartnerRequest[]
+
+  @@id([audienceGroupId, version])
+  @@index([ruleHash])
+  @@map("audience_group_versions")
+}
+
+/// v6 §7: the compatibility result between one audience version and one
+/// Partner, at a known capability version.
+///
+/// Stored rather than computed on read because v6 §16 ties a reach estimate —
+/// and later an approval — to the capability version that produced the match.
+model PartnerMatchSnapshot {
+  id                  String      @id @default(uuid()) @db.Uuid
+  audienceGroupId     String      @map("audience_group_id") @db.Uuid
+  audienceVersion     Int         @map("audience_version")
+  partnerOrgId        String      @map("partner_org_id") @db.Uuid
+  capabilityVersion   Int         @map("capability_version")
+  status              MatchStatus
+  /// 0-100 weighted coverage. v6 §7: schema compatibility, NOT audience
+  /// quality — a 100 means the Partner can evaluate every rule, nothing more.
+  matchScore          Int         @map("match_score")
+  supportedRulesJson  Json        @map("supported_rules_json")
+  missingRequiredJson Json        @map("missing_required_json")
+  missingOptionalJson Json        @map("missing_optional_json")
+  channelsJson        Json        @map("channels_json")
+  computedAt          DateTime    @default(now()) @map("computed_at") @db.Timestamptz(6)
+
+  audienceGroup      AudienceGroup        @relation(fields: [audienceGroupId], references: [id], onDelete: Cascade)
+  audienceVersionRef AudienceGroupVersion @relation(fields: [audienceGroupId, audienceVersion], references: [audienceGroupId, version], onDelete: Cascade)
+  organization       Organization         @relation(fields: [partnerOrgId], references: [id], onDelete: Cascade)
+
+  @@unique([audienceGroupId, audienceVersion, partnerOrgId, capabilityVersion])
+  @@index([partnerOrgId, status])
+  @@map("partner_match_snapshots")
+}
+
+/// v6 §8: a safe reach estimate produced INSIDE a Partner.
+///
+/// There is no exact-count column and there never will be. The Agent computes
+/// the count locally, applies the minimum cohort threshold, and returns a
+/// bucket or BELOW_THRESHOLD (v6 §8.2, §17).
+model ReachEstimate {
+  id                String              @id @default(uuid()) @db.Uuid
+  audienceGroupId   String              @map("audience_group_id") @db.Uuid
+  audienceVersion   Int                 @map("audience_version")
+  partnerOrgId      String              @map("partner_org_id") @db.Uuid
+  status            ReachEstimateStatus @default(REQUESTED)
+  reachBucket       ReachBucket?        @map("reach_bucket")
+  /// Ties the estimate to the exact rules evaluated (v6 §16): an estimate is
+  /// valid only for this audience version AND this rule hash.
+  ruleHash          String              @map("rule_hash") @db.Char(64)
+  capabilityVersion Int?                @map("capability_version")
+  mappingVersion    Int?                @map("mapping_version")
+  freshnessAt       DateTime?           @map("freshness_at") @db.Timestamptz(6)
+  expiresAt         DateTime?           @map("expires_at") @db.Timestamptz(6)
+  failureReason     String?             @map("failure_reason")
+  requestedBy       String              @map("requested_by") @db.Uuid
+  requestedAt       DateTime            @default(now()) @map("requested_at") @db.Timestamptz(6)
+  completedAt       DateTime?           @map("completed_at") @db.Timestamptz(6)
+
+  audienceGroup      AudienceGroup        @relation(fields: [audienceGroupId], references: [id], onDelete: Cascade)
+  audienceVersionRef AudienceGroupVersion @relation(fields: [audienceGroupId, audienceVersion], references: [audienceGroupId, version], onDelete: Cascade)
+  organization       Organization         @relation(fields: [partnerOrgId], references: [id], onDelete: Cascade)
+  partnerRequests    PartnerRequest[]
+
+  /// v6 §17 rate-limits repeated estimates for the same audience/Partner/
+  /// version, which this constraint makes structural rather than advisory:
+  /// asking again returns the cached row.
+  @@unique([audienceGroupId, audienceVersion, partnerOrgId])
+  @@index([partnerOrgId, status])
+  @@map("reach_estimates")
+}
+
+/// v6 §9: binds a campaign to exactly one audience version.
+///
+/// A join table even though the MVP allows one link, so supporting several
+/// later is not a destructive migration (v6 §3).
+model CampaignAudienceLink {
+  campaignId      String   @map("campaign_id") @db.Uuid
+  audienceGroupId String   @map("audience_group_id") @db.Uuid
+  audienceVersion Int      @map("audience_version")
+  ruleHash        String   @map("rule_hash") @db.Char(64)
+  linkedAt        DateTime @default(now()) @map("linked_at") @db.Timestamptz(6)
+
+  campaign           Campaign             @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  audienceGroup      AudienceGroup        @relation(fields: [audienceGroupId], references: [id])
+  audienceVersionRef AudienceGroupVersion @relation(fields: [audienceGroupId, audienceVersion], references: [audienceGroupId, version])
+
+  @@id([campaignId, audienceGroupId])
+  @@index([audienceGroupId, audienceVersion])
+  @@map("campaign_audience_links")
+}

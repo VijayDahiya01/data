@@ -1,0 +1,389 @@
+# =============================================================================
+# Partner Agent -- Kubernetes deployment starter (Appendix A, spec v5 §69, §76.1,
+# §80, §82, §92).
+#
+# THIS MANIFEST IS APPLIED BY THE DATA PARTNER, IN THE PARTNER'S OWN CLUSTER.
+# Oolix has no access to it and cannot change it. That is the point (§1): the
+# Partner keeps physical control of the process that touches their customer
+# data, and every control below is one the Partner can verify for themselves.
+#
+# Apply:
+#   kubectl apply -f k8s-partner-agent.yaml
+#
+# Before applying, fill in:
+#   * the image tag from the Partner's own registry mirror;
+#   * the `oolix-agent-config` values (partner_id, agent_id, client_id, URLs);
+#   * the read-only database credential in `oolix-agent-connector`;
+#   * the label selector in the NetworkPolicy that identifies the Partner's
+#     own backend pods.
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: oolix-agent
+  labels:
+    app.kubernetes.io/name: oolix-partner-agent
+    # §82: the Agent runs unprivileged and must never be granted host access.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: oolix-agent
+  namespace: oolix-agent
+# The Agent talks to Oolix and to the Partner's database. It has no business
+# with the Kubernetes API, so no Role or RoleBinding is created and the token
+# is not mounted.
+automountServiceAccountToken: false
+
+---
+# §69.1: non-secret configuration. Note what is NOT here -- there is no setting
+# that lets Oolix widen what the Agent reads. The queries and the DSN are the
+# Partner's, and a manifest can only reference segment ids the Partner already
+# published (§38.1).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oolix-agent-config
+  namespace: oolix-agent
+data:
+  agent.yaml: |
+    agent:
+      partner_id: "REPLACE_WITH_PARTNER_ORG_ID"
+      listen_addr: "0.0.0.0:8082"
+      control_sync_interval: 30s
+      # §75: how long the Agent may serve cached manifests when Oolix is
+      # unreachable. Each manifest's own config_expires_at still applies.
+      stale_grace: 15m
+      # §103: the SDK gives up at 150ms, so exceeding this is worse for the
+      # Partner's page than returning NO_AD.
+      decision_timeout: 100ms
+
+    oolix:
+      api_base_url: "https://api.oolix.internal"
+      agent_id: "REPLACE_WITH_AGENT_ID"
+      client_id: "REPLACE_WITH_CLIENT_ID"
+      # §92.2: generated inside this pod and never transmitted.
+      private_key_path: "/var/lib/oolix-agent/agent-key.pem"
+      # §75: PINNED, not discovered. A manifest signed for another environment
+      # must not verify here.
+      manifest_issuer: "https://api.oolix.internal"
+      manifest_audience: "oolix-partner-agent"
+      token_audience: "oolix-agent-api"
+
+    connector:
+      type: "postgres_view"
+      dsn_secret_ref: "env://PARTNER_AUDIENCE_DSN"
+      # §7.2: PRE-COMPUTED membership. Never a join against booking or order
+      # tables -- that would blow the §103 30ms budget and put production load
+      # on the Partner's database on every page view.
+      membership_query: >-
+        SELECT 1 FROM oolix_segment_membership
+        WHERE partner_user_id = $1 AND segment_id = $2 AND expires_at > NOW()
+      consent_query: >-
+        SELECT (eligible AND withdrawn_at IS NULL) FROM oolix_user_consent
+        WHERE partner_user_id = $1 AND purpose_id = $2
+      max_open_conns: 10
+      query_timeout: 50ms
+
+    state:
+      # §76.1 is emphatic: "embedded" is SINGLE REPLICA ONLY. With three
+      # replicas each keeps its own counters, so a frequency cap of 2/day
+      # silently becomes 6/day and the Partner has promised their customer
+      # something that is not happening. The Redis below is Partner-local.
+      mode: "redis"
+      redis_url: "redis://oolix-agent-redis.oolix-agent.svc.cluster.local:6379"
+      redis_key_prefix: "oolix:agent"
+
+    channels:
+      # §15, §16, §84: external adapters stay off until the exact account and
+      # eligibility model is proven for this Partner/Buyer relationship.
+      meta:
+        enabled: false
+      google:
+        enabled: false
+
+    logging:
+      level: "info"
+      format: "json"
+      # §69.1 / §78.1: never log these, at any level.
+      redact_fields:
+        - "partner_user_id"
+        - "email"
+        - "phone"
+        - "mobile_id"
+
+---
+# The read-only credential for the Partner's own segment tables.
+#
+# Committed here as a placeholder ONLY so the manifest is self-contained. §82
+# requires the real value to come from the Partner's secret manager -- External
+# Secrets, Vault Agent, or the cloud provider's CSI driver. Do not put a
+# working DSN in version control.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oolix-agent-connector
+  namespace: oolix-agent
+type: Opaque
+stringData:
+  # The role behind this DSN must be READ-ONLY and scoped to the two Oolix
+  # views. §7.2: the Agent needs SELECT on pre-computed membership and consent,
+  # and nothing else. A superuser DSN here would hand Oolix's binary the keys
+  # to the Partner's database.
+  PARTNER_AUDIENCE_DSN: 'postgres://oolix_agent_ro:REPLACE_ME@partner-db:5432/audience?sslmode=require'
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oolix-agent
+  namespace: oolix-agent
+spec:
+  # ClusterIP, never LoadBalancer or NodePort. §12.1: the private API is the
+  # one hop carrying a partner_user_id and must not be reachable from outside
+  # the cluster.
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: oolix-partner-agent
+  ports:
+    - name: private-api
+      port: 8082
+      targetPort: private-api
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oolix-agent
+  namespace: oolix-agent
+  labels:
+    app.kubernetes.io/name: oolix-partner-agent
+spec:
+  # More than one replica is safe ONLY because state.mode is "redis" above.
+  # If you switch back to embedded state, this MUST return to 1 (§76.1).
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: oolix-partner-agent
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: oolix-partner-agent
+      annotations:
+        # Roll the pods when the configuration changes; a stale ConfigMap in a
+        # running pod is invisible and hard to diagnose.
+        checksum/config: 'REPLACE_WITH_CONFIGMAP_CHECKSUM'
+    spec:
+      serviceAccountName: oolix-agent
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: agent
+          # Oolix publishes this image; you do not need a Go toolchain to run
+          # the Agent. Ask Oolix for the registry path and the version agreed
+          # for your pilot, then pin BOTH here.
+          #
+          # Pin a version, never `latest`. A tag that moves means the Agent
+          # your Partner audited is not necessarily the one running, and it
+          # makes a rollback impossible at the moment you need one. Pinning by
+          # digest (image: ...@sha256:...) is better still.
+          image: 'REPLACE_WITH_REGISTRY/partner-agent:REPLACE_WITH_VERSION'
+          imagePullPolicy: IfNotPresent
+          args: ['--config', '/etc/oolix/agent.yaml']
+          ports:
+            - name: private-api
+              containerPort: 8082
+          env:
+            - name: PARTNER_AUDIENCE_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: oolix-agent-connector
+                  key: PARTNER_AUDIENCE_DSN
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ['ALL']
+          resources:
+            # §103 budgets a p95 of 30ms for the membership lookup and 100ms
+            # for the whole decision. CPU throttling is the usual cause of a
+            # miss, so the request is generous relative to the work.
+            requests:
+              cpu: '250m'
+              memory: '128Mi'
+            limits:
+              cpu: '1'
+              memory: '512Mi'
+
+          # §69.2 keeps these apart deliberately. Liveness asks only whether
+          # the process is alive: restarting a pod because Oolix is unreachable
+          # would turn an Oolix outage into a Partner outage, when §75 says the
+          # Agent should keep serving from cache instead.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: private-api
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+
+          # Readiness reports control-sync staleness and whether this Agent's
+          # identity is still valid (§69.3: Oolix may revoke an Agent
+          # immediately). A revoked Agent leaves the Service rather than
+          # continuing to answer for fifteen minutes.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: private-api
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            failureThreshold: 3
+
+          # The first control sync and connector pool warm-up happen at boot.
+          # Without a startup probe the liveness probe can kill the pod while
+          # it is still legitimately starting.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: private-api
+            periodSeconds: 3
+            failureThreshold: 20
+
+          volumeMounts:
+            - name: config
+              mountPath: /etc/oolix
+              readOnly: true
+            - name: state
+              mountPath: /var/lib/oolix-agent
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: oolix-agent-config
+        - name: state
+          # §92.2: holds the Agent's own P-256 private key. A PersistentVolume
+          # keeps the identity across restarts; an emptyDir would force a fresh
+          # bootstrap token on every pod recycle, and bootstrap tokens are
+          # single-use by design (§92.1).
+          persistentVolumeClaim:
+            claimName: oolix-agent-state
+        - name: tmp
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: oolix-agent-state
+  namespace: oolix-agent
+spec:
+  accessModes: ['ReadWriteOnce']
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+# §43: "ad placement failure cannot block checkout/booking/login." A rollout or
+# a node drain must never take every Agent down at once, because the Partner's
+# own pages call this service synchronously.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: oolix-agent
+  namespace: oolix-agent
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: oolix-partner-agent
+
+---
+# §12.1 / §82, enforced rather than documented.
+#
+# Ingress: ONLY the Partner's own backend may call the private API. This is the
+# single hop that carries a partner_user_id, so anything else reaching port
+# 8082 is a bug or an attack.
+#
+# Egress: the Agent may reach the Oolix control plane, the Partner's database,
+# Partner-local Redis and DNS. Nothing else. If a future Agent build ever tried
+# to send data somewhere unexpected, this policy is what stops it -- and it is
+# under the PARTNER's control, not Oolix's.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: oolix-agent
+  namespace: oolix-agent
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: oolix-partner-agent
+  policyTypes: ['Ingress', 'Egress']
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              # REPLACE: the namespace holding the Partner's own backend.
+              kubernetes.io/metadata.name: partner-backend
+          podSelector:
+            matchLabels:
+              # REPLACE: the label identifying those backend pods.
+              app.kubernetes.io/name: partner-web-backend
+      ports:
+        - protocol: TCP
+          port: 8082
+  egress:
+    # DNS.
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Partner-local Redis (§76.1 shared frequency state).
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: oolix-agent-redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    # The Partner's own audience database.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: partner-data
+      ports:
+        - protocol: TCP
+          port: 5432
+    # The Oolix control plane over TLS. Narrow this to the resolved CIDR if the
+    # Partner's policy requires it; a hostname cannot be expressed here.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443

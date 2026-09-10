@@ -1,0 +1,52 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+partner-agent/bin/
+
+# env & secrets  (§82: no hard-coded credentials)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+!**/testdata/*.key
+
+# Locally generated signing keys (§75 manifests, §92.3 Agent tokens).
+# These are PRIVATE ES256 keys: anyone holding the manifest key can forge an
+# activation manifest that a Partner Agent will accept as genuine. They are
+# generated on first boot and belong in a secret manager everywhere else.
+.keys/
+*.keyfile.json
+apps/api-gateway/test/.keys-test/
+partner-agent/config.local.yaml
+partner-agent/.agent-state/
+
+# local data
+/var/
+tmp/
+coverage/
+.playwright/
+test-results/
+playwright-report/
+
+# editors / os
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# generated
+apps/api-gateway/src/generated/
+
+# Production compose environment — secrets, never committed.
+.env.prod
+
+# Pack-verification scratch config (contains a local test DSN)
+packtest-agent.yaml

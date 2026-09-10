@@ -1,0 +1,110 @@
+# =============================================================================
+# Oolix portal — the interface for all four personas.
+#
+# Server-rendered on purpose: the OIDC access token is held in a server-side
+# session and never reaches the browser (§82), so this container is a trust
+# boundary rather than a static asset host. It needs the session secret and the
+# OIDC client secret at runtime, and it must never be built with them.
+#
+# Build from the repository root:
+#   docker build -f infra/docker/Dockerfile.web-portal -t oolix/web-portal:dev .
+# =============================================================================
+
+ARG NODE_VERSION=24.19.0-alpine
+
+# -----------------------------------------------------------------------------
+# Stage 1 — dependencies
+# -----------------------------------------------------------------------------
+FROM node:${NODE_VERSION} AS deps
+WORKDIR /repo
+
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY apps/api-gateway/package.json      apps/api-gateway/
+COPY apps/web-portal/package.json       apps/web-portal/
+COPY apps/worker/package.json           apps/worker/
+COPY apps/mock-partner/package.json     apps/mock-partner/
+COPY packages/auth-rbac/package.json    packages/auth-rbac/
+COPY packages/contracts/package.json    packages/contracts/
+COPY packages/db/package.json           packages/db/
+COPY packages/manifest-schema/package.json packages/manifest-schema/
+COPY packages/observability/package.json   packages/observability/
+COPY packages/runtime-config/package.json  packages/runtime-config/
+COPY packages/sdk-web/package.json         packages/sdk-web/
+
+RUN pnpm install --frozen-lockfile
+
+# -----------------------------------------------------------------------------
+# Stage 2 — build
+# -----------------------------------------------------------------------------
+FROM deps AS build
+WORKDIR /repo
+
+COPY tsconfig.base.json ./
+COPY packages ./packages
+COPY apps/web-portal ./apps/web-portal
+
+# See the API gateway image for why this placeholder exists: prisma.config.ts
+# resolves DATABASE_URL eagerly so that migrations cannot run against the wrong
+# database. Generation never connects, and this value never leaves the build.
+ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build?schema=public"
+
+# The portal reads its configuration at runtime, but `next build` still
+# evaluates the config module, which validates the environment. These are
+# structural placeholders so the build can complete; every one is replaced by
+# the orchestrator at start-up.
+ENV APP_ENV=production \
+    NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    OOLIX_API_INTERNAL_URL="http://api:4000" \
+    WEB_PUBLIC_URL="http://localhost:3000" \
+    OIDC_ISSUER_URL="http://keycloak:8081/realms/oolix" \
+    OIDC_CLIENT_ID="oolix-web"
+
+# The two secret-shaped values are passed to the build command rather than set
+# with ENV. ENV persists into the image's metadata, so even a placeholder there
+# would model exactly the wrong habit — and Docker flags it, which trains people
+# to ignore a warning that should stay meaningful.
+RUN pnpm --filter "./packages/*" build \
+ && OIDC_CLIENT_SECRET=placeholder-replaced-at-runtime \
+    PORTAL_SESSION_SECRET=placeholder-replaced-at-runtime \
+    pnpm --filter @oolix/web-portal build
+
+# -----------------------------------------------------------------------------
+# Stage 3 — runtime
+#
+# Only the standalone output is copied. It carries the traced dependencies and
+# nothing else, so this image needs no node_modules of its own and no package
+# manager to install one.
+# -----------------------------------------------------------------------------
+FROM node:${NODE_VERSION} AS runtime
+
+RUN apk add --no-cache dumb-init
+
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=3000 \
+    HOSTNAME=0.0.0.0
+
+WORKDIR /app
+
+# The standalone bundle reproduces the workspace layout, so `server.js` sits at
+# the path the app occupied in the monorepo.
+COPY --from=build --chown=root:root /repo/apps/web-portal/.next/standalone ./
+COPY --from=build --chown=root:root /repo/apps/web-portal/.next/static ./apps/web-portal/.next/static
+
+# No `public/` copy: this app has no static asset directory. Adding one later
+# means adding it here too, or the files will simply 404.
+
+USER node
+EXPOSE 3000
+
+# The login page is the one route that renders without a session, which makes it
+# the honest check for "is this serving" — anything authenticated would report a
+# redirect and tell us nothing.
+HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "apps/web-portal/server.js"]

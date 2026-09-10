@@ -1,0 +1,1297 @@
+/*
+ * Oolix portal — visual system (§34).
+ *
+ * One application, four personas, so the chrome has to stay quiet: the
+ * navigation is a dark rail that recedes, and everything with meaning lives on
+ * a light working surface. An operations console people sit in all day should
+ * not compete with its own content.
+ *
+ * Plain CSS with custom properties rather than a utility framework. The whole
+ * surface here is forms, tables and status; a framework would add a build step
+ * and a dependency without changing how any of it looks.
+ */
+
+:root {
+  /* Light only, and deliberately so.
+   *
+   * There is no `prefers-color-scheme: dark` override: an operations console
+   * people sit in all day should look the same for everyone on the team, and a
+   * screenshot in a ticket should match what the next person sees. Following
+   * the OS setting meant half the team was reviewing a dark product nobody had
+   * designed.
+   *
+   * This declaration is load-bearing beyond the palette — it is what stops the
+   * browser painting its OWN chrome dark: scrollbars, form controls, autofill
+   * and the canvas behind the page all follow it. */
+  color-scheme: light;
+
+  /* Surfaces
+   *
+   * A light system throughout, including the navigation. The rail used to be
+   * near-black, which made it the heaviest thing on every screen — the first
+   * thing the eye landed on was a menu the user had already read. Now the whole
+   * application sits on one quiet, cool white ground and the only saturated
+   * things are the ones that mean something: a primary action, a status, a
+   * warning. */
+  --bg: #f7f9fb;
+  --surface: #ffffff;
+  --surface-sunken: #f1f5f9;
+  --surface-raised: #ffffff;
+
+  --rail: #ffffff;
+  --rail-hover: #f1f5f9;
+  --rail-active: #eaf6f4;
+
+  /* Ink */
+  --text: #17212f;
+  --text-muted: #5a6675;
+  --text-faint: #8b95a4;
+  --rail-text: #5a6675;
+  --rail-text-strong: #17212f;
+
+  /* Lines — soft enough to group without drawing boxes around everything. */
+  --border: #dfe5ec;
+  --border-strong: #c4cddb;
+
+  /* Accent — teal, dark enough that white text on it clears WCAG AA (5.4:1),
+   * with a pale tint for surfaces that should read as "selected" rather than
+   * "important". */
+  --accent: #0f766e;
+  --accent-hover: #0b5d57;
+  --accent-soft: #eefaf8;
+  --accent-line: #a7ded7;
+
+  --ok: #16794c;
+  --ok-soft: #eefbf3;
+  --warn: #9a5b08;
+  --warn-soft: #fff8e9;
+  --danger: #b3261e;
+  --danger-soft: #fef2f1;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+
+  /* FLAT. No soft depth anywhere.
+   *
+   * The surface is drawn, not lit: shapes are separated by a crisp line and a
+   * change of fill, the way they are on a design canvas. Blur is the one thing
+   * that never appears in a vector drawing, so the shadow tokens resolve to
+   * `none` rather than being deleted — every rule that asks for depth simply
+   * gets none, and the intent stays readable. */
+  --shadow-sm: none;
+  --shadow: none;
+  --shadow-lift: none;
+  --ring: 0 0 0 3px rgb(15 118 110 / 18%);
+
+  --rail-width: 258px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    sans-serif;
+  font-size: 14.5px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+  letter-spacing: -0.014em;
+  margin: 0 0 0.4rem;
+  font-weight: 600;
+}
+h1 {
+  font-size: 1.4rem;
+}
+h2 {
+  font-size: 1.02rem;
+}
+h3 {
+  font-size: 0.92rem;
+}
+
+p {
+  margin: 0 0 0.75rem;
+}
+
+code,
+kbd {
+  font-family: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, monospace;
+  font-size: 0.86em;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.06rem 0.32rem;
+  word-break: break-word;
+}
+
+/* --- shell ---------------------------------------------------------------- */
+
+.shell {
+  display: grid;
+  grid-template-columns: var(--rail-width) 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--rail);
+  border-right: 1px solid var(--border);
+  padding: 1.1rem 0.8rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.sidebar::-webkit-scrollbar {
+  width: 8px;
+}
+.sidebar::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-weight: 600;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+  padding: 0.1rem 0.55rem 0.9rem;
+  color: var(--rail-text-strong);
+  text-decoration: none;
+}
+.brand:hover {
+  text-decoration: none;
+}
+
+.brand-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--accent);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
+.org-switch {
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.org-switch-label {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--rail-text);
+  margin-bottom: 0.18rem;
+}
+
+.org-switch-name {
+  color: var(--rail-text-strong);
+  font-weight: 550;
+  font-size: 0.92rem;
+  line-height: 1.3;
+  margin-bottom: 0.3rem;
+}
+
+.org-switch select {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--rail-text-strong);
+  font-size: 0.87rem;
+  padding: 0.35rem 0.45rem;
+}
+
+.org-switch button {
+  width: 100%;
+  margin-top: 0.35rem;
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  padding: 0.32rem 0.6rem;
+}
+.org-switch button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.nav-group {
+  margin-bottom: 0.9rem;
+}
+
+.nav-group-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--rail-text);
+  opacity: 0.72;
+  padding: 0 0.6rem 0.35rem;
+}
+
+/* Icon and label share a baseline row. The icon is flex-fixed so a two-line
+   label wraps against the text, not under the glyph. */
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.46rem 0.6rem;
+  border-radius: var(--radius-sm);
+  color: var(--rail-text);
+  text-decoration: none;
+  font-size: 0.885rem;
+  line-height: 1.4;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.nav-icon {
+  flex: 0 0 auto;
+  opacity: 0.75;
+}
+
+.nav-link[aria-current='page'] .nav-icon {
+  opacity: 1;
+}
+
+.nav-link:hover {
+  background: var(--rail-hover);
+  color: var(--rail-text-strong);
+  text-decoration: none;
+}
+
+/* The current page is the one thing in the rail that should be saturated: a
+ * tinted pill with an accent spine, so it is findable without scanning. */
+.nav-link[aria-current='page'] {
+  background: var(--rail-active);
+  color: var(--accent-hover);
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.rail-footer {
+  margin-top: auto;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--border);
+}
+
+.rail-identity {
+  padding: 0 0.6rem 0.5rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+.rail-identity strong {
+  display: block;
+  color: var(--rail-text-strong);
+  font-weight: 550;
+}
+.rail-identity span {
+  color: var(--rail-text);
+  word-break: break-all;
+}
+
+.rail-footer button {
+  width: 100%;
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+.rail-footer button:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.content {
+  padding: 1.9rem 2.25rem 5rem;
+  max-width: 1160px;
+  width: 100%;
+}
+
+@media (max-width: 940px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    position: static;
+    height: auto;
+    border-bottom: 1px solid var(--border);
+  }
+  .content {
+    padding: 1.25rem 1.1rem 3rem;
+  }
+}
+
+/* --- page header ---------------------------------------------------------- */
+
+.page-header {
+  margin-bottom: 1.6rem;
+  padding-bottom: 1.1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.page-header p {
+  color: var(--text-muted);
+  margin: 0;
+  max-width: 68ch;
+}
+
+/* --- cards ---------------------------------------------------------------- */
+
+/* Cards are drawn shapes: a flat fill and a crisp outline, no lift. */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.15rem 1.25rem;
+  box-shadow: var(--shadow);
+  margin-bottom: 1.15rem;
+}
+
+.card > h2:first-child,
+.card > h3:first-child {
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+
+details.card > summary {
+  list-style: none;
+  cursor: pointer;
+  font-weight: 550;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+details.card > summary::-webkit-details-marker {
+  display: none;
+}
+details.card > summary::before {
+  content: '›';
+  display: inline-block;
+  color: var(--text-faint);
+  font-size: 1.1rem;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+details.card[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+/* --- stats ---------------------------------------------------------------- */
+
+.grid {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.stat-label {
+  font-size: 0.7rem;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-weight: 600;
+  margin-bottom: 0.2rem;
+}
+
+.stat-value {
+  font-size: 1.55rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+
+.stat-note {
+  font-size: 0.77rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+  line-height: 1.4;
+}
+
+/* --- tables --------------------------------------------------------------- */
+
+/* --- tables ----------------------------------------------------------------
+ *
+ * Most screens here are a list of things with a status. The table is the main
+ * reading surface, so it gets a real container rather than rules floating on a
+ * card: a tinted header band, a hairline between rows, and rounded edges that
+ * match the cards around it.
+ */
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+/* Inside a card the border would double up, so the card provides the frame. */
+.card .table-wrap {
+  border: 0;
+  border-radius: 0;
+  margin: 0 -1.25rem -1.1rem;
+  width: calc(100% + 2.5rem);
+}
+
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.875rem;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.7rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-sunken);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+/* Definition-style tables (a <th> in each row) read better with a fixed rail. */
+tbody th {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  font-weight: 600;
+  width: 190px;
+  white-space: nowrap;
+  background: transparent;
+}
+
+tbody tr:last-child td,
+tbody tr:last-child th {
+  border-bottom: none;
+}
+
+tbody tr {
+  transition: background 0.1s ease;
+}
+
+tbody tr:hover td {
+  background: var(--accent-soft);
+}
+
+/* Money and counts line up on the decimal when right-aligned; a column of
+   left-aligned numbers is unreadable at a glance. */
+td.numeric,
+th.numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+td.centred,
+th.centred {
+  text-align: center;
+}
+
+/* --- badges --------------------------------------------------------------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 0.18rem 0.6rem;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-strong);
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  white-space: nowrap;
+  line-height: 1.5;
+}
+
+.badge::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.75;
+  flex: 0 0 auto;
+}
+
+.badge-ok {
+  color: var(--ok);
+  background: var(--ok-soft);
+  border-color: var(--ok);
+}
+.badge-warn {
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-color: var(--warn);
+}
+.badge-danger {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: var(--danger);
+}
+.badge-info {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+
+/* --- notices -------------------------------------------------------------- */
+
+.notice {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--text-faint);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 0.95rem;
+  margin-bottom: 1.1rem;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  background: var(--surface);
+  color: var(--text-muted);
+}
+
+.notice strong {
+  color: var(--text);
+}
+
+.notice-warn {
+  border-left-color: var(--warn);
+  background: var(--warn-soft);
+  border-color: transparent;
+  color: var(--warn);
+}
+.notice-warn strong {
+  color: var(--warn);
+}
+
+.notice-danger {
+  border-left-color: var(--danger);
+  background: var(--danger-soft);
+  border-color: transparent;
+  color: var(--danger);
+}
+.notice-danger strong {
+  color: var(--danger);
+}
+
+.notice-info {
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent);
+}
+.notice-info strong {
+  color: var(--accent);
+}
+
+.muted {
+  color: var(--text-muted);
+}
+.faint {
+  color: var(--text-faint);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+/* --- forms ---------------------------------------------------------------- */
+
+label {
+  display: block;
+  font-size: 0.815rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 0.28rem;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 0.885rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.65rem;
+  transition:
+    border-color 0.14s ease,
+    box-shadow 0.14s ease;
+}
+
+input:hover:not(:disabled),
+select:hover:not(:disabled),
+textarea:hover:not(:disabled) {
+  border-color: var(--text-faint);
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled {
+  background: var(--surface-sunken);
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-faint);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 2.4rem;
+}
+
+.field {
+  margin-bottom: 0.95rem;
+}
+
+.field-hint {
+  font-size: 0.775rem;
+  color: var(--text-faint);
+  margin-top: 0.26rem;
+  line-height: 1.5;
+}
+
+.field-error {
+  font-size: 0.775rem;
+  color: var(--danger);
+  font-weight: 550;
+  margin-top: 0.26rem;
+}
+
+.field-row {
+  display: grid;
+  gap: 0.95rem;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+fieldset {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.05rem 1.15rem 0.5rem;
+  margin: 0 0 1.15rem;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+legend {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  padding: 0 0.4rem;
+}
+
+.check {
+  display: flex;
+  gap: 0.55rem;
+  align-items: flex-start;
+  margin-bottom: 0.5rem;
+  font-weight: 400;
+  font-size: 0.875rem;
+  color: var(--text);
+  padding: 0.35rem 0.45rem;
+  border-radius: var(--radius-sm);
+}
+
+.check:hover {
+  background: var(--surface-sunken);
+}
+
+.check input {
+  width: auto;
+  margin-top: 0.22rem;
+  accent-color: var(--accent);
+  flex: 0 0 auto;
+}
+
+/* --- buttons ---------------------------------------------------------------
+ *
+ * Three weights, and the weight says what the action is. Solid accent for the
+ * one thing the screen wants you to do; outlined for everything reversible;
+ * solid red only where something is destroyed or stopped. Anything that is
+ * really navigation is a link, not a button.
+ */
+
+button,
+.btn {
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    box-shadow 0.14s ease,
+    transform 0.06s ease;
+}
+
+button:hover,
+.btn:hover {
+  border-color: var(--text-faint);
+  background: var(--surface-sunken);
+  text-decoration: none;
+}
+
+/* A press should be felt. One pixel is enough — more reads as a bug. */
+button:active,
+.btn:active {
+  transform: translateY(1px);
+  filter: brightness(0.96);
+}
+
+/* Keyboard focus gets the same ring as a focused input, so the two feel like
+   one system. :focus-visible rather than :focus keeps it off mouse clicks. */
+button:focus-visible,
+.btn:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+button:disabled,
+.btn[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+button:disabled:hover,
+.btn[aria-disabled='true']:hover {
+  background: var(--surface);
+  border-color: var(--border-strong);
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+.btn-primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: #fff;
+  box-shadow: var(--shadow);
+}
+
+/* Named so a secondary action can be explicit rather than relying on the bare
+   element default — which is the same thing, but reads as an oversight. */
+.btn-secondary {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.btn-secondary:hover {
+  background: var(--surface-sunken);
+  border-color: var(--text-faint);
+}
+
+/* For actions that must be available but should not compete: "Cancel", "Back". */
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+.btn-ghost:hover {
+  background: var(--surface-sunken);
+  border-color: transparent;
+  color: var(--text);
+}
+
+.btn-danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+.btn-danger:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+  filter: brightness(0.94);
+}
+
+.btn-sm {
+  font-size: 0.8rem;
+  padding: 0.32rem 0.7rem;
+}
+
+.btn-row {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 1.15rem;
+}
+
+/* --- wizard / tabs -------------------------------------------------------- */
+
+.steps {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin: 0 0 1.4rem;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  font-size: 0.775rem;
+  font-weight: 550;
+  padding: 0.24rem 0.62rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-faint);
+  text-decoration: none;
+  display: inline-block;
+}
+
+.step:hover {
+  text-decoration: none;
+  border-color: var(--border-strong);
+  color: var(--text-muted);
+}
+
+.step-current {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.step-done {
+  color: var(--ok);
+  border-color: transparent;
+  background: var(--ok-soft);
+}
+
+/* --- login ---------------------------------------------------------------- */
+
+.login {
+  max-width: 400px;
+  margin: 11vh auto;
+  padding: 0 1.15rem;
+}
+
+.login .brand-mark {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  font-size: 1.1rem;
+  margin-bottom: 0.9rem;
+}
+
+.login h1 {
+  font-size: 1.6rem;
+}
+
+/* --- Audience Builder ------------------------------------------------------
+ *
+ * A Buyer composing an audience is making a business decision, not filling in
+ * a schema. These styles exist to make the two things that matter legible at a
+ * glance: what each condition says, and whether it is required.
+ */
+
+.conditions {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.condition {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.95rem 1.05rem;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition:
+    box-shadow 0.14s ease,
+    border-color 0.14s ease;
+}
+
+.condition:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow);
+}
+
+.condition-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.condition-name {
+  font-weight: 600;
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+}
+
+/* The ordinal is quiet: it helps a Buyer refer to "condition 3" without
+   competing with the condition's own name. */
+.condition-n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.condition-body {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.6rem 0 0.75rem;
+}
+
+.condition-body input[type='number'] {
+  width: 6.5rem;
+}
+
+.value-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.link-danger {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--danger);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.link-danger:hover {
+  text-decoration: underline;
+}
+
+/* Multi-select values. Chips beat a multiple <select>, which hides options and
+   needs ctrl-click to deselect. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.chip {
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: 0.32rem 0.8rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: none;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.chip:hover {
+  border-color: var(--accent-line);
+}
+
+.chip-on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-hover);
+  font-weight: 600;
+}
+
+/* Required vs optional decides which Partners can serve at all, so it is a
+   visible two-state control rather than a checkbox that is easy to skim past. */
+.requirement {
+  border-top: 1px dashed var(--border);
+  padding-top: 0.7rem;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.seg {
+  background: var(--surface);
+  border: 0;
+  border-radius: 0;
+  padding: 0.38rem 0.95rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.seg + .seg {
+  border-left: 1.5px solid var(--border-strong);
+}
+
+.seg-on {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.importance {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.importance select {
+  width: auto;
+}
+
+/* Attribute picker */
+.picker {
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius);
+  padding: 0.95rem 1.05rem;
+  background: var(--accent-soft);
+}
+
+.picker-group {
+  margin-bottom: 0.8rem;
+}
+
+.picker-group-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 0.3rem;
+}
+
+.picker-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.3rem;
+  cursor: pointer;
+  box-shadow: none;
+  justify-content: flex-start;
+  white-space: normal;
+}
+
+.picker-item:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* Summary */
+.summary-counts {
+  display: flex;
+  gap: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.summary-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.summary-list .tick {
+  display: inline-block;
+  width: 1.1rem;
+  color: var(--ok);
+}
+
+.summary-list .faint .tick {
+  color: var(--text-faint);
+}
+
+/* --- definition lists ------------------------------------------------------
+ *
+ * "Label: value" pairs — a Partner's mapping health, a match card's coverage.
+ * A two-column grid rather than default <dl> stacking, so the labels form a
+ * readable rail and the values line up with each other.
+ */
+
+dl.kv {
+  display: grid;
+  grid-template-columns: minmax(9rem, 12rem) 1fr;
+  gap: 0.5rem 1.1rem;
+  margin: 0;
+  align-items: baseline;
+}
+
+dl.kv > dt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  font-weight: 600;
+}
+
+dl.kv > dd {
+  margin: 0;
+  min-width: 0;
+}
+
+/* Below ~600px the two columns crush the value, so stack and let the label
+   sit directly above what it describes. */
+@media (max-width: 640px) {
+  dl.kv {
+    grid-template-columns: 1fr;
+    gap: 0.15rem 0;
+  }
+
+  dl.kv > dd {
+    margin-bottom: 0.6rem;
+  }
+}
+
+/* --- audience conditions ----------------------------------------------------
+   Required conditions get a tick and Optional ones a dot, because the
+   distinction decides whether a Data Partner can be matched at all -- a
+   Required condition they cannot answer rules them out entirely. A plain
+   bulleted list made the two look interchangeable. */
+
+.rule-list {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+}
+
+.rule-list > li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.32rem 0;
+  border-bottom: 1px solid var(--border-faint, var(--border));
+}
+
+.rule-list > li:last-child {
+  border-bottom: none;
+}
+
+.rule-tick {
+  color: var(--accent);
+  font-weight: 700;
+  flex: none;
+  width: 1rem;
+}
+
+.rule-dot {
+  color: var(--muted);
+  flex: none;
+  width: 1rem;
+}

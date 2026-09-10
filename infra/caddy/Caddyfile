@@ -1,0 +1,96 @@
+# =============================================================================
+# TLS termination for the Oolix stack.
+#
+# Everything reaches the deployment through here. The API, the portal and
+# Keycloak publish no ports of their own — they are on the internal network
+# only — so this file is the entire attack surface that faces the internet.
+#
+# ── The one setting that matters ─────────────────────────────────────────────
+#
+#   TLS_MODE=internal              a local certificate authority, for proving
+#                                  the stack works over HTTPS on a laptop
+#   TLS_MODE=ops@yourdomain.com    real certificates from Let's Encrypt
+#
+# Both are valid `tls` arguments in Caddy, which is why one variable covers the
+# local drill and the real deployment without a second file to keep in step.
+#
+# ── Why three hostnames rather than paths ────────────────────────────────────
+#
+# An OIDC issuer is compared as a string. The browser is redirected to Keycloak
+# to sign in and the portal exchanges the code server-side; if those two reach
+# Keycloak by different names, the issuer in the token does not match what the
+# API validates and every request is rejected as invalid — while every part
+# looks correctly configured. Distinct public names that resolve identically
+# from the browser and from inside the network remove that class of failure.
+# =============================================================================
+
+{
+	# Caddy's own admin API listens on localhost by default. It can reconfigure
+	# the server, so it does not belong on a routable interface.
+	admin off
+}
+
+# --- The API -----------------------------------------------------------------
+# Also serves the manifest JWKS that every Partner Agent fetches, which is why
+# a valid chain here is not optional: an Agent that cannot verify the chain
+# refuses to serve rather than trusting it anyway.
+{$API_HOST} {
+	tls {$TLS_MODE}
+	encode zstd gzip
+
+	# HSTS. Once a Partner's Agent and a Buyer's browser have seen this, a
+	# downgrade to plain HTTP stops being something an attacker can arrange.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	# The scrape endpoint names Partner organisations and Agent ids. That is
+	# operational detail, and an endpoint that enumerates it does not belong on
+	# the public internet. A collector reaches the API directly on the internal
+	# network instead.
+	handle /metrics {
+		respond 404
+	}
+
+	reverse_proxy api:4000 {
+		health_uri /healthz
+	}
+}
+
+# --- The portal --------------------------------------------------------------
+{$APP_HOST} {
+	tls {$TLS_MODE}
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		# The portal renders campaign and audience data. Framing it elsewhere
+		# is how an approval gets clicked by someone who thought they were
+		# clicking something else.
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	reverse_proxy portal:3000
+}
+
+# --- Keycloak ----------------------------------------------------------------
+{$AUTH_HOST} {
+	tls {$TLS_MODE}
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	# Keycloak builds absolute URLs from these, so they have to be forwarded
+	# accurately or the login redirect lands on the wrong scheme.
+	reverse_proxy keycloak:8081 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+	}
+}

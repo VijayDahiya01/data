@@ -1,0 +1,1106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="How Buyers, Data Partners and Network sponsors onboard, and what we need from each.">
+<title>Onboarding Every Party</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,500;1,400&display=swap">
+<style>
+  /* Reset equivalent to the one the artifact host injects. */
+  *, *::before, *::after { box-sizing: border-box; }
+  body { margin: 0; }
+  img, svg { max-width: 100%; }
+</style>
+</head>
+<body>
+<style>
+  :root {
+    --ground: #eff1f3;
+    --slide: #ffffff;
+    --ink: #16202b;
+    --ink-soft: #47535f;
+    --ink-faint: #6b7681;
+    --rule: #dde2e6;
+    --rule-soft: #eaedf0;
+
+    --buyer: #35578a;
+    --buyer-wash: #eef2f8;
+    --oolix: #0f766e;
+    --oolix-wash: #edf6f5;
+    --partner: #9a5d09;
+    --partner-wash: #fbf4e8;
+    --network: #6a4a78;
+    --network-wash: #f4f0f7;
+
+    --ok: #1f7a4d;
+    --warn: #a8620a;
+
+    --s--1: 0.8rem;
+    --s-0: 1rem;
+    --s-1: 1.2rem;
+    --s-2: 1.5rem;
+    --s-3: 2rem;
+    --s-4: 2.7rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0b1016;
+      --slide: #151c24;
+      --ink: #e7ebef;
+      --ink-soft: #aab5c0;
+      --ink-faint: #7e8994;
+      --rule: #2a333d;
+      --rule-soft: #1f272f;
+
+      --buyer: #86aade;
+      --buyer-wash: #182231;
+      --oolix: #5cc4b8;
+      --oolix-wash: #11241f;
+      --partner: #dfa551;
+      --partner-wash: #291f14;
+      --network: #bfa0cd;
+      --network-wash: #241d29;
+
+      --ok: #62c48d;
+      --warn: #dfa551;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0b1016;
+    --slide: #151c24;
+    --ink: #e7ebef;
+    --ink-soft: #aab5c0;
+    --ink-faint: #7e8994;
+    --rule: #2a333d;
+    --rule-soft: #1f272f;
+
+    --buyer: #86aade;
+    --buyer-wash: #182231;
+    --oolix: #5cc4b8;
+    --oolix-wash: #11241f;
+    --partner: #dfa551;
+    --partner-wash: #291f14;
+    --network: #bfa0cd;
+    --network-wash: #241d29;
+
+    --ok: #62c48d;
+    --warn: #dfa551;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "IBM Plex Serif", Georgia, serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, .eyebrow, .tag, th, .mono, .num, figcaption, .btn {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+  }
+
+  .deck {
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: clamp(1rem, 3vw, 2.5rem) clamp(0.6rem, 3vw, 1.5rem) 4rem;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(1rem, 2vw, 1.5rem);
+  }
+
+  .slide {
+    background: var(--slide);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: clamp(1.5rem, 4vw, 2.75rem);
+    display: flex;
+    flex-direction: column;
+    gap: 1.35rem;
+    position: relative;
+  }
+
+  .slide-head { display: flex; flex-direction: column; gap: 0.5rem; }
+
+  .meta {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    flex-wrap: wrap;
+  }
+
+  .num {
+    font-size: var(--s--1);
+    font-weight: 600;
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+  }
+
+  .tag {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    padding: 0.15rem 0.5rem;
+    border-radius: 2px;
+    border: 1px solid currentColor;
+  }
+  .t-buyer { color: var(--buyer); background: var(--buyer-wash); }
+  .t-oolix { color: var(--oolix); background: var(--oolix-wash); }
+  .t-partner { color: var(--partner); background: var(--partner-wash); }
+  .t-network { color: var(--network); background: var(--network-wash); }
+  .t-all { color: var(--ink-soft); background: var(--rule-soft); }
+
+  h2 { font-size: var(--s-3); line-height: 1.15; font-weight: 600; letter-spacing: -0.018em; margin: 0; text-wrap: balance; }
+  h3 { font-size: var(--s-0); font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  .lead { color: var(--ink-soft); font-size: var(--s-1); max-width: 62ch; }
+  .body { color: var(--ink-soft); max-width: 68ch; }
+
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.87em; }
+  code { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.86em; background: var(--rule-soft); padding: 0.08em 0.34em; border-radius: 2px; }
+
+  /* --- title slide --- */
+  .title-slide { padding: clamp(2.5rem, 8vw, 5rem) clamp(1.5rem, 5vw, 3.5rem); gap: 1.75rem; }
+  .title-slide h1 { font-size: var(--s-4); line-height: 1.05; font-weight: 600; letter-spacing: -0.028em; margin: 0; text-wrap: balance; }
+  .eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); }
+  .party-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+  /* --- tables --- */
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+  th, td { text-align: left; padding: 0.55rem 0.9rem 0.55rem 0; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  th { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); }
+  td { color: var(--ink-soft); }
+  td strong { color: var(--ink); font-weight: 600; }
+  td:first-child { color: var(--ink); }
+  .w-need td:first-child { width: 34%; }
+
+  /* --- checklists --- */
+  ul.need { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; }
+  ul.need li { display: grid; grid-template-columns: 1.1rem 1fr; gap: 0.7rem; align-items: start; color: var(--ink-soft); }
+  ul.need li::before { content: "▸"; color: var(--accent-mark, var(--ink-faint)); font-size: 0.85rem; line-height: 1.55; }
+  ul.need li strong { color: var(--ink); font-weight: 600; }
+  .mark-buyer { --accent-mark: var(--buyer); }
+  .mark-partner { --accent-mark: var(--partner); }
+  .mark-network { --accent-mark: var(--network); }
+  .mark-oolix { --accent-mark: var(--oolix); }
+
+  /* --- steps --- */
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: st; display: flex; flex-direction: column; }
+  ol.steps li {
+    counter-increment: st;
+    display: grid; grid-template-columns: 1.9rem 1fr; gap: 1rem;
+    padding: 0.8rem 0; border-bottom: 1px solid var(--rule-soft);
+  }
+  ol.steps li:last-child { border-bottom: 0; }
+  ol.steps li::before {
+    content: counter(st);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.78rem; color: var(--ink-faint); padding-top: 0.22rem;
+    font-variant-numeric: tabular-nums;
+  }
+  ol.steps h3 { margin-bottom: 0.15rem; }
+  ol.steps p { font-size: 0.93rem; color: var(--ink-soft); }
+
+  /* --- callouts --- */
+  .call { padding: 1rem 1.2rem; border-radius: 3px; border: 1px solid var(--rule); background: var(--rule-soft); display: flex; flex-direction: column; gap: 0.4rem; }
+  .call .eyebrow { color: var(--ink-soft); }
+  .call p { font-size: 0.94rem; color: var(--ink-soft); }
+  .call.oolix { border-color: color-mix(in srgb, var(--oolix) 32%, transparent); background: var(--oolix-wash); }
+  .call.partner { border-color: color-mix(in srgb, var(--partner) 32%, transparent); background: var(--partner-wash); }
+  .call.stop { border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: var(--partner-wash); }
+
+  /* --- figures --- */
+  figure { margin: 0; display: flex; flex-direction: column; gap: 0.7rem; }
+  figure svg { max-width: 100%; height: auto; display: block; }
+  figcaption { font-size: 0.83rem; color: var(--ink-faint); max-width: 62ch; }
+  .fig-shell { overflow-x: auto; padding: 0.5rem 0; }
+
+  /* --- two-col --- */
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1.25rem; }
+  .col { display: flex; flex-direction: column; gap: 0.55rem; }
+  .col h3 { padding-bottom: 0.35rem; border-bottom: 2px solid var(--col-mark, var(--rule)); }
+  .c-buyer { --col-mark: var(--buyer); }
+  .c-partner { --col-mark: var(--partner); }
+  .c-network { --col-mark: var(--network); }
+  .col p, .col li { font-size: 0.92rem; color: var(--ink-soft); }
+
+  /* --- code block --- */
+  pre {
+    margin: 0; padding: 1rem 1.15rem; overflow-x: auto;
+    background: var(--rule-soft); border: 1px solid var(--rule); border-radius: 3px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.82rem; line-height: 1.6;
+    color: var(--ink);
+  }
+  pre .c { color: var(--ink-faint); }
+
+  footer { text-align: center; color: var(--ink-faint); font-size: 0.85rem; padding-top: 1rem; }
+
+  :focus-visible { outline: 2px solid var(--oolix); outline-offset: 2px; }
+
+  @media print {
+    body { background: #fff; }
+    .slide { break-inside: avoid; page-break-inside: avoid; border-color: #ccc; }
+  }
+</style>
+
+<div class="deck">
+
+<!-- 1 ─────────────────────────────────────────────────────────── -->
+<section class="slide title-slide">
+  <span class="eyebrow">Oolix · Operations</span>
+  <h1>Onboarding every party</h1>
+  <p class="lead">
+    What each side signs up for, what we need from them, and exactly how a Data
+    Partner gets the Agent running, the ad code on their pages and their first
+    creative slot live.
+  </p>
+  <div class="party-row">
+    <span class="tag t-buyer">Buyer</span>
+    <span class="tag t-partner">Data Partner</span>
+    <span class="tag t-network">Network sponsor</span>
+    <span class="tag t-oolix">Oolix</span>
+  </div>
+</section>
+
+<!-- 2 ─────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="meta"><span class="num">02</span><span class="tag t-all">Overview</span></div>
+    <h2>Three parties, three different things to prove</h2>
+    <p class="lead">Nobody onboards for the same reason, so nobody onboards the same way.</p>
+  </div>
+
+  <div class="cols">
+    <div class="col c-buyer">
+      <h3>Buyer</h3>
+      <p>Brings demand: a brand, a budget and a reason for advertising. Must prove it is a real business before it can submit anything to a Partner.</p>
+    </div>
+    <div class="col c-partner">
+      <h3>Data Partner</h3>
+      <p>Brings audience and ad space. Must stand up software inside their own infrastructure, and prove it is running, before a single campaign can reach them.</p>
+    </div>
+    <div class="col c-network">
+      <h3>Network sponsor</h3>
+      <p>Brings curation: which Buyers meet which Partners. Holds no data and no veto over a Partner's decisions.</p>
+    </div>
+  </div>
+
+  <div class="call">
+    <span class="eyebrow">The asymmetry</span>
+    <p>
+      A Buyer can be onboarded in an afternoon — it is paperwork and a brand. A
+      Data Partner is an engineering project: they run our Agent, expose a
+      read-only view of their own data to it, and integrate an ad slot. Plan for
+      weeks, not hours.
+    </p>
+  </div>
+</section>
+
+<!-- 3 ─────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="meta"><span class="num">03</span><span class="tag t-all">Why it is built this way</span></div>
+    <h2>One boundary explains every requirement</h2>
+    <p class="lead">
+      Customer data never leaves the Data Partner. That single rule is why their
+      onboarding involves software at all.
+    </p>
+  </div>
+
+  <figure>
+    <div class="fig-shell">
+      <svg viewBox="0 0 720 260" role="img" aria-label="Oolix Cloud holds campaigns and approvals; the Data Partner holds customers and runs the Agent. Signed instructions cross to the Partner, only hashed tokens come back." xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <polygon points="0,0 10,5 0,10" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <!-- Oolix side -->
+        <rect x="20" y="40" width="250" height="180" rx="4" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+        <text x="36" y="30" font-size="11" font-weight="600" fill="currentColor" opacity="0.75" font-family="IBM Plex Sans, sans-serif">OOLIX CLOUD</text>
+        <text x="40" y="72" font-size="12.5" fill="currentColor" font-family="IBM Plex Sans, sans-serif">Campaigns &amp; budgets</text>
+        <text x="40" y="100" font-size="12.5" fill="currentColor" font-family="IBM Plex Sans, sans-serif">Partner approvals</text>
+        <text x="40" y="128" font-size="12.5" fill="currentColor" font-family="IBM Plex Sans, sans-serif">Creatives &amp; settlement</text>
+        <text x="40" y="156" font-size="12.5" fill="currentColor" font-family="IBM Plex Sans, sans-serif">Signing keys</text>
+        <text x="40" y="192" font-size="11.5" fill="currentColor" opacity="0.6" font-family="IBM Plex Sans, sans-serif">No customer records at all</text>
+
+        <!-- boundary -->
+        <line x1="360" y1="14" x2="360" y2="246" stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 4" opacity="0.55"/>
+        <text x="360" y="252" font-size="10.5" font-weight="600" text-anchor="middle" fill="currentColor" opacity="0.7" font-family="IBM Plex Sans, sans-serif">TRUST BOUNDARY</text>
+
+        <!-- Partner side -->
+        <rect x="450" y="40" width="250" height="180" rx="4" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+        <text x="466" y="30" font-size="11" font-weight="600" fill="currentColor" opacity="0.75" font-family="IBM Plex Sans, sans-serif">DATA PARTNER</text>
+        <text x="470" y="72" font-size="12.5" fill="currentColor" font-family="IBM Plex Sans, sans-serif">Customer attributes</text>
+        <text x="470" y="100" font-size="12.5" fill="currentColor" font-family="IBM Plex Sans, sans-serif">Consent records</text>
+        <text x="470" y="128" font-size="12.5" fill="currentColor" font-family="IBM Plex Sans, sans-serif">Their websites &amp; apps</text>
+        <text x="470" y="156" font-size="12.5" font-weight="600" fill="#0f766e" font-family="IBM Plex Sans, sans-serif">Oolix Agent runs here</text>
+        <text x="470" y="192" font-size="11.5" fill="currentColor" opacity="0.6" font-family="IBM Plex Sans, sans-serif">Never uploaded anywhere</text>
+
+        <!-- arrows -->
+        <line x1="272" y1="96" x2="448" y2="96" stroke="currentColor" stroke-width="1.4" marker-end="url(#ar)"/>
+        <text x="360" y="88" font-size="11" text-anchor="middle" fill="currentColor" font-family="IBM Plex Sans, sans-serif">signed instructions</text>
+
+        <line x1="448" y1="150" x2="272" y2="150" stroke="currentColor" stroke-width="1.4" marker-end="url(#ar)"/>
+        <text x="360" y="142" font-size="11" text-anchor="middle" fill="currentColor" font-family="IBM Plex Sans, sans-serif">hashed tokens, counts</text>
+      </svg>
+    </div>
+    <figcaption>
+      Instructions flow right; only hashed tokens and aggregate counts flow back.
+      No customer identifier crosses the dashed line in either direction.
+    </figcaption>
+  </figure>
+</section>
+
+<!-- 4 ─────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="meta"><span class="num">04</span><span class="tag t-all">Shared</span></div>
+    <h2>Every party starts the same way</h2>
+    <p class="lead">Signup and business verification are common. What follows diverges completely.</p>
+  </div>
+
+  <figure>
+    <div class="fig-shell">
+      <svg viewBox="0 0 720 220" role="img" aria-label="A shared signup and verification path splits into three role-specific onboarding tracks: Buyer, Data Partner and Network sponsor." xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <polygon points="0,0 10,5 0,10" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <rect x="14" y="88" width="118" height="44" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.45"/>
+        <text x="73" y="106" font-size="11.5" text-anchor="middle" fill="currentColor" font-family="IBM Plex Sans, sans-serif">Sign up</text>
+        <text x="73" y="122" font-size="10" text-anchor="middle" fill="currentColor" opacity="0.65" font-family="IBM Plex Sans, sans-serif">email verified</text>
+
+        <line x1="134" y1="110" x2="166" y2="110" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar2)"/>
+
+        <rect x="168" y="88" width="132" height="44" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.45"/>
+        <text x="234" y="106" font-size="11.5" text-anchor="middle" fill="currentColor" font-family="IBM Plex Sans, sans-serif">Business verified</text>
+        <text x="234" y="122" font-size="10" text-anchor="middle" fill="currentColor" opacity="0.65" font-family="IBM Plex Sans, sans-serif">gates everything after</text>
+
+        <line x1="302" y1="110" x2="336" y2="110" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar2)"/>
+        <line x1="338" y1="110" x2="338" y2="40" stroke="currentColor" stroke-width="1.3"/>
+        <line x1="338" y1="110" x2="338" y2="182" stroke="currentColor" stroke-width="1.3"/>
+
+        <line x1="338" y1="40" x2="428" y2="40" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar2)"/>
+        <line x1="338" y1="110" x2="428" y2="110" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar2)"/>
+        <line x1="338" y1="182" x2="428" y2="182" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar2)"/>
+
+        <rect x="430" y="18" width="272" height="44" rx="3" fill="none" stroke="#35578a" stroke-width="1.4"/>
+        <text x="446" y="36" font-size="11.5" font-weight="600" fill="#35578a" font-family="IBM Plex Sans, sans-serif">Buyer</text>
+        <text x="446" y="52" font-size="10.5" fill="currentColor" opacity="0.75" font-family="IBM Plex Sans, sans-serif">brand · purpose · creative · budget</text>
+
+        <rect x="430" y="88" width="272" height="44" rx="3" fill="none" stroke="#9a5d09" stroke-width="1.4"/>
+        <text x="446" y="106" font-size="11.5" font-weight="600" fill="#9a5d09" font-family="IBM Plex Sans, sans-serif">Data Partner</text>
+        <text x="446" y="122" font-size="10.5" fill="currentColor" opacity="0.75" font-family="IBM Plex Sans, sans-serif">policy · Agent · data view · placements</text>
+
+        <rect x="430" y="160" width="272" height="44" rx="3" fill="none" stroke="#6a4a78" stroke-width="1.4"/>
+        <text x="446" y="178" font-size="11.5" font-weight="600" fill="#6a4a78" font-family="IBM Plex Sans, sans-serif">Network sponsor</text>
+        <text x="446" y="194" font-size="10.5" fill="currentColor" opacity="0.75" font-family="IBM Plex Sans, sans-serif">network mode · members</text>
+      </svg>
+    </div>
+    <figcaption>
+      Verification is the common gate. Until an organization passes it, a Buyer
+      cannot submit a campaign and a Partner cannot publish supply.
+    </figcaption>
+  </figure>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Verification state</th><th>What it means</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">SIGNUP_STARTED</td><td>Account created, nothing usable yet</td></tr>
+        <tr><td class="mono">EMAIL_VERIFIED</td><td>Contact address confirmed</td></tr>
+        <tr><td class="mono">ORGANIZATION_CREATED</td><td>Legal entity recorded</td></tr>
+        <tr><td class="mono">BUSINESS_VERIFICATION_PENDING</td><td>Documents with us; work can be drafted but not submitted or published</td></tr>
+        <tr><td class="mono">BUSINESS_VERIFIED</td><td><strong>The gate opens</strong> — submission and publication unlock</td></tr>
+        <tr><td class="mono">ROLE_ONBOARDING</td><td>Role-specific setup underway</td></tr>
+        <tr><td class="mono">ACTIVE</td><td>Fully operational</td></tr>
+        <tr><td class="mono">SUSPENDED</td><td>Everything stops; serving included</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 5 ─────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="meta"><span class="num">05</span><span class="tag t-buyer">Buyer</span></div>
+    <h2>Buyer onboarding, step by step</h2>
+  </div>
+
+  <ol class="steps">
+    <li><div><h3>Create the organization</h3><p>Legal entity, trading name, contact. Type is <span class="mono">BUYER</span>, or <span class="mono">BUYER_AND_PARTNER</span> if they are also supplying audience.</p></div></li>
+    <li><div><h3>Pass business verification</h3><p>Until this clears, they can build campaigns but the Submit button stays disabled. The portal now says so explicitly rather than greying out silently.</p></div></li>
+    <li><div><h3>Register a brand</h3><p>Name, website and landing domain. Data Partners see the brand when deciding whether to accept — it is how they judge what will appear on their property.</p></div></li>
+    <li><div><h3>Invite the team</h3><p><span class="mono">BUYER_ADMIN</span> creates and submits; <span class="mono">BUYER_OPERATOR</span> handles creatives. At least two people are needed in practice — whoever creates a request cannot approve it.</p></div></li>
+    <li><div><h3>Declare an advertising purpose</h3><p>A stable identifier such as <span class="mono">travel_insurance_offer</span>. Each Partner checks their customers' consent against this exact purpose, so it is not a label — it decides who can be reached.</p></div></li>
+    <li><div><h3>Optional: connect a CRM</h3><p>Issue an API key so lead outcomes flow back. Required only for outcome-based campaigns, where settlement depends on the Buyer confirming which leads qualified.</p></div></li>
+    <li><div><h3>Build an audience, then a campaign</h3><p>Describe who they want, see which Partners can evaluate it, request reach, then attach creative, budget and Partners and submit for review.</p></div></li>
+  </ol>
+</section>
+
+<!-- 6 ─────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="meta"><span class="num">06</span><span class="tag t-buyer">Buyer</span></div>
+    <h2>What we need from a Buyer</h2>
+  </div>
+
+  <div class="table-wrap">
+    <table class="w-need">
+      <thead><tr><th>We need</th><th>Detail</th><th>Blocks</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Legal entity details</strong></td><td>Registered name, address, verification documents</td><td>Everything</td></tr>
+        <tr><td><strong>Brand</strong></td><td>Name, website, landing domain — the domain is allow-listed for click destinations</td><td>Campaign creation</td></tr>
+        <tr><td><strong>Advertising purpose</strong></td><td>A stable id, checked against each customer's consent inside the Partner</td><td>Serving</td></tr>
+        <tr><td><strong>Creative assets</strong></td><td>PNG, JPEG or WebP up to 5&nbsp;MB. Image creatives are 1200×628 by default; native cards need headline, body and call to action instead</td><td>Partner review</td></tr>
+        <tr><td><strong>Budget and currency</strong></td><td>Total, plus an explicit allocation per Data Partner</td><td>Submission</td></tr>
+        <tr><td><strong>Flight dates</strong></td><td>Start and end. Nothing serves outside the window, however approved it is</td><td>Serving</td></tr>
+        <tr><td><strong>Outcome definition</strong></td><td>For lead and conversion campaigns: which CRM statuses count as qualified, and the duplicate window</td><td>Submission</td></tr>
+        <tr><td><strong>CRM key</strong></td><td>Only if they want lead attribution and outcome-based settlement</td><td>Settlement</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="call stop">
+    <span class="eyebrow">Two people, not one</span>
+    <p>
+      Whoever creates a campaign request cannot approve it, even holding both
+      roles. A Buyer who is also a Data Partner needs separate people on each
+      side, or approvals will be refused.
+    </p>
+  </div>
+</section>
+
+<!-- 7 ─────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="meta"><span class="num">07</span><span class="tag t-partner">Data Partner</span></div>
+    <h2>Seven gates to READY_FOR_CAMPAIGNS</h2>
+    <p class="lead">
+      The system computes this ladder continuously. A Partner is not
+      requestable until every step is complete — and it tells them which one is
+      blocking.
+    </p>
+  </div>
+
+  <figure>
+    <div class="fig-shell">
+      <svg viewBox="0 0 720 300" role="img" aria-label="Seven sequential gates: business verified, profile, policy, agent registered, agent heartbeat, segment or capability published, active placement, leading to READY_FOR_CAMPAIGNS." xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+            <polygon points="0,0 10,5 0,10" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <g font-family="IBM Plex Sans, sans-serif">
+          <rect x="14" y="20" width="176" height="38" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4"/>
+          <text x="26" y="38" font-size="11.5" fill="currentColor">1 · Business verified</text>
+          <text x="26" y="52" font-size="9.5" fill="currentColor" opacity="0.6">legal entity checked</text>
+
+          <rect x="14" y="70" width="176" height="38" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4"/>
+          <text x="26" y="88" font-size="11.5" fill="currentColor">2 · Partner profile</text>
+          <text x="26" y="102" font-size="9.5" fill="currentColor" opacity="0.6">who they are, what they run</text>
+
+          <rect x="14" y="120" width="176" height="38" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4"/>
+          <text x="26" y="138" font-size="11.5" fill="currentColor">3 · Advertising policy</text>
+          <text x="26" y="152" font-size="9.5" fill="currentColor" opacity="0.6">categories allowed / blocked</text>
+
+          <rect x="14" y="170" width="176" height="38" rx="3" fill="none" stroke="#9a5d09" stroke-width="1.5"/>
+          <text x="26" y="188" font-size="11.5" font-weight="600" fill="#9a5d09">4 · Agent registered</text>
+          <text x="26" y="202" font-size="9.5" fill="currentColor" opacity="0.6">keypair created on their side</text>
+
+          <rect x="14" y="220" width="176" height="38" rx="3" fill="none" stroke="#9a5d09" stroke-width="1.5"/>
+          <text x="26" y="238" font-size="11.5" font-weight="600" fill="#9a5d09">5 · Agent heartbeat</text>
+          <text x="26" y="252" font-size="9.5" fill="currentColor" opacity="0.6">it has actually reported in</text>
+
+          <rect x="254" y="120" width="186" height="38" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4"/>
+          <text x="266" y="138" font-size="11.5" fill="currentColor">6 · Audience published</text>
+          <text x="266" y="152" font-size="9.5" fill="currentColor" opacity="0.6">capabilities or a segment</text>
+
+          <rect x="254" y="170" width="186" height="38" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4"/>
+          <text x="266" y="188" font-size="11.5" fill="currentColor">7 · Active placement</text>
+          <text x="266" y="202" font-size="9.5" fill="currentColor" opacity="0.6">a real slot on a real page</text>
+
+          <rect x="504" y="140" width="200" height="52" rx="3" fill="none" stroke="#0f766e" stroke-width="1.8"/>
+          <text x="604" y="163" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f766e">READY_FOR_CAMPAIGNS</text>
+          <text x="604" y="180" font-size="10" text-anchor="middle" fill="currentColor" opacity="0.7">Buyers can now request them</text>
+
+          <line x1="102" y1="60" x2="102" y2="68" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar3)"/>
+          <line x1="102" y1="110" x2="102" y2="118" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar3)"/>
+          <line x1="102" y1="160" x2="102" y2="168" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar3)"/>
+          <line x1="102" y1="210" x2="102" y2="218" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar3)"/>
+          <path d="M192 239 L222 239 L222 139 L252 139" fill="none" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar3)"/>
+          <line x1="347" y1="160" x2="347" y2="168" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar3)"/>
+          <line x1="442" y1="189" x2="500" y2="171" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar3)"/>
+        </g>
+      </svg>
+    </div>
+    <figcaption>
+      Steps 4 and 5 are the engineering work, and they are separate on purpose:
+      registering an Agent proves nothing until it has reported in.
+    </figcaption>
+  </figure>
+
+  <div class="call">
+    <span class="eyebrow">Reading the blocker</span>
+    <p>
+      Each incomplete state has its own name — <span class="mono">POLICY_PENDING</span>,
+      <span class="mono">AGENT_PENDING</span>, <span class="mono">CONNECTOR_PENDING</span>,
+      <span class="mono">SEGMENTS_PENDING</span>, <span class="mono">PLACEMENTS_PENDING</span> —
+      so a Partner always knows which step they are on rather than just "not ready".
+    </p>
+  </div>
+</section>
+
+<!-- 8 ─────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="meta"><span class="num">08</span><span class="tag t-partner">Data Partner</span></div>
+    <h2>What we need from a Data Partner</h2>
+  </div>
+
+  <div class="cols">
+    <div class="col c-partner">
+      <h3>Commercial</h3>
+      <ul class="need mark-partner">
+        <li><strong>Legal entity</strong> and verification documents</li>
+        <li><strong>Advertising policy</strong> — which categories they will and will not carry</li>
+        <li><strong>Payout terms</strong> — the model and unit price they will accept</li>
+        <li><strong>Named approver</strong> to decide on campaigns</li>
+      </ul>
+    </div>
+    <div class="col c-partner">
+      <h3>Technical</h3>
+      <ul class="need mark-partner">
+        <li><strong>Somewhere to run the Agent</strong> — a container or VM in their infrastructure</li>
+        <li><strong>A read-only database user</strong> scoped to a pre-computed table</li>
+        <li><strong>An attribute mapping</strong> from their field names to ours</li>
+        <li><strong>Ad slots defined</strong> on their pages, and the SDK integrated</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="call stop">
+    <span class="eyebrow">Two separate admins are mandatory</span>
+    <p>
+      Registering an Agent requires a <span class="mono">PARTNER_SECURITY_ADMIN</span>.
+      The commercial <span class="mono">PARTNER_ADMIN</span> cannot do it, and the
+      <span class="mono">PARTNER_CAMPAIGN_APPROVER</span> who accepts campaigns is a
+      third role again. Ask for these names early — it is the most common reason
+      technical onboarding stalls.
+    </p>
+  </div>
+
+  <div class="call">
+    <span class="eyebrow">What we never ask for</span>
+    <p>
+      No customer list. No database credentials for us. No copy of their data,
+      hashed or otherwise. No third-party tag, and no identifier we can join
+      across Partners. If someone offers a customer export, the integration is
+      being done wrong.
+    </p>
+  </div>
+</section>
+
+<!-- 9 ─────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="meta"><span class="num">09</span><span class="tag t-partner">Data Partner · Agent</span></div>
+    <h2>The Agent: what it is and where it lives</h2>
+    <p class="lead">
+      A single Go binary the Partner runs themselves. It is the only component
+      that sees a customer, and it never belongs to us operationally.
+    </p>
+  </div>
+
+  <div class="table-wrap">
+    <table class="w-need">
+      <thead><tr><th>Requirement</th><th>Detail</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Runtime</strong></td><td>One static binary, or the container image we ship. No runtime dependencies to install</td></tr>
+        <tr><td><strong>Placement</strong></td><td>Inside their network, reachable privately by their own backend. Never exposed to the public internet</td></tr>
+        <tr><td><strong>Outbound access</strong></td><td>HTTPS to the Oolix API only. No inbound connection from us, ever</td></tr>
+        <tr><td><strong>Database access</strong></td><td>A read-only user against one pre-computed attribute table, plus membership and consent lookups</td></tr>
+        <tr><td><strong>Local storage</strong></td><td>A writable path for its private key and, in single-replica mode, its frequency counters</td></tr>
+        <tr><td><strong>Scaling</strong></td><td>Single replica uses in-process state. More than one replica requires Redis, or caps would be counted per replica and silently multiply</td></tr>
+        <tr><td><strong>Latency budget</strong></td><td>Answers in under 100&nbsp;ms; its database queries are capped tighter still</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="call partner">
+    <span class="eyebrow">Their operational control</span>
+    <p>
+      They can stop it at any moment, and revocation from our side takes effect
+      immediately rather than when a credential expires. Nothing about the Agent
+      is a black box they cannot switch off.
+    </p>
+  </div>
+</section>
+
+<!-- 10 ─────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="meta"><span class="num">10</span><span class="tag t-partner">Data Partner · Agent</span></div>
+    <h2>How the Agent gets its identity</h2>
+    <p class="lead">
+      The credential that matters is created inside the Partner and never
+      transmitted. We only ever hold a public key.
+    </p>
+  </div>
+
+  <figure>
+    <div class="fig-shell">
+      <svg viewBox="0 0 720 300" role="img" aria-label="Registration handshake: a security admin mints a single-use bootstrap token, the Agent generates a keypair locally and registers with the public half, then exchanges proof of possession for short-lived access tokens." xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+            <polygon points="0,0 10,5 0,10" fill="currentColor"/>
+          </marker>
+        </defs>
+        <g font-family="IBM Plex Sans, sans-serif">
+          <text x="120" y="20" font-size="11" font-weight="600" text-anchor="middle" fill="currentColor" opacity="0.75">PARTNER SIDE</text>
+          <text x="580" y="20" font-size="11" font-weight="600" text-anchor="middle" fill="currentColor" opacity="0.75">OOLIX</text>
+          <line x1="120" y1="30" x2="120" y2="286" stroke="currentColor" stroke-opacity="0.3"/>
+          <line x1="580" y1="30" x2="580" y2="286" stroke="currentColor" stroke-opacity="0.3"/>
+
+          <text x="128" y="52" font-size="11.5" fill="currentColor">Security admin</text>
+          <line x1="130" y1="62" x2="570" y2="62" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar4)"/>
+          <text x="350" y="56" font-size="10.5" text-anchor="middle" fill="currentColor">requests a bootstrap token</text>
+
+          <line x1="570" y1="92" x2="130" y2="92" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar4)"/>
+          <text x="350" y="86" font-size="10.5" text-anchor="middle" fill="currentColor">token · single use · 15 minutes</text>
+          <text x="350" y="106" font-size="9.5" text-anchor="middle" fill="currentColor" opacity="0.6">shown once — we keep only its hash</text>
+
+          <rect x="16" y="126" width="208" height="46" rx="3" fill="none" stroke="#9a5d09" stroke-width="1.5"/>
+          <text x="120" y="145" font-size="11.5" font-weight="600" text-anchor="middle" fill="#9a5d09">Agent creates a keypair</text>
+          <text x="120" y="161" font-size="9.5" text-anchor="middle" fill="currentColor" opacity="0.7">private half never leaves</text>
+
+          <line x1="130" y1="192" x2="570" y2="192" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar4)"/>
+          <text x="350" y="186" font-size="10.5" text-anchor="middle" fill="currentColor">token + PUBLIC key</text>
+
+          <line x1="570" y1="222" x2="130" y2="222" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar4)"/>
+          <text x="350" y="216" font-size="10.5" text-anchor="middle" fill="currentColor">agent id + client id</text>
+
+          <line x1="130" y1="262" x2="570" y2="262" stroke="currentColor" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#ar4)"/>
+          <text x="350" y="256" font-size="10.5" text-anchor="middle" fill="currentColor">proves possession → 15-min access token</text>
+          <text x="350" y="278" font-size="9.5" text-anchor="middle" fill="currentColor" opacity="0.6">repeats for the life of the Agent</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption>
+      Because we never hold the private key, a compromise of our database cannot
+      let anyone impersonate a Partner's Agent — and a signed report is evidence
+      rather than a claim.
+    </figcaption>
+  </figure>
+</section>
+
+<!-- 11 ─────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="meta"><span class="num">11</span><span class="tag t-partner">Data Partner · Agent</span></div>
+    <h2>The mapping: their field names, our vocabulary</h2>
+    <p class="lead">
+      This one block of their config is why the whole model works without us
+      seeing their schema.
+    </p>
+  </div>
+
+  <pre><span class="c"># The Partner writes this. Nothing we send can add to it.</span>
+connector:
+  type: postgres_view
+  dsn:  postgres://oolix_agent_ro:•••@db.internal/customers  <span class="c"># read-only</span>
+  query_timeout: 50ms
+
+  audience:
+    attribute_table: oolix_audience_attributes   <span class="c"># pre-computed, not live joins</span>
+    mapping_version: 8
+    mappings:
+      age:                   date_part('year', age(dob))
+      purchase_category:     product_class
+      payment_method:        pay_mode
+      purchase_recency_days: date_part('day', now() - last_order_at)</pre>
+
+  <div class="cols">
+    <div class="col c-partner">
+      <h3>What this means</h3>
+      <p>We ask about <span class="mono">payment_method</span>; they store <span class="mono">pay_mode</span>. We ask about age; they store a date of birth. The translation lives in their file, on their machine.</p>
+    </div>
+    <div class="col c-partner">
+      <h3>What it controls</h3>
+      <p>An attribute absent from this map is one they cannot be asked about. A campaign requiring it simply will not match them — which is the honest answer, not a partial one.</p>
+    </div>
+  </div>
+
+  <div class="call stop">
+    <span class="eyebrow">Insist on a pre-computed table</span>
+    <p>
+      The attribute source must be a restricted, pre-built table — never a live
+      join across their production schema. At scale, the difference is a query
+      that returns in milliseconds versus one that scans hundreds of millions of
+      rows on a page render.
+    </p>
+  </div>
+</section>
+
+<!-- 12 ─────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="meta"><span class="num">12</span><span class="tag t-partner">Data Partner · Integration</span></div>
+    <h2>The ad code on their pages</h2>
+    <p class="lead">
+      Two pieces: a small SDK in the page, and one endpoint on their own backend.
+      Nothing calls us directly from a browser.
+    </p>
+  </div>
+
+  <figure>
+    <div class="fig-shell">
+      <svg viewBox="0 0 720 250" role="img" aria-label="The browser sends a placement id to the Partner's backend, which resolves the visitor from its own session and asks the local Agent, which answers with a creative or no ad." xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="ar5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+            <polygon points="0,0 10,5 0,10" fill="currentColor"/>
+          </marker>
+        </defs>
+        <g font-family="IBM Plex Sans, sans-serif">
+          <rect x="16" y="70" width="150" height="60" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.45"/>
+          <text x="91" y="94" font-size="12" font-weight="600" text-anchor="middle" fill="currentColor">Browser</text>
+          <text x="91" y="112" font-size="10" text-anchor="middle" fill="currentColor" opacity="0.7">Oolix SDK in the slot</text>
+
+          <rect x="248" y="70" width="170" height="60" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.45"/>
+          <text x="333" y="94" font-size="12" font-weight="600" text-anchor="middle" fill="currentColor">Their backend</text>
+          <text x="333" y="112" font-size="10" text-anchor="middle" fill="currentColor" opacity="0.7">knows who is signed in</text>
+
+          <rect x="500" y="70" width="204" height="60" rx="3" fill="none" stroke="#9a5d09" stroke-width="1.6"/>
+          <text x="602" y="94" font-size="12" font-weight="600" text-anchor="middle" fill="#9a5d09">Oolix Agent</text>
+          <text x="602" y="112" font-size="10" text-anchor="middle" fill="currentColor" opacity="0.7">local · decides in &lt;100ms</text>
+
+          <line x1="168" y1="88" x2="246" y2="88" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar5)"/>
+          <text x="207" y="80" font-size="9.5" text-anchor="middle" fill="currentColor">placement id</text>
+          <text x="207" y="146" font-size="9.5" text-anchor="middle" fill="currentColor" opacity="0.65">no user id</text>
+
+          <line x1="420" y1="88" x2="498" y2="88" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar5)"/>
+          <text x="459" y="80" font-size="9.5" text-anchor="middle" fill="currentColor">+ customer id</text>
+
+          <line x1="498" y1="118" x2="420" y2="118" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar5)"/>
+          <line x1="246" y1="118" x2="168" y2="118" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar5)"/>
+          <text x="333" y="134" font-size="9.5" text-anchor="middle" fill="currentColor">creative, or NO_AD + reason</text>
+
+          <line x1="440" y1="30" x2="440" y2="210" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 4" opacity="0.35"/>
+          <text x="207" y="200" font-size="10" text-anchor="middle" fill="currentColor" opacity="0.7">the identifier exists only to the right of nothing —</text>
+          <text x="207" y="216" font-size="10" text-anchor="middle" fill="currentColor" opacity="0.7">it never leaves the Partner at all</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption>
+      The browser never carries a customer identifier and never contacts Oolix.
+      Their backend resolves the visitor from its own session — a cookie, an app
+      user id, whatever they already use.
+    </figcaption>
+  </figure>
+
+  <div class="call">
+    <span class="eyebrow">The integration, in full</span>
+    <p>
+      Drop the SDK into the slot, and add one backend route that resolves the
+      signed-in customer and forwards the request to the Agent. That is the
+      entire engineering surface on their pages.
+    </p>
+  </div>
+</section>
+
+<!-- 13 ─────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="meta"><span class="num">13</span><span class="tag t-partner">Data Partner · Placements</span></div>
+    <h2>The placeholder: how a slot is defined</h2>
+    <p class="lead">
+      A placement is the contract for one slot on one surface. The Partner
+      defines it; the Buyer's creative has to fit it.
+    </p>
+  </div>
+
+  <div class="table-wrap">
+    <table class="w-need">
+      <thead><tr><th>Field</th><th>What it decides</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Placement key</strong></td><td>The stable name the SDK sends, e.g. <span class="mono">booking_success_offer</span>. Never changes once live</td></tr>
+        <tr><td><strong>Surface</strong></td><td>web, iOS, Android, React Native, Flutter, or server-side</td></tr>
+        <tr><td><strong>Format</strong></td><td>banner, native card, carousel, inline or modal</td></tr>
+        <tr><td><strong>Width and height</strong></td><td>The space reserved in the page, so the slot does not shift when an ad arrives</td></tr>
+        <tr><td><strong>Context tags</strong></td><td>Where it sits — a booking confirmation reads very differently from a home page</td></tr>
+        <tr><td><strong>Allowed / blocked categories</strong></td><td>Their policy, enforced at decision time. A blocked category is refused locally</td></tr>
+        <tr><td><strong>Default frequency cap</strong></td><td>Applied when a campaign does not ask for something stricter. Defaults to 2 per day</td></tr>
+        <tr><td><strong>Fallback</strong></td><td><span class="mono">NO_AD</span> — collapse the slot — or <span class="mono">HOUSE_CONTENT</span>, their own promotion</td></tr>
+        <tr><td><strong>Status</strong></td><td>Draft until they activate it. Only active placements can be requested</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 14 ─────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="meta"><span class="num">14</span><span class="tag t-partner">Data Partner · Placements</span></div>
+    <h2>What fills the placeholder, and what happens when nothing does</h2>
+  </div>
+
+  <figure>
+    <div class="fig-shell">
+      <svg viewBox="0 0 720 210" role="img" aria-label="A placement slot resolves to either an image creative, a native card built from headline body and call to action, or the fallback: house content or a collapsed slot." xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="ar6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+            <polygon points="0,0 10,5 0,10" fill="currentColor"/>
+          </marker>
+        </defs>
+        <g font-family="IBM Plex Sans, sans-serif">
+          <rect x="16" y="76" width="150" height="56" rx="3" stroke-dasharray="5 4" fill="none" stroke="currentColor" stroke-opacity="0.55"/>
+          <text x="91" y="100" font-size="12" font-weight="600" text-anchor="middle" fill="currentColor">The slot</text>
+          <text x="91" y="117" font-size="9.5" text-anchor="middle" fill="currentColor" opacity="0.65">reserved space</text>
+
+          <line x1="168" y1="104" x2="214" y2="104" stroke="currentColor" stroke-width="1.3"/>
+          <line x1="214" y1="104" x2="214" y2="34" stroke="currentColor" stroke-width="1.3"/>
+          <line x1="214" y1="104" x2="214" y2="174" stroke="currentColor" stroke-width="1.3"/>
+          <line x1="214" y1="34" x2="256" y2="34" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar6)"/>
+          <line x1="214" y1="104" x2="256" y2="104" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar6)"/>
+          <line x1="214" y1="174" x2="256" y2="174" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar6)"/>
+
+          <rect x="258" y="14" width="200" height="40" rx="3" fill="none" stroke="#0f766e" stroke-width="1.4"/>
+          <text x="272" y="32" font-size="11.5" font-weight="600" fill="#0f766e">Image creative</text>
+          <text x="272" y="47" font-size="9.5" fill="currentColor" opacity="0.7">the image is the ad</text>
+
+          <rect x="258" y="84" width="200" height="40" rx="3" fill="none" stroke="#0f766e" stroke-width="1.4"/>
+          <text x="272" y="102" font-size="11.5" font-weight="600" fill="#0f766e">Native card</text>
+          <text x="272" y="117" font-size="9.5" fill="currentColor" opacity="0.7">headline · body · call to action</text>
+
+          <rect x="258" y="154" width="200" height="40" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.5"/>
+          <text x="272" y="172" font-size="11.5" font-weight="600" fill="currentColor">Fallback</text>
+          <text x="272" y="187" font-size="9.5" fill="currentColor" opacity="0.7">house content, or collapse</text>
+
+          <line x1="460" y1="34" x2="512" y2="94" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar6)"/>
+          <line x1="460" y1="104" x2="512" y2="104" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar6)"/>
+          <line x1="460" y1="174" x2="512" y2="114" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar6)"/>
+
+          <rect x="514" y="76" width="190" height="56" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.45"/>
+          <text x="609" y="100" font-size="11.5" font-weight="600" text-anchor="middle" fill="currentColor">Page renders</text>
+          <text x="609" y="117" font-size="9.5" text-anchor="middle" fill="currentColor" opacity="0.7">no layout shift either way</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption>
+      Three outcomes, one reserved space. The slot is sized from the placement,
+      so the page does not move whichever path is taken.
+    </figcaption>
+  </figure>
+
+  <div class="call stop">
+    <span class="eyebrow">An ad must never break their page</span>
+    <p>
+      If the Agent is slow, unreachable or refuses, the SDK falls back and the
+      page carries on. An advertising failure is not allowed to affect a booking,
+      a checkout or a login — so the fallback path is the normal path, not an
+      error path.
+    </p>
+  </div>
+</section>
+
+<!-- 15 ─────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="meta"><span class="num">15</span><span class="tag t-partner">Data Partner</span></div>
+    <h2>Publishing what they can be asked about</h2>
+    <p class="lead">
+      A Partner with nothing published is invisible. There are two ways to be
+      discoverable, and they are not equivalent.
+    </p>
+  </div>
+
+  <div class="cols">
+    <div class="col c-partner">
+      <h3>Audience capabilities</h3>
+      <p>
+        They declare which attributes they can answer questions about — age,
+        purchase category, payment method — and which operators apply. Buyers then
+        describe an audience in our shared vocabulary and we work out who can
+        evaluate it.
+      </p>
+      <p><strong>This is the primary path.</strong> It requires no audience to be built in advance.</p>
+    </div>
+    <div class="col c-partner">
+      <h3>Prebuilt segments</h3>
+      <p>
+        They publish an audience they already maintain — its name, description
+        and a reach range. Buyers target it directly.
+      </p>
+      <p>Still supported for Partners with an existing setup, but no longer offered to Buyers as an alternative way to build a campaign.</p>
+    </div>
+  </div>
+
+  <div class="call">
+    <span class="eyebrow">Reach is always a range</span>
+    <p>
+      A published audience never carries an exact count, and reach estimates come
+      back as bands. Anything below the minimum cohort reports only that it is
+      too small — because "fewer than a thousand" is itself a disclosure.
+    </p>
+  </div>
+</section>
+
+<!-- 16 ─────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="meta"><span class="num">16</span><span class="tag t-network">Network sponsor</span></div>
+    <h2>Network sponsor onboarding</h2>
+    <p class="lead">
+      A sponsor curates who meets whom. They hold no customer data and cannot
+      overrule anybody.
+    </p>
+  </div>
+
+  <ol class="steps">
+    <li><div><h3>Create the organization</h3><p>Type <span class="mono">NETWORK_SPONSOR</span>, with a <span class="mono">NETWORK_ADMIN</span> named.</p></div></li>
+    <li><div><h3>Pass business verification</h3><p>The same gate as everyone else.</p></div></li>
+    <li><div><h3>Choose an admission mode</h3><p><strong>Private</strong> — invite only. <strong>Curated</strong> — applications reviewed. <strong>Marketplace</strong> — open. This decides how Buyers and Partners join.</p></div></li>
+    <li><div><h3>Admit members</h3><p>Buyers and Data Partners are invited and accepted into the network. Membership is what makes private supply visible to a Buyer at all.</p></div></li>
+    <li><div><h3>Set network policy</h3><p>The rules governing who may join and what may be transacted within it.</p></div></li>
+  </ol>
+
+  <div class="call stop">
+    <span class="eyebrow">The limit that defines the role</span>
+    <p>
+      A sponsor can curate supply but can <strong>never</strong> override a Data
+      Partner's approval decision. There is no endpoint that would allow it. They
+      see aggregate performance across the network, never a member's customer data.
+    </p>
+  </div>
+</section>
+
+<!-- 17 ─────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="meta"><span class="num">17</span><span class="tag t-all">Roles</span></div>
+    <h2>Who we need named, and why they must differ</h2>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Role</th><th>Side</th><th>Can do</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">BUYER_ADMIN</td><td>Buyer</td><td>Create campaigns, submit for review, manage the team</td></tr>
+        <tr><td class="mono">BUYER_OPERATOR</td><td>Buyer</td><td>Build campaigns and upload creatives; cannot submit</td></tr>
+        <tr><td class="mono">PARTNER_ADMIN</td><td>Partner</td><td>Commercial setup, placements, segments, policy</td></tr>
+        <tr><td class="mono">PARTNER_SECURITY_ADMIN</td><td>Partner</td><td><strong>Register and revoke Agents.</strong> Deliberately not the commercial admin</td></tr>
+        <tr><td class="mono">PARTNER_CAMPAIGN_APPROVER</td><td>Partner</td><td>Accept, reject or request changes on campaigns</td></tr>
+        <tr><td class="mono">NETWORK_ADMIN</td><td>Network</td><td>Admit members, set network policy</td></tr>
+        <tr><td class="mono">FINANCE</td><td>Either</td><td>Payouts, invoices, disputes</td></tr>
+        <tr><td class="mono">ANALYST</td><td>Either</td><td>Read reporting only</td></tr>
+        <tr><td class="mono">OOLIX_ADMIN</td><td>Oolix</td><td>Platform operations — and <strong>cannot</strong> approve on a Partner's behalf</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="call">
+    <span class="eyebrow">Separation is enforced, not advised</span>
+    <p>
+      Permissions are checked on every route, and the person who creates a
+      campaign request is refused if they try to approve it. Onboarding that
+      names one person for everything will hit this on the first campaign.
+    </p>
+  </div>
+</section>
+
+<!-- 18 ─────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="meta"><span class="num">18</span><span class="tag t-all">Go-live</span></div>
+    <h2>Go-live checklist</h2>
+  </div>
+
+  <div class="cols">
+    <div class="col c-buyer">
+      <h3>Buyer</h3>
+      <ul class="need mark-buyer">
+        <li>Organization verified</li>
+        <li>Brand registered, landing domain allow-listed</li>
+        <li>Purpose declared</li>
+        <li>Two people with distinct roles</li>
+        <li>Creative uploaded and finalized</li>
+        <li>Budget allocated per Partner</li>
+        <li>Flight dates set — <strong>starting today, not tomorrow</strong></li>
+        <li>CRM key issued if settling on outcomes</li>
+      </ul>
+    </div>
+    <div class="col c-partner">
+      <h3>Data Partner</h3>
+      <ul class="need mark-partner">
+        <li>Organization verified</li>
+        <li>Advertising policy published</li>
+        <li>Security admin named separately</li>
+        <li>Agent running and heartbeating</li>
+        <li>Read-only user and attribute table in place</li>
+        <li>Mapping reviewed and versioned</li>
+        <li>Capabilities or a segment published</li>
+        <li>At least one placement active</li>
+        <li>SDK integrated and the backend route live</li>
+      </ul>
+    </div>
+    <div class="col c-network">
+      <h3>Network sponsor</h3>
+      <ul class="need mark-network">
+        <li>Organization verified</li>
+        <li>Admission mode chosen</li>
+        <li>Network policy set</li>
+        <li>Members invited and accepted</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 19 ─────────────────────────────────────────────────────────── -->
+<section class="slide">
+  <div class="slide-head">
+    <div class="meta"><span class="num">19</span><span class="tag t-all">First campaign</span></div>
+    <h2>What the first live campaign looks like</h2>
+    <p class="lead">Once all three are onboarded, this is the sequence — and where each party acts.</p>
+  </div>
+
+  <ol class="steps">
+    <li><div><h3>Buyer describes an audience</h3><p>In our shared vocabulary, not the Partner's field names. Marks each condition required or optional.</p></div></li>
+    <li><div><h3>Oolix matches Partners</h3><p>On published capability metadata only. A Partner missing a required attribute is incompatible and cannot be selected.</p></div></li>
+    <li><div><h3>Each Partner's Agent estimates reach</h3><p>Computed inside them, returned as a band. We never see the number behind it.</p></div></li>
+    <li><div><h3>Buyer builds the campaign</h3><p>Creative, budget per Partner, placement, flight dates — then submits.</p></div></li>
+    <li><div><h3>The Partner decides</h3><p>They see the full rule set, the creative, the terms and their own reach estimate. They can accept, accept less than asked, request changes, or refuse.</p></div></li>
+    <li><div><h3>The Agent builds the audience locally</h3><p>It verifies the signed instruction, compiles the approved rules against their data, and materializes the matching customers on their side.</p></div></li>
+    <li><div><h3>Ads serve</h3><p>Within the cap, the flight window and the consent each customer gave for that stated purpose.</p></div></li>
+    <li><div><h3>Outcomes flow back</h3><p>Hashed tokens attribute clicks; the Buyer's CRM confirms which leads qualified; settlement is reproducible from the record.</p></div></li>
+  </ol>
+
+  <div class="call oolix">
+    <span class="eyebrow">The Partner keeps control throughout</span>
+    <p>
+      They can revoke at any point, and it takes effect immediately. Nothing runs
+      on their property that they did not individually approve, and no approval
+      can be granted on their behalf.
+    </p>
+  </div>
+</section>
+
+<footer>Oolix · onboarding reference</footer>
+
+</div>
+</body>
+</html>

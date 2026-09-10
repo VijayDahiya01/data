@@ -1,0 +1,68 @@
+{
+  "realm": "oolix",
+  "displayName": "Oolix (local dev)",
+  "enabled": true,
+  "sslRequired": "${env.KC_SSL_REQUIRED}",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "accessTokenLifespan": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+  "bruteForceProtected": true,
+  "passwordPolicy": "${env.KC_PASSWORD_POLICY}",
+  "failureFactor": 10,
+  "waitIncrementSeconds": 60,
+  "attributes": {
+    "frontendUrl": "${env.KEYCLOAK_PUBLIC_URL}"
+  },
+  "clients": [
+    {
+      "clientId": "oolix-web",
+      "name": "Oolix Web Portal",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "${env.OIDC_CLIENT_SECRET}",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": "${env.KC_DIRECT_GRANTS}",
+      "serviceAccountsEnabled": false,
+      "implicitFlowEnabled": false,
+      "redirectUris": ["${env.WEB_PUBLIC_URL}/*"],
+      "webOrigins": ["${env.WEB_PUBLIC_URL}"],
+      "rootUrl": "${env.WEB_PUBLIC_URL}",
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${env.WEB_PUBLIC_URL}/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "oolix-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "oolix-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "oolix-api",
+      "name": "Oolix API",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false
+    }
+  ],
+  "users": []
+}

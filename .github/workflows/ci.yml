@@ -1,0 +1,407 @@
+# Oolix CI -- spec v5 §79.1.
+#
+# Stage order follows §79.1: lint/typecheck -> unit -> build -> integration
+# with ephemeral dependencies -> contract compatibility -> container/vuln scan
+# -> migration dry-run -> e2e smoke -> publish artifacts.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24.19.0'
+  PNPM_VERSION: '10.20.0'
+  GO_VERSION: '1.27.0'
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Static analysis + unit tests. Fast; gates everything else.
+  # -------------------------------------------------------------------------
+  static:
+    name: Lint, typecheck and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Packages must be built before typecheck: apps resolve workspace deps
+      # through their published `types` entry, not their source.
+      - name: Build shared packages
+        run: pnpm -r --filter "./packages/*" build
+
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test:unit
+
+      # §79.1 puts build after unit tests. The apps are built here, not only
+      # the packages: the Next build resolves server/client boundaries and
+      # module specifiers that `tsc --noEmit` does not, and those are exactly
+      # the failures a portal change introduces.
+      - name: Build applications
+        run: pnpm build
+        env:
+          # §65.1 validation runs at build time for the portal's config module.
+          # Placeholders only -- nothing here is a real credential, and the
+          # build makes no outbound calls.
+          OIDC_ISSUER_URL: http://localhost:8081/realms/oolix
+          OIDC_CLIENT_ID: oolix-web
+          OIDC_CLIENT_SECRET: build-time-placeholder
+          PORTAL_SESSION_SECRET: build-time-placeholder-not-a-secret
+          DATABASE_URL: postgresql://oolix:oolix@localhost:5432/oolix?schema=public
+          REDIS_URL: redis://localhost:6379
+
+  # -------------------------------------------------------------------------
+  # Partner Agent (Go). Separate job: different toolchain, and §80 ships the
+  # Agent on its own release cadence.
+  # -------------------------------------------------------------------------
+  agent:
+    name: Partner Agent (Go)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: partner-agent/go.sum
+
+      - name: Verify formatting
+        working-directory: partner-agent
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt'd:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        working-directory: partner-agent
+        run: go vet ./...
+
+      - name: Test with race detector
+        working-directory: partner-agent
+        # -race requires cgo. The ubuntu runner has a C toolchain; a Windows
+        # dev box may not, which is why the local gate runs without it.
+        env:
+          CGO_ENABLED: '1'
+        run: go test -race -count=1 ./...
+
+      - name: Build
+        working-directory: partner-agent
+        run: go build -o bin/oolix-agent ./cmd/agent
+
+  # -------------------------------------------------------------------------
+  # Integration tests against real Postgres/Redis/LocalStack (§79).
+  # -------------------------------------------------------------------------
+  integration:
+    name: API integration tests
+    runs-on: ubuntu-latest
+    needs: static
+    services:
+      postgres:
+        image: postgres:16.10-alpine
+        env:
+          POSTGRES_USER: oolix
+          POSTGRES_PASSWORD: oolix
+          POSTGRES_DB: oolix_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U oolix -d oolix_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7.4-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+      localstack:
+        image: localstack/localstack:4.9
+        env:
+          SERVICES: s3,sqs
+          AWS_DEFAULT_REGION: ap-south-1
+        ports: ['4566:4566']
+
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgresql://oolix:oolix@localhost:5432/oolix_test?schema=public
+      REDIS_URL: redis://localhost:6379
+      AWS_REGION: ap-south-1
+      AWS_ENDPOINT_URL: http://localhost:4566
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      # §65.1 requires these; boot fails validation without them. No identity
+      # provider runs in CI, and none is needed: the suite asserts the
+      # REJECTION path, which never reaches the issuer.
+      OIDC_ISSUER_URL: http://localhost:8080/realms/oolix-local
+      OIDC_CLIENT_ID: oolix-web
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter "./packages/*" build
+
+      # §79.1: migrations are dry-run against a disposable database before the
+      # integration suite depends on them.
+      - name: Apply migrations
+        run: pnpm db:migrate:deploy
+
+      - run: pnpm db:generate
+      - run: pnpm test:integration
+
+      # The integration suite asserts the product does what it should. These
+      # probes assert it REFUSES what it should, from outside, with no
+      # credentials and no cooperation -- which is a different question and
+      # catches a different class of mistake: a route added without its guard,
+      # a stack trace in an error body, an unbounded anonymous flood.
+      #
+      # No identity provider is needed, for the same reason the suite above
+      # does not need one: every probe exercises a rejection path.
+      - name: Build the API for probing
+        run: pnpm --filter @oolix/api-gateway build
+
+      - name: Adversarial probes
+        run: |
+          node apps/api-gateway/dist/main.js &
+          API_PID=$!
+          # Fail loudly if it never listens, rather than reporting probe
+          # failures that are really a start-up failure.
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:4000/healthz >/dev/null; then break; fi
+            if ! kill -0 $API_PID 2>/dev/null; then
+              echo "the API exited during start-up"; wait $API_PID; exit 1
+            fi
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:4000/healthz >/dev/null || {
+            echo "the API never became healthy"; kill $API_PID; exit 1; }
+
+          node scripts/pen-probe.mjs --base http://127.0.0.1:4000
+          status=$?
+          kill $API_PID 2>/dev/null || true
+          exit $status
+
+  # -------------------------------------------------------------------------
+  # §79.1 / §86: the OpenAPI file is canonical for HTTP shapes.
+  # -------------------------------------------------------------------------
+  contracts:
+    name: Contract compatibility
+    runs-on: ubuntu-latest
+    needs: static
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # `pnpm dlx @redocly/cli` alone fails: the package ships two binaries
+      # (`redocly` and `openapi`) and pnpm refuses to guess. Name the binary.
+      - name: Lint OpenAPI contract
+        run: pnpm --package=@redocly/cli@2.47.0 dlx redocly lint implementation_examples/openapi.yaml
+
+      # Appendix A: the pack's snapshot, mirror and README describe code rather
+      # than being it. Documentation that has drifted is worse than none,
+      # because a reader trusts it.
+      - name: Implementation pack drift
+        run: pnpm verify:pack
+
+      # An Agent in the field may be one protocol version behind (§80 keeps
+      # N-1 compatibility during rollout), so a breaking manifest schema change
+      # must be a deliberate, reviewed act.
+      - name: Manifest schema backward compatibility
+        run: pnpm --filter @oolix/manifest-schema test
+
+  # -------------------------------------------------------------------------
+  # §79.1: e2e smoke.
+  #
+  # Narrow by design. `pnpm verify` already proves the business flow end to end
+  # against a live Agent; what only a browser can show is §43's customer-facing
+  # promise that an ad failure never breaks the Partner's own page. Playwright
+  # starts the Mock Partner itself and points it at an Agent that is not
+  # listening, so this job needs no services.
+  # -------------------------------------------------------------------------
+  e2e:
+    name: End-to-end smoke
+    runs-on: ubuntu-latest
+    needs: static
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  # -------------------------------------------------------------------------
+  # Service images.
+  #
+  # §79.1 puts the container scan in the pipeline; this is what produces the
+  # containers to scan. A Dockerfile that no longer builds should fail a pull
+  # request, not a deployment.
+  # -------------------------------------------------------------------------
+  images:
+    name: Build service images
+    runs-on: ubuntu-latest
+    needs: static
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    strategy:
+      # One service failing should not hide whether the others build.
+      fail-fast: false
+      matrix:
+        include:
+          - service: api-gateway
+            dockerfile: infra/docker/Dockerfile.api-gateway
+          - service: web-portal
+            dockerfile: infra/docker/Dockerfile.web-portal
+          - service: worker
+            dockerfile: infra/docker/Dockerfile.worker
+          # The Partner Agent runs inside a Data Partner's own infrastructure,
+          # on a host Oolix never touches. Its Dockerfile says "built by
+          # Oolix" and until now nothing built it -- so the shipped Kubernetes
+          # manifest pointed at REPLACE_WITH_REGISTRY/oolix/partner-agent and
+          # a Partner had to build it themselves, from source, unscanned.
+          #
+          # Publishing it is what lets a Partner pin a version, verify a
+          # digest, and skip installing a Go toolchain to run our software.
+          - service: partner-agent
+            dockerfile: implementation_examples/Dockerfile.partner-agent
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Only on main: a pull request proves the image builds without granting
+      # every branch push access to the registry.
+      - name: Log in to the registry
+        if: github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          # Loaded into the local daemon so the scan below has something to
+          # read. Pushing happens in a later step, only for main.
+          load: true
+          push: false
+          tags: oolix/${{ matrix.service }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,scope=${{ matrix.service }},mode=max
+
+      # The filesystem scan elsewhere in this pipeline cannot see the base
+      # image, which is where most of an image's vulnerability surface lives.
+      - name: Scan the image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: image
+          image-ref: oolix/${{ matrix.service }}:${{ github.sha }}
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true
+
+      - name: Push
+        if: github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/${{ matrix.service }}:latest
+          cache-from: type=gha,scope=${{ matrix.service }}
+
+  # -------------------------------------------------------------------------
+  # §79.1 / §82: dependency, secret and container scanning.
+  # -------------------------------------------------------------------------
+  security:
+    name: Security scans
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Dependency audit
+        run: pnpm audit --audit-level high
+
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Filesystem vulnerability scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true

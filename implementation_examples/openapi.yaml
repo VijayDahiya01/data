@@ -1,0 +1,3023 @@
+openapi: 3.1.0
+
+# =============================================================================
+# Oolix API -- canonical HTTP contract (spec v5 §86, §97).
+#
+# §86: "OpenAPI 3.1 file in the implementation pack is canonical for HTTP
+# shapes. CI validates generated server/client types against it."
+#
+# Three surfaces, deliberately separated (§67):
+#   /v1/...        Oolix user API        OIDC bearer token
+#   /agent/v1/...  Agent-facing API      Oolix-issued workload token + X-Agent-Id
+#   /healthz,/readyz  probes             unauthenticated
+#
+# The Partner Agent's own /private/v1 API is NOT described here: it is served
+# by the Agent inside Partner infrastructure and is never exposed by Oolix.
+# See partner-agent/config.example.yaml and §12.1.
+# =============================================================================
+
+info:
+  title: Oolix API
+  version: 0.2.0
+  description: |
+    Privacy-safe partner media activation control plane.
+
+    **The rule every endpoint serves.** Oolix is the control plane; Data
+    Partners remain the customer-data owners (§1). No request or response in
+    this contract carries a `partner_user_id`, a segment membership list or an
+    exact audience count. Reach is always a bucket (§72) and attribution is
+    always an opaque token resolved server-side by SHA-256 (§90).
+  contact:
+    name: Oolix engineering
+  license:
+    name: Oolix proprietary
+    identifier: LicenseRef-Oolix-Proprietary
+
+servers:
+  - url: http://localhost:4000
+    description: Local development (docker compose stack)
+  - url: '{scheme}://{host}'
+    description: |
+      Deployed environments. The host is supplied per environment rather than
+      hard-coded, so a generated client can never default to someone else's
+      domain.
+    variables:
+      scheme: { default: https, enum: [https] }
+      host: { default: localhost:4000 }
+
+tags:
+  - name: Health
+    description: Liveness, readiness and manifest verification keys (§69.2, §75).
+  - name: Identity
+    description: Users, organizations and membership (§35, §66).
+  - name: Partner supply
+    description: Partner profile, policy, segments and placements (§37, §38, §43).
+  - name: Catalogue
+    description: Buyer audience discovery over safe metadata (§39).
+  - name: Audience
+    description: |
+      Buyer-defined audiences, Partner capability matching and safe reach
+      estimation (v6 §4-§8). Replaces segment-first discovery as the primary
+      Buyer path; prebuilt segments remain optional supply (v6 §19).
+  - name: Campaign
+    description: Campaign builder and Partner requests (§40).
+  - name: Creative
+    description: Creative upload and versioning (§70, §93).
+  - name: Approval
+    description: Partner review centre and decisions (§41, §101).
+  - name: Activation
+    description: Activation lifecycle and kill switches (§24, §52.3).
+  - name: Attribution
+    description: Click and CRM lead events (§14, §71).
+  - name: Reporting
+    description: Delivery, dashboards and reconciliation (§49, §77.3).
+  - name: Billing
+    description: Settlement, payout and disputes (§19, §83.1, §102).
+  - name: Agent
+    description: Partner Agent registration and control sync (§52.4, §92).
+  - name: Admin
+    description: Oolix platform operations (§98.1).
+
+security:
+  - oidcBearer: []
+
+paths:
+  # ---------------------------------------------------------------------------
+  /healthz:
+    get:
+      operationId: getLiveness
+      tags: [Health]
+      summary: Liveness probe
+      description: |
+        §69.2: process alive, **no dependency checks**. Conflating this with
+        readiness makes a database blip restart every pod instead of merely
+        removing them from the load balancer.
+      security: []
+      responses:
+        '200':
+          description: Process is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, const: ok }
+                  contract_version: { type: string }
+
+  /readyz:
+    get:
+      operationId: getReadiness
+      tags: [Health]
+      summary: Readiness probe
+      description: '§69.2: dependencies are healthy enough to serve.'
+      security: []
+      responses:
+        '200': { description: Ready }
+        '503': { description: Not ready }
+
+  /metrics:
+    get:
+      operationId: getMetrics
+      tags: [Health]
+      summary: Prometheus exposition of the §78.2 signals
+      description: |
+        **Not for the public internet.** The exposition names Partner
+        organisations and Agent ids, which is operational detail no Buyer or
+        Partner should be able to enumerate. The TLS terminator returns 404 for
+        this path; a collector reaches the API directly on the internal
+        network.
+
+        Derived from the database on each scrape, so a replica that has just
+        started reports the same numbers as one that has been up for a week.
+        No per-person label appears anywhere -- there is no customer identifier
+        in the control plane to label with (§54, §73).
+      security: []
+      responses:
+        '200':
+          description: Prometheus text exposition
+          content:
+            text/plain:
+              schema: { type: string }
+        '404':
+          description: |
+            What a caller from outside sees. The TLS terminator refuses this
+            path, so the endpoint exists only on the internal network.
+
+  /.well-known/oolix-manifest-jwks.json:
+    get:
+      operationId: getManifestJwks
+      tags: [Health]
+      summary: Manifest verification keys
+      description: |
+        §75: Partner Agents fetch and cache this to verify signed manifests,
+        pinning issuer and audience against it. Public by design; it contains
+        only public keys.
+      security: []
+      responses:
+        '200':
+          description: JWKS
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  keys:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+
+  # ---------------------------------------------------------------------------
+  /v1/me/context:
+    get:
+      operationId: getMyContext
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Identity]
+      summary: Resolve the caller's organizations, roles and permissions
+      description: |
+        §52.1. Everything the portal needs to render role-aware navigation
+        (§34) in one call, so the frontend never infers permissions from a role
+        name. Roles come from the database, never from a token claim (§4.2).
+      responses:
+        '200':
+          description: Caller context
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/organizations:
+    post:
+      operationId: createOrganization
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Identity]
+      summary: Create an organization
+      description: |
+        §35.2. New organizations start at `BUSINESS_VERIFICATION_PENDING`;
+        §66.3 permits browsing and drafting while pending, but not submitting
+        or publishing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateOrganization' }
+      responses:
+        '201': { description: Organization created }
+        '400': { $ref: '#/components/responses/ValidationError' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/organizations/members:
+    get:
+      operationId: listOrganizationMembers
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Identity]
+      summary: List organization members
+      responses:
+        '200': { description: Members }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/organizations/members/invite:
+    post:
+      operationId: inviteOrganizationMember
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Identity]
+      summary: Invite a member
+      responses:
+        '201': { description: Invited }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/organizations/members/{userId}:
+    delete:
+      operationId: removeOrganizationMember
+      tags: [Identity]
+      summary: Remove a member
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Removed }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  # ---------------------------------------------------------------------------
+  /v1/partner/profile:
+    post:
+      operationId: upsertPartnerProfile
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Partner supply]
+      summary: Create or update the Partner profile
+      responses:
+        '201': { description: Profile saved }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner/policies:
+    post:
+      operationId: publishPartnerPolicy
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Partner supply]
+      summary: Publish a new Partner advertising policy version
+      description: |
+        §41, §83: policies are versioned and never edited in place. Every
+        approval binds to the `policy_version` in force at the time, so editing
+        one must not retroactively change what a Partner agreed to.
+      responses:
+        '201': { description: Policy version published }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner/readiness:
+    get:
+      operationId: getPartnerReadiness
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Partner supply]
+      summary: Partner onboarding readiness checklist
+      description: |
+        §37. Readiness is **derived** from observable facts, not set by hand: a
+        Partner cannot be marked ready while its Agent has never checked in.
+      responses:
+        '200':
+          description: Readiness report
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReadinessReport' }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner/segments:
+    get:
+      operationId: listPartnerSegments
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Partner supply]
+      summary: List this Partner's segments
+      responses:
+        '200': { description: Segments }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    post:
+      operationId: createSegment
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Partner supply]
+      summary: Create a segment
+      description: |
+        §38.1: Oolix receives **metadata only**; the member list stays local.
+        `reach_exact_local` is accepted solely to derive the published bucket
+        and is never persisted or returned (§72).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSegment' }
+      responses:
+        '201':
+          description: Segment created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Segment' }
+        '409':
+          description: |
+            `PART_002` -- the cohort is below the publishable minimum. §72
+            requires suppressing the listing rather than exposing a tiny cohort.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner/segments/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      operationId: getSegment
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Partner supply]
+      summary: Get a segment
+      responses:
+        '200': { description: Segment }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    patch:
+      operationId: updateSegment
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Partner supply]
+      summary: Update a segment
+      responses:
+        '200': { description: Updated }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner/segments/{id}/publish:
+    post:
+      operationId: publishSegment
+      tags: [Partner supply]
+      summary: Publish a segment to the catalogue
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Published }
+        '409': { description: 'Segment has never reported a successful refresh (§38.1)' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner/segments/{id}/freshness:
+    post:
+      operationId: reportSegmentFreshness
+      tags: [Partner supply]
+      summary: Report a completed segment refresh
+      description: |
+        §38.1, §72. The exact count supplied here re-derives the published
+        bucket and is then discarded. Republication is rate-limited to defeat
+        count differencing.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Freshness recorded }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner/placements:
+    get:
+      operationId: listPlacements
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Partner supply]
+      summary: List placements
+      responses:
+        '200': { description: Placements }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    post:
+      operationId: createPlacement
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Partner supply]
+      summary: Create a placement
+      responses:
+        '201': { description: Placement created }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner/placements/{id}:
+    patch:
+      operationId: updatePlacement
+      tags: [Partner supply]
+      summary: Update a placement
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Updated }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner/placements/{id}/status:
+    post:
+      operationId: setPlacementStatus
+      tags: [Partner supply]
+      summary: Activate or disable a placement
+      description: '§43: the Partner may disable any placement unilaterally.'
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Status changed }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  # ---------------------------------------------------------------------------
+  /v1/catalogue/segments:
+    get:
+      operationId: searchCatalogue
+      tags: [Catalogue]
+      summary: Search published segments
+      description: |
+        §39. Buyers filter **published metadata**; there is deliberately no
+        parameter that reaches a Partner database. §39: "Do not allow a Buyer
+        to send arbitrary SQL-like rules against a Partner database."
+
+        Reach filters match on bucket **overlap**, never an exact count (§72).
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: query, in: query, schema: { type: string, maxLength: 200 } }
+        - { name: industry, in: query, schema: { type: string } }
+        - { name: category, in: query, schema: { type: string } }
+        - { name: geo, in: query, schema: { type: string } }
+        - { name: channel, in: query, schema: { type: string } }
+        - { name: pricing_model, in: query, schema: { type: string } }
+        - { name: freshness_max_hours, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: reach_min, in: query, schema: { type: integer, minimum: 0 } }
+        - { name: reach_max, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: price_max_minor, in: query, schema: { type: integer, minimum: 0 } }
+        - { name: network_id, in: query, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Catalogue page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CataloguePage' }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/catalogue/partners/{partnerOrgId}/placements:
+    get:
+      operationId: listPartnerPlacements
+      tags: [Catalogue]
+      summary: A Partner's published placements
+      description: |
+        v6 §9 step 6. An audience-targeted campaign has no segment to reach a
+        Partner's placements through, so a Buyer asks about the Partner
+        directly.
+
+        §66.2 visibility applies: a Partner the Buyer cannot transact with
+        returns `PART_001` rather than `403`, because confirming that they exist
+        would itself leak supply.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: partnerOrgId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Active placements published by this Partner }
+        '404':
+          description: '`PART_001` — unknown Partner, or one this Buyer may not transact with.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/catalogue/segments/{id}:
+    get:
+      operationId: getCatalogueSegment
+      tags: [Catalogue]
+      summary: Segment detail with available placements
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Segment detail
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Segment'
+                  - type: object
+                    properties:
+                      channel_availability:
+                        type: array
+                        description: |
+                          §40.5: per-channel eligibility, resolved separately
+                          from the channel constant itself (§89). A Buyer must
+                          be able to see that META is CONDITIONAL before
+                          building a campaign around it.
+                        items:
+                          type: object
+                          properties:
+                            channel: { $ref: '#/components/schemas/Channel' }
+                            availability: { $ref: '#/components/schemas/ChannelAvailability' }
+                            reason: { type: [string, 'null'] }
+        '404':
+          description: |
+            Not found **or** not visible to this Buyer. The two are deliberately
+            indistinguishable: confirming existence would leak supply (§66.2).
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  # ---------------------------------------------------------------------------
+  /v1/brands:
+    get:
+      tags: [Campaign]
+      operationId: listBrands
+      summary: List the Buyer's brands
+      description: |
+        §40.2 requires every campaign to name a brand belonging to the verified
+        Buyer organization, so this is a prerequisite for the builder rather
+        than an optional extra.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      responses:
+        '200':
+          description: Brands
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Brand' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    post:
+      tags: [Campaign]
+      operationId: createBrand
+      summary: Create a brand profile
+      description: |
+        §36 step 4. The landing domain recorded here IS the allow-list §40.7
+        checks a campaign's links against, so it is validated against the brand
+        website rather than taken on trust.
+
+        Needs `campaign:draft` rather than a verified organization: §66.3 allows
+        drafting while verification is pending, and a brand is part of drafting.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateBrand' }
+      responses:
+        '201':
+          description: Brand created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Brand' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/audiences/taxonomy:
+    get:
+      tags: [Audience]
+      operationId: getAttributeTaxonomy
+      summary: The Oolix attribute taxonomy
+      description: |
+        v6 §4. Buyers compose audiences from THIS and nothing else — §17 forbids
+        arbitrary SQL, JavaScript or regex rules, so what a Buyer can express is
+        exactly what appears here.
+
+        Readable by any authenticated org, Buyer or Data Partner, with no
+        permission gate: it is Oolix-controlled platform vocabulary rather than
+        either party's information. A Partner needs it to publish capabilities
+        (§5.1) and to read the rules on a campaign request (§18.2).
+
+        Versioned: a campaign request binds to the taxonomy version the Partner
+        approved, so changing what an attribute means cannot retroactively
+        change what somebody agreed to serve.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      responses:
+        '200':
+          description: Attribute definitions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AttributeDefinition' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/audiences:
+    get:
+      tags: [Audience]
+      operationId: listAudiences
+      summary: List the Buyer's audience groups
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      responses:
+        '200': { description: Audience groups }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    post:
+      tags: [Audience]
+      operationId: createAudience
+      summary: Create an audience group
+      description: |
+        v6 §6. The Buyer describes who they want to reach; Oolix works out which
+        Partners can evaluate that description (§7).
+
+        Every rule is validated against the live taxonomy — attribute, operator
+        and value. §20 requires at least four rules: a one-rule audience matches
+        every Partner trivially and tells a Data Partner almost nothing about
+        what they are being asked to serve (§10).
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAudience' }
+      responses:
+        '201':
+          description: Audience group created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  version: { type: integer }
+                  status: { type: string }
+                  rule_hash:
+                    type: string
+                    description: "v6 §10: what a Partner's approval binds to."
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/audiences/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Audience]
+      operationId: getAudience
+      summary: Read an audience group with its versions and estimates
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      responses:
+        '200': { description: Audience group detail }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    patch:
+      tags: [Audience]
+      operationId: updateAudience
+      summary: Edit an audience group
+      description: |
+        v6 §16: "Editing a READY Audience Group creates a new version; live
+        campaigns stay on their approved version." A DRAFT is edited in place; a
+        READY one forks. That is what stops an edit here from silently changing
+        what a Partner already agreed to serve.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateAudience' }
+      responses:
+        '200':
+          description: Updated, with the version that resulted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version: { type: integer }
+                  rule_hash: { type: string }
+                  forked:
+                    type: boolean
+                    description: True when a new version was created (§16).
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { description: 'The audience is archived.' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/audiences/{id}/publish:
+    post:
+      tags: [Audience]
+      operationId: publishAudience
+      summary: Freeze the current version as READY
+      description: |
+        v6 §14. Re-validates against the taxonomy first: an attribute could have
+        been withdrawn since the draft was written (§4).
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/OrgId'
+      responses:
+        '201': { description: Version frozen READY }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/audiences/{id}/history:
+    get:
+      tags: [Audience]
+      operationId: getAudienceHistory
+      summary: Change history for one audience, in Buyer-facing terms
+      description: |
+        Every saved set of conditions, newest first, with how many campaigns are
+        still running on each.
+
+        The internal version number and rule hash are deliberately absent.
+        They remain the identity a Partner's approval binds to (§10) and the
+        campaign snapshot keeps them, but a Buyer cannot act on either; what
+        they need is what changed, when, and whether anything still depends on
+        the older settings.
+
+        `display_status` is derived, not stored: the current set reads as
+        "Current settings" (or "Draft" before it is finalized) and any earlier
+        set as "Previous settings".
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/OrgId'
+      responses:
+        '200':
+          description: Change history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        audience_version: { type: integer }
+                        is_current: { type: boolean }
+                        display_status:
+                          type: string
+                          enum: [Draft, Current settings, Previous settings]
+                        used_by_campaigns: { type: integer }
+                        created_at: { type: string, format: date-time }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/audiences/{id}/partner-matches:
+    get:
+      tags: [Audience]
+      operationId: getPartnerMatches
+      summary: Which Partners can evaluate this audience
+      description: |
+        v6 §7. A Partner missing any REQUIRED rule is INCOMPATIBLE and cannot be
+        selected; a missing OPTIONAL rule only lowers the score. Incompatible
+        Partners are still returned, with the missing rule named, so the Buyer
+        can decide whether to relax a requirement.
+
+        `match_score` is SCHEMA compatibility — whether the Partner can evaluate
+        these rules. It says nothing about audience quality.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: audience_version, in: query, schema: { type: integer } }
+        - $ref: '#/components/parameters/OrgId'
+      responses:
+        '200':
+          description: Partner matches
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  audience_version: { type: integer }
+                  rule_hash: { type: string }
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/PartnerMatch' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/audiences/{id}/reach-estimates:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Audience]
+      operationId: listReachEstimates
+      summary: Read estimate states
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      responses:
+        '200': { description: Reach estimates }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    post:
+      tags: [Audience]
+      operationId: requestReachEstimates
+      summary: Ask selected Partners to evaluate locally
+      description: |
+        v6 §8. Evaluation happens INSIDE the Partner: the Agent runs the rules
+        against its own attribute view, applies the minimum cohort threshold and
+        returns a bucket or BELOW_THRESHOLD. Oolix never receives a count
+        (§8.2, §17).
+
+        Asking an INCOMPATIBLE Partner is refused — it would waste their query
+        and mislead the Buyer (§7). Repeated requests for the same audience,
+        version and Partner are cached, which is both load control and §72
+        anti-differencing: re-running the same rule repeatedly is how a cohort
+        could be watched changing.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [partner_org_ids]
+              properties:
+                audience_version: { type: integer }
+                partner_org_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+                  minItems: 1
+      responses:
+        '202':
+          description: |
+            Estimates QUEUED. v6 §8.1 specifies 202 because nothing has been
+            computed yet — each Partner's Agent evaluates locally and the answer
+            arrives minutes later. Poll `GET .../reach-estimates` for the result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  audience_version: { type: integer }
+                  rule_hash: { type: string }
+                  requests:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        reach_estimate_id: { type: string, format: uuid }
+                        partner_org_id: { type: string, format: uuid }
+                        status: { $ref: '#/components/schemas/ReachEstimateStatus' }
+                        cached: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: |
+            `PART_002` — that Partner cannot evaluate every REQUIRED rule, or
+            has published no capabilities.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/partner/capabilities:
+    get:
+      tags: [Partner supply]
+      operationId: getPartnerCapabilities
+      summary: This Partner's published capabilities
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      responses:
+        '200': { description: Current capability version }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    put:
+      tags: [Partner supply]
+      operationId: publishPartnerCapabilities
+      summary: Publish what this Partner can evaluate
+      description: |
+        v6 §5.1. METADATA ONLY — there is deliberately no field for a Partner's
+        local column name. §5.2 keeps the mapping from `payment_method` to
+        `pay_mode` inside the Partner, and §17 restates it: Oolix stores
+        "Partner capability metadata, not Partner customer records or Partner
+        local field names".
+
+        Each publication is a NEW version. §16 binds a match, and later an
+        approval, to the capability version that produced it, so rewriting one
+        in place would change the meaning of a decision already made.
+
+        Declaring an attribute as `UNAVAILABLE` is how a Partner declines to be
+        matched on it (§17).
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PublishCapabilities' }
+      responses:
+        '200':
+          description: Capabilities published at a new version
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/campaigns:
+    get:
+      operationId: listCampaigns
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Campaign]
+      summary: List campaigns
+      responses:
+        '200': { description: Campaigns }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    post:
+      operationId: createCampaign
+      tags: [Campaign]
+      summary: Create a campaign draft
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCampaign' }
+      responses:
+        '201':
+          description: Campaign created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Campaign' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/campaigns/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      operationId: getCampaign
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Campaign]
+      summary: Campaign detail with per-Partner activations
+      description: |
+        §42: the parent campaign is an aggregate **view**. Each Partner request
+        and each activation carries its own independent state and reason;
+        `derived_status` is a projection over the activations.
+      responses:
+        '200': { description: Campaign detail }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    patch:
+      operationId: updateCampaign
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Campaign]
+      summary: Update a draft campaign
+      responses:
+        '200': { description: Updated }
+        '409': { description: 'Campaign is not DRAFT (§76)' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/campaigns/{id}/audience-link:
+    post:
+      operationId: linkCampaignAudience
+      tags: [Campaign, Audience]
+      summary: Link an Audience Group to the campaign
+      description: |
+        v6 §9 step 3. Freezes the Audience Group version and its rule hash onto
+        the campaign: §10 binds a Partner's approval to that hash, so it must
+        not move when the Buyer edits the audience afterwards.
+
+        One campaign links one Audience Group (§9). Re-linking is allowed while
+        the campaign is DRAFT and no Partner request is in review.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [audience_group_id]
+              properties:
+                audience_group_id: { type: string, format: uuid }
+                audience_version:
+                  type: integer
+                  minimum: 1
+                  description: Defaults to the audience's current version, frozen at link time.
+      responses:
+        '200': { description: Audience linked and frozen }
+        '409':
+          description: |
+            `CAMP_002` — the campaign is not DRAFT, the audience version is not
+            READY, or a Partner request is already in review.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    get:
+      operationId: getCampaignAudience
+      tags: [Campaign, Audience]
+      summary: Read the campaign's frozen audience
+      description: 'v6 §9 step 10: what the review screen shows. `audience` is null when none is linked.'
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: 'The linked audience, or null when none is set' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    delete:
+      operationId: unlinkCampaignAudience
+      tags: [Campaign, Audience]
+      summary: Unlink the campaign's audience
+      description: |
+        v6 §9 keeps step 3 revisable until submit. Refused once Partner requests
+        on this campaign target the audience — removing it would leave them
+        pointing at nothing.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Audience unlinked }
+        '409':
+          description: '`CAMP_002` — Partner requests still target this audience.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/campaigns/{id}/partner-requests:
+    post:
+      operationId: addPartnerRequest
+      tags: [Campaign]
+      summary: Add a Partner request
+      description: |
+        §40.4: one parent campaign may hold 1..N Partner requests, and every
+        Partner receives only its own. §40.5: each requested channel becomes a
+        separate activation -- never one ambiguous activation spanning several.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePartnerRequest' }
+      responses:
+        '201': { description: Partner request created }
+        '409':
+          description: |
+            `CAMP_003` budget exceeded (§40.6), `PART_002` Partner not ready or
+            category blocked (§37, §41), or `CHAN_001` external channel not
+            enabled (§84).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/campaigns/{id}/submit:
+    post:
+      operationId: submitCampaign
+      tags: [Campaign, Approval]
+      summary: Submit the campaign for Partner review
+      description: |
+        §40.9 freezes the request version; §101 starts each Partner's own
+        review clock. **Idempotency-Key is required** (§53): a retried submit
+        must not start a second review.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+      responses:
+        '200': { description: Submitted }
+        '400': { description: 'Idempotency-Key missing (§53)' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  # ---------------------------------------------------------------------------
+  /v1/creatives/upload-session:
+    post:
+      operationId: createCreativeUploadSession
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Creative]
+      summary: Request a pre-signed upload URL
+      description: |
+        §93.1. Bytes go straight from the browser to object storage, so the API
+        never proxies a 5 MiB upload.
+      responses:
+        '201':
+          description: Upload session
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadSession' }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/creatives/{id}/finalize:
+    post:
+      operationId: finalizeCreative
+      tags: [Creative]
+      summary: Finalize an uploaded creative
+      description: |
+        §93.3. Verifies what was **actually** uploaded -- size, MIME, magic
+        bytes and the declared SHA-256 -- before the version becomes usable.
+        §70 binds Partner approval to the resulting content hash.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Creative READY }
+        '400': { description: 'Hash, size or type mismatch (§70, §93)' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/creatives:
+    get:
+      operationId: listCreatives
+      tags: [Creative]
+      summary: List creative versions for a campaign
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: campaign_id, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Creative versions }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  # ---------------------------------------------------------------------------
+  /v1/partner-requests:
+    get:
+      operationId: listPartnerRequests
+      tags: [Approval]
+      summary: The Partner's review queue
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/PartnerRequestStatus' } }
+      responses:
+        '200': { description: Requests awaiting decision }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner-requests/{id}:
+    get:
+      operationId: getPartnerRequest
+      tags: [Approval]
+      summary: Everything the Partner must see before deciding
+      description: |
+        §41's checklist in one response: Buyer identity, category, segment,
+        channel and placement, frequency cap, creative preview bound to its
+        content hash, landing destination, commercial basis, lead definition,
+        expansion flag and the policy version the decision will bind to.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Review detail }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner-requests/{id}/approve:
+    post:
+      operationId: approvePartnerRequest
+      tags: [Approval]
+      summary: Approve a Partner request
+      description: |
+        §31: the Data Partner makes the **final** decision; neither the network
+        sponsor nor Oolix can override it. §66.2: the user who created the
+        request may not approve it, even within one organization.
+
+        On success this creates one activation per approved channel (§13) and
+        signs a manifest for each owned-media activation (§75). An external
+        channel activation stays `PENDING_CHANNEL_CHECK` with no manifest --
+        approval alone must never enable an upload (§15, §16).
+
+        **Idempotency-Key is required** (§53).
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Approve' }
+      responses:
+        '201': { description: Approved; activations created }
+        '400': { description: 'Idempotency-Key missing (§53)' }
+        '403': { description: 'Wrong role, or self-approval (§66, §66.2)' }
+        '409': { description: 'Invalid state transition, or request expired (§76, §101)' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner-requests/{id}/request-change:
+    post:
+      operationId: requestPartnerRequestChange
+      tags: [Approval]
+      summary: Ask the Buyer to change the request
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Change requested }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner-requests/{id}/reject:
+    post:
+      operationId: rejectPartnerRequest
+      tags: [Approval]
+      summary: Reject a Partner request
+      description: '§76: a REJECTED request never becomes APPROVED without a new version.'
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Rejected }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner-requests/{id}/revoke:
+    post:
+      operationId: revokePartnerRequest
+      tags: [Approval]
+      summary: Revoke an approved or live request
+      description: |
+        §57: local serving stops immediately and external cleanup is queued.
+        The manifest is revoked so an Agent holding a cached copy drops it on
+        its next control sync (§75).
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Revoked; activations ENDING }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner-requests/{id}/extend:
+    post:
+      operationId: extendPartnerRequestReview
+      tags: [Approval]
+      summary: Extend the review window once
+      description: '§101: one extension of up to 7 days, with a mandatory audited reason.'
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Extended }
+        '409': { description: 'Already extended once (§101)' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  # ---------------------------------------------------------------------------
+  /v1/activations/{id}/pause:
+    post:
+      operationId: pauseActivation
+      tags: [Activation]
+      summary: Pause an activation
+      description: |
+        §52.3. Reachable by the Partner that serves it **and** the Buyer that
+        pays for it; neither can touch the other's activations.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Paused }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/activations/{id}/resume:
+    post:
+      operationId: resumeActivation
+      tags: [Activation]
+      summary: Resume a paused activation
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Live }
+        '409': { description: 'An active kill switch prevents resuming (§24)' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/activations/{id}/end:
+    post:
+      operationId: endActivation
+      tags: [Activation]
+      summary: End an activation
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Ending }
+        '400': { description: 'A reason is required for the audit trail (§83)' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner/kill-switches:
+    get:
+      operationId: listKillSwitches
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Activation]
+      summary: List kill switches
+      responses:
+        '200': { description: Kill switches }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    post:
+      operationId: activateKillSwitch
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Activation]
+      summary: Activate a kill switch
+      description: |
+        §24, §6. Unilateral and immediate: no Buyer agreement, no Oolix
+        approval, no notice period. Enforced **locally** by the Agent so it
+        works while Oolix is unreachable. §78.2 alerts on every activation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/KillSwitch' }
+      responses:
+        '201': { description: Kill switch active }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner/kill-switches/{id}/release:
+    post:
+      operationId: releaseKillSwitch
+      tags: [Activation]
+      summary: Release a kill switch
+      description: |
+        Releasing does **not** resurrect an ended activation: §76 has no path
+        from ENDED back to LIVE.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Released }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  # ---------------------------------------------------------------------------
+  /v1/attribution/click/{token}:
+    post:
+      operationId: recordClick
+      tags: [Attribution]
+      summary: Record a click against an opaque token
+      description: |
+        §14, §90. The response is **identical** whether or not the token is
+        recognised -- a differing status would let a caller probe for valid
+        tokens.
+      security: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Attribution outcome
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  attributed: { type: boolean }
+                  activation_id: { type: string, format: uuid }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/leads/events:
+    post:
+      operationId: reportLeadEvent
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Attribution]
+      summary: Report a CRM lead event
+      description: |
+        §71. Authenticated by the Buyer's **CRM API key**, not an OIDC token:
+        the caller is a machine in the Buyer's own stack.
+
+        Transitions are forward-only (`RECEIVED -> VALID -> QUALIFIED ->
+        CONVERTED`, or `-> REJECTED`). Idempotent on
+        `(buyer_org_id, crm_event_id)` so a retry storm cannot inflate the lead
+        count -- and therefore the payout.
+      security:
+        - crmApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeadEvent' }
+      responses:
+        '201': { description: 'Event accepted or recognised as a duplicate' }
+        '401': { description: Invalid or missing CRM API key }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/leads/events/batch:
+    post:
+      operationId: reportLeadEventBatch
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Attribution]
+      summary: Report many CRM lead events
+      description: |
+        Each event is independent: one invalid event does not reject the batch,
+        because a CRM retrying the whole batch would stall every other lead.
+      security:
+        - crmApiKey: []
+      responses:
+        '201': { description: Per-event results }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/conversions/events:
+    post:
+      operationId: reportConversionEvent
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Attribution]
+      summary: Report a conversion
+      description: |
+        §71: a conversion is a lead-state transition, not a separate object --
+        a click token maps to ONE logical lead moving through states.
+      security:
+        - crmApiKey: []
+      responses:
+        '201': { description: Conversion recorded }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/buyer/crm-keys:
+    post:
+      operationId: rotateCrmApiKey
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Attribution]
+      summary: Issue or rotate the Buyer's CRM API key
+      description: |
+        §71: keys are hashed at rest and can be rotated. The plaintext is
+        returned **once**.
+      responses:
+        '201':
+          description: New key (shown once)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  api_key: { type: string }
+                  warning: { type: string }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  # ---------------------------------------------------------------------------
+  /v1/reports/campaigns/{id}:
+    get:
+      operationId: getCampaignReport
+      tags: [Reporting]
+      summary: Buyer campaign report
+      description: |
+        §49. Delivery comes from Agent aggregates; outcomes come from CRM lead
+        states. They are kept distinct because they are verified differently --
+        a Partner counts an impression, a **Buyer** confirms a qualified lead.
+
+        Per-Partner figures are **not** deduplicated across Partners (§13, §72).
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Campaign report }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/reports/partner:
+    get:
+      operationId: getPartnerReport
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Reporting]
+      summary: Partner delivery and revenue report
+      description: |
+        §67: scoped to the authenticated organization. There is deliberately no
+        path parameter that could address another Partner's data.
+      responses:
+        '200': { description: Partner report }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/reports/reconcile/{activationId}:
+    post:
+      operationId: reconcileActivation
+      tags: [Reporting]
+      summary: Reconcile Agent counts against central figures
+      description: |
+        §77.3. Tolerance is `max(10 events, 0.5% of the Agent's count)`. A
+        difference beyond tolerance raises `REVIEW_REQUIRED` and explicitly
+        does **not** alter Partner payout.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: activationId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: date, in: query, schema: { type: string, format: date } }
+      responses:
+        '201':
+          description: Reconciliation result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reconciliation' }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  # ---------------------------------------------------------------------------
+  /v1/billing/payouts/calculate:
+    post:
+      operationId: calculatePayout
+      tags: [Billing]
+      summary: Calculate a payout and write immutable FinancialEvents
+      description: |
+        §50, §102. Writes `OUTCOME_ACCRUAL`, `PLATFORM_FEE` and
+        `PARTNER_PAYOUT_BASIS` events. Re-running is idempotent on
+        `(activation, type, source_ref)` and does not duplicate the accrual.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CalculatePayout' }
+      responses:
+        '201':
+          description: Settlement, with the immutable inputs it was derived from
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Settlement' }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/billing/payouts/{id}/reproduce:
+    get:
+      operationId: reproduceSettlement
+      tags: [Billing]
+      summary: Re-derive a settlement from its immutable inputs
+      description: |
+        §50 rule 4: "Every financial calculation should be reproducible from
+        immutable settlement inputs." A Partner does not have to take the
+        figure on trust -- it can be recomputed and compared.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Reproduction result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reproducible: { type: boolean }
+                  original: { type: object, additionalProperties: true }
+                  recomputed: { type: object, additionalProperties: true }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/billing/payouts:
+    get:
+      operationId: listPayouts
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Billing]
+      summary: The Partner's payouts, with every contributing event
+      responses:
+        '200': { description: Payouts }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/billing/payouts/{id}/review:
+    post:
+      operationId: reviewPayout
+      tags: [Billing]
+      summary: 'CALCULATED -> REVIEWED (§76)'
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Reviewed }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/billing/payouts/{id}/approve:
+    post:
+      operationId: approvePayout
+      tags: [Billing]
+      summary: 'REVIEWED or ADJUSTED -> APPROVED (§76, §83.1)'
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Approved }
+        '403': { description: 'Requires payout:approve (§66 FINANCE)' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/billing/payouts/{id}/mark-paid:
+    post:
+      operationId: markPayoutPaid
+      tags: [Billing]
+      summary: 'APPROVED -> PAID (§76)'
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+      responses:
+        '201': { description: Paid }
+        '409': { description: 'Invalid transition -- a DISPUTED payout cannot be paid (§83.1)' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/billing/payouts/{id}/dispute:
+    post:
+      operationId: disputePayout
+      tags: [Billing]
+      summary: Open a payout dispute
+      description: |
+        §83.1: either side may dispute, and the payout is **held** until the
+        dispute resolves.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Disputed; payout on hold }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/billing/payouts/{id}/resolve-dispute:
+    post:
+      operationId: resolvePayoutDispute
+      tags: [Billing]
+      summary: Resolve a dispute
+      description: |
+        §83.1: "Corrections create adjustment FinancialEvents; never mutate
+        historical FinancialEvents." An `ADJUSTMENT` event is **appended**; the
+        original accrual is left exactly as it was.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Resolved }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/billing/invoices/preview/{campaignId}:
+    get:
+      operationId: previewInvoice
+      tags: [Billing]
+      summary: Buyer invoice preview
+      description: |
+        §19. Computed from immutable FinancialEvents. Tax treatment is
+        configured per jurisdiction and is **not** assumed here (§81).
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: campaignId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Invoice preview }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # External channel activation (§15, §16, §17, §47, §48)
+  # ---------------------------------------------------------------------------
+  /v1/channel-connections:
+    get:
+      operationId: listChannelConnections
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Channel]
+      summary: List this organization's external channel connections
+      description: |
+        §17: Oolix stores account IDs, authorization state and capability
+        flags. It never stores the credential that acts on them -- that lives
+        in the Partner Agent.
+      responses:
+        '200': { description: Connections with status and capability flags }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/channel-connections/{provider}:
+    parameters:
+      - name: provider
+        in: path
+        required: true
+        schema: { type: string, enum: [META, GOOGLE] }
+    get:
+      operationId: getChannelConnection
+      tags: [Channel]
+      summary: One channel connection
+      responses:
+        '200': { description: The connection }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    put:
+      operationId: upsertChannelConnection
+      tags: [Channel]
+      summary: Record or update an account relationship
+      description: |
+        §17 forbids collecting credentials centrally, so this endpoint REFUSES
+        any field whose name suggests one -- `access_token`, `client_secret`,
+        `refresh_token` and similar are rejected rather than stored.
+
+        `capability_flags` are DISCOVERED from the provider, never asserted.
+        §15: "it must never assume universal eligibility." A flag that is
+        absent is treated exactly like one that is false.
+
+        Status is derived, not accepted: a connection whose `expires_at` has
+        passed is EXPIRED whatever the caller intended.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account_ids]
+              additionalProperties: false
+              properties:
+                account_ids:
+                  type: object
+                  additionalProperties: { type: string, maxLength: 256 }
+                scopes:
+                  type: array
+                  items: { type: string, maxLength: 200 }
+                capability_flags:
+                  type: object
+                  additionalProperties: { type: boolean }
+                expires_at: { type: [string, 'null'], format: date-time }
+                status_reason: { type: [string, 'null'], maxLength: 500 }
+      responses:
+        '200': { description: The stored connection }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    delete:
+      operationId: disconnectChannel
+      tags: [Channel]
+      summary: Revoke a channel connection
+      description: |
+        Marks the connection REVOKED so no NEW eligibility check can pass
+        against it, and clears the capability flags so a later reconnection
+        cannot inherit permissions the provider never re-granted. Live
+        activations are ended through the revocation path, not here.
+      responses:
+        '200': { description: The revoked connection }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/activations/{id}/eligibility-check:
+    post:
+      operationId: runChannelEligibilityCheck
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      tags: [Channel]
+      summary: Run the §47.5 / §48.4 eligibility check
+      description: |
+        Runs automatically on approval; this re-runs it after a Partner has
+        fixed a connection. Applies only to PENDING_CHANNEL_CHECK or FAILED --
+        re-checking a live activation would either do nothing or revoke it as a
+        side effect, and revocation has its own path so it is never accidental.
+
+        On success the activation becomes READY and Oolix signs the manifest --
+        in that order, because the manifest is the Agent's authority to read
+        the segment and upload it. On failure the activation becomes FAILED and
+        **no customer data is prepared or uploaded at all** (§47.6, §48.5).
+
+        The response lists every check, not just the first failure: connecting
+        an ad account is slow enough that one round trip per missing scope is a
+        bad experience.
+      responses:
+        '200':
+          description: The verdict, with every check and its result
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { description: 'Not eligible, or not in a checkable state' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/partner/agents:
+    get:
+      operationId: listAgents
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Agent]
+      summary: List this Partner's Agents
+      responses:
+        '200': { description: Agents with heartbeat and config age }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner/agents/bootstrap-tokens:
+    post:
+      operationId: createAgentBootstrapToken
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Agent]
+      summary: Mint a single-use Agent bootstrap token
+      description: |
+        §92.1: 32 random bytes, single-use, 15 minutes. Returned in plaintext
+        **once**; only its SHA-256 is stored. PARTNER_SECURITY_ADMIN only --
+        §66 separates this from the commercial PARTNER_ADMIN.
+      responses:
+        '201':
+          description: Bootstrap token (shown once)
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner/agents/bootstrap-tokens/revoke:
+    post:
+      operationId: revokeAgentBootstrapTokens
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Agent]
+      summary: Revoke all unused bootstrap tokens
+      responses:
+        '201': { description: Revoked }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner/agents/{id}/revoke:
+    post:
+      operationId: revokeAgent
+      tags: [Agent]
+      summary: Revoke an Agent immediately
+      description: |
+        §69.3: "Oolix may revoke an Agent immediately during incident
+        response." Effective at once -- the guard re-checks Agent status on
+        every call rather than waiting for the 15-minute token to expire.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Revoked }
+        '400': { description: 'A reason is required for the audit trail (§83)' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /agent/v1/register:
+    post:
+      operationId: agentRegister
+      tags: [Agent]
+      summary: Register a Partner Agent
+      description: |
+        §92.2. Public because the Agent has no access token yet; it
+        authenticates with the single-use bootstrap token in the body.
+
+        The Agent supplies only its **public** JWK -- §92.2 keeps the private
+        key inside Partner infrastructure, which is what makes a signed report
+        batch meaningful tamper evidence.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterAgent' }
+      responses:
+        '201':
+          description: Agent identity and endpoints
+        '401': { description: 'Bootstrap token invalid, used or expired (§92.1)' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /agent/v1/token:
+    post:
+      operationId: agentIssueToken
+      tags: [Agent]
+      summary: Exchange a client assertion for an access token
+      description: |
+        §92.3. The ES256 client assertion **is** the credential, verified
+        against the public key recorded at registration. Tokens live 15
+        minutes.
+      security: []
+      responses:
+        '200':
+          description: Access token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string }
+                  token_type: { type: string, const: Bearer }
+                  expires_in: { type: integer, const: 900 }
+        '401': { description: Assertion verification failed }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /agent/v1/heartbeat:
+    post:
+      operationId: agentHeartbeat
+      tags: [Agent]
+      summary: Agent heartbeat
+      description: '§52.4. Feeds the §78.2 staleness alerts.'
+      security:
+        - agentBearer: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '201': { description: 'Acknowledged, with config freshness' }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /agent/v1/config/pull:
+    get:
+      operationId: agentPullConfig
+      tags: [Agent]
+      summary: Pull signed manifests and creative bundle
+      description: |
+        §52.4, §75. Polled every 30 seconds. Scoped entirely by the Agent's
+        registered Partner id -- §92.4: "never trust a partner_org_id supplied
+        in the body."
+
+        Returns manifests, the approved creative bundle, revoked activation ids
+        and the kill switches the Agent enforces locally.
+      security:
+        - agentBearer: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+        - { name: since_version, in: query, schema: { type: integer, minimum: 0 } }
+      responses:
+        '200':
+          description: Config bundle
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgentConfigBundle' }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /agent/v1/config/ack:
+    post:
+      operationId: agentAckConfig
+      tags: [Agent]
+      summary: Acknowledge an applied config version
+      security:
+        - agentBearer: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '201': { description: Acknowledged }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /agent/v1/reporting/batches:
+    post:
+      operationId: agentUploadDeliveryBatch
+      tags: [Agent, Reporting]
+      summary: Upload aggregate delivery counters
+      description: |
+        §18, §27. Aggregates only -- Oolix never receives a per-impression
+        event. Deduplicated on `(partner_org_id, batch_id)` so a retry cannot
+        inflate delivery (§57).
+      security:
+        - agentBearer: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeliveryBatch' }
+      responses:
+        '201': { description: 'Accepted, or recognised as a duplicate' }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /agent/v1/channel-status:
+    post:
+      operationId: agentReportChannelSync
+      tags: [Agent, Channel]
+      summary: Report an external audience sync
+      description: |
+        §47.11 / §48.9: "Channel adapter records audience resource ID and sync
+        status centrally; raw matching payload is not stored in Oolix DB."
+
+        The Agent is the only party that can see the upload happen, so this is
+        the control plane's only view of whether an external activation is
+        actually delivering. It accepts a resource id, a status and two counts
+        -- nothing that describes the audience.
+
+        `skipped` is the most useful number here. A high skip rate means
+        members had no usable identifier, which almost always means the
+        Partner's matching-field mapping is wrong; the only other symptom is
+        that the campaign quietly under-delivers.
+
+        Rejected for an activation belonging to another Partner, and for one
+        that never cleared eligibility -- a status arriving for a blocked
+        activation means an Agent is acting on a manifest it should not hold.
+      security:
+        - agentBearer: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [activation_id, provider, status]
+              additionalProperties: false
+              properties:
+                activation_id: { type: string, format: uuid }
+                provider: { type: string, enum: [META, GOOGLE] }
+                resource_id: { type: [string, 'null'], maxLength: 200 }
+                external_campaign_id: { type: [string, 'null'], maxLength: 200 }
+                status:
+                  type: string
+                  enum:
+                    [
+                      NOT_STARTED,
+                      PREPARING,
+                      UPLOADING,
+                      PROCESSING,
+                      READY,
+                      FAILED,
+                      REMOVING,
+                      REMOVED,
+                    ]
+                accepted: { type: integer, minimum: 0 }
+                skipped: { type: integer, minimum: 0 }
+                error_detail: { type: [string, 'null'], maxLength: 500 }
+      responses:
+        '201': { description: Recorded }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /agent/v1/audience/estimate-requests:
+    get:
+      operationId: agentPendingReachEstimates
+      tags: [Agent, Audience]
+      summary: Reach estimate requests waiting for this Agent
+      description: |
+        v6 §8.1. The Agent collects the audience RULES and evaluates them inside
+        the Partner. The rules travel outward; nothing about people travels
+        back.
+
+        Scoped entirely by the Agent's registered Partner (§92.4: never trust a
+        `partner_org_id` supplied by the caller), so an Agent cannot collect
+        another Partner's work with a valid token.
+      security:
+        - agentBearer: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '200':
+          description: |
+            Up to 20 pending requests, each carrying the rules and the
+            `audience_rule_hash` the Agent recomputes before evaluating (§10).
+            Returned requests are claimed; a stale claim is offered again.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /agent/v1/audience/estimate-results:
+    post:
+      operationId: agentReportReachEstimate
+      tags: [Agent, Audience]
+      summary: Report a locally computed reach bucket
+      description: |
+        v6 §8.2. The Agent counted locally and discarded the count; what it
+        reports is a §72 BUCKET, or `BELOW_THRESHOLD` when the cohort is under
+        the publishable minimum. There is no field on this request that could
+        carry an exact number, and adding one would be a privacy change rather
+        than a schema change (§17).
+
+        The reported `audience_rule_hash` must match the request's, or the
+        Agent would be answering a different question than the one asked.
+      security:
+        - agentBearer: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reach_estimate_id, status, audience_rule_hash, freshness_at]
+              properties:
+                reach_estimate_id: { type: string, format: uuid }
+                status:
+                  type: string
+                  enum: [READY, BELOW_THRESHOLD, UNAVAILABLE, FAILED]
+                reach_bucket:
+                  $ref: '#/components/schemas/ReachBucket'
+                audience_rule_hash: { type: string, minLength: 64, maxLength: 64 }
+                mapping_version: { type: integer, minimum: 1 }
+                freshness_at: { type: string, format: date-time }
+                failure_reason: { type: string, maxLength: 500 }
+      responses:
+        '201': { description: Estimate recorded }
+        '400':
+          description: '`VAL_001` — the reported hash does not match the request.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /agent/v1/audience/materializations:
+    post:
+      operationId: agentReportMaterialization
+      tags: [Agent, Audience]
+      summary: Report local audience materialization status
+      description: |
+        v6 §11. The Agent compiled the approved rules and stored the matching
+        members inside the Partner. Oolix receives the status, the
+        materialization version and when it was built — never a member, and
+        never how many.
+
+        A reported `audience_rule_hash` that disagrees with what the Partner
+        approved is refused and audited: it means the Agent compiled something
+        other than what was agreed (§10).
+      security:
+        - agentBearer: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [activation_id, status, materialization_version]
+              properties:
+                activation_id: { type: string, format: uuid }
+                status:
+                  type: string
+                  enum: [NOT_STARTED, BUILDING, READY, STALE, FAILED, REMOVED]
+                materialization_version: { type: integer, minimum: 0 }
+                audience_rule_hash: { type: string, minLength: 64, maxLength: 64 }
+                built_at: { type: string, format: date-time }
+                last_error: { type: string, maxLength: 500 }
+      responses:
+        '201': { description: Status recorded }
+        '400':
+          description: '`VAL_001` — the materialized hash is not what the Partner approved.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /agent/v1/attribution/tokens:
+    post:
+      operationId: agentRegisterAttributionTokens
+      tags: [Agent, Attribution]
+      summary: Register attribution token hashes
+      description: |
+        §90. The Agent uploads **hashes only**. The raw token went to the
+        browser and exists nowhere else.
+      security:
+        - agentBearer: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '201': { description: Tokens registered }
+        '403': { description: 'An activation does not belong to this Partner (§92.4)' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  # ---------------------------------------------------------------------------
+  /v1/admin/ops/dashboard:
+    get:
+      operationId: getOpsDashboard
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Admin]
+      summary: Oolix operations dashboard
+      description: |
+        §98.1. Aggregates and health signals only. §66: OOLIX_ADMIN "cannot
+        bypass Partner approval or access Partner raw DB", and nothing on this
+        dashboard exposes a person, a membership or a customer count.
+      responses:
+        '200': { description: Ops dashboard }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/admin/ops/no-ad-distribution:
+    get:
+      operationId: getNoAdDistribution
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Admin]
+      summary: NO_AD reason distribution
+      description: |
+        §98.2. Aggregate buckets, "excluding any customer identifiers" --
+        inherent, since a §77.1 reason describes a decision, not a person.
+      responses:
+        '200': { description: Reason buckets }
+
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+# =============================================================================
+components:
+  securitySchemes:
+    oidcBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        §64: OIDC access token. Identity is delegated to the provider; Oolix
+        stores only the subject claim. Roles are read from the database for the
+        active organization, never from a token claim (§4.2).
+    agentBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: '§92.3: Oolix-issued Agent access token, 15-minute lifetime.'
+    crmApiKey:
+      type: http
+      scheme: bearer
+      description: "§71: the Buyer's CRM API key. Hashed at rest and rotatable."
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: { type: string, maxLength: 200 }
+      description: |
+        §22.3, §99. Same key + same payload replays the stored result; same key
+        + different payload is `409 IDEMPOTENCY_CONFLICT`. **Required** on
+        campaign submit, approval and mark-paid (§53).
+    IdempotencyKeyRequired:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, maxLength: 200 }
+      description: |
+        §53 makes the key MANDATORY here. These three operations each have an
+        effect that must not happen twice -- starting a second Partner review,
+        creating a second set of activations, or paying a payout twice -- so a
+        retry without a key is refused rather than guessed at.
+
+    AgentId:
+      name: X-Agent-Id
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+      description: |
+        §92.4: must match the access token's subject. Without this check a
+        valid token for one Agent could be replayed while claiming to be
+        another.
+    OrgId:
+      name: X-Org-Id
+      in: header
+      required: false
+      schema: { type: string, format: uuid }
+      description: |
+        Selects which organization the request acts within, for a user who
+        belongs to several (§34 role switching without a second account).
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+      description: '§86: cursor-based pagination.'
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      description: '§86: default 25, maximum 100.'
+
+  responses:
+    Unauthorized:
+      description: '`AUTH_001` -- invalid or expired token.'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: '`PERM_001` / `PERM_002` -- permission or organization scope denied.'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: |
+        `CAMP_001` / `PART_001`. Also returned where an object exists but is
+        not visible to the caller, so existence cannot be probed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationError:
+      description: '`VAL_001` -- schema validation failed.'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: |
+        `SYS_001` -- §86's per-class budget for this caller is exhausted. The
+        response carries `X-RateLimit-*`, `Retry-After` and
+        `retry_after_seconds`, so a client can pace itself instead of guessing
+        (§94).
+      headers:
+        X-RateLimit-Limit:
+          { schema: { type: integer }, description: Requests allowed in the window. }
+        X-RateLimit-Remaining:
+          { schema: { type: integer }, description: Requests left in the window. }
+        X-RateLimit-Reset:
+          { schema: { type: integer }, description: Unix seconds when the window frees up. }
+        Retry-After: { schema: { type: integer }, description: Seconds to wait before retrying. }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    IdempotencyConflict:
+      description: '`IDEMPOTENCY_CONFLICT` -- key reused with a different payload (§99).'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    # --- §77.2 error envelope ------------------------------------------------
+    Error:
+      type: object
+      required: [error]
+      description: |
+        §53, §99. Every error uses this envelope: a canonical code, a human
+        message, an explicit retryable flag, field errors and the correlation
+        id. §99 forbids exposing stack traces or secrets.
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable, correlation_id, field_errors]
+          properties:
+            code: { $ref: '#/components/schemas/ErrorCode' }
+            message: { type: string }
+            retryable: { type: boolean }
+            correlation_id: { type: string }
+            retry_after_seconds: { type: integer }
+            field_errors:
+              type: array
+              items:
+                type: object
+                properties:
+                  field: { type: string }
+                  message: { type: string }
+
+    ErrorCode:
+      type: string
+      description: '§77.2 canonical error registry.'
+      enum:
+        [
+          AUTH_001,
+          PERM_001,
+          PERM_002,
+          VAL_001,
+          CAMP_001,
+          CAMP_002,
+          CAMP_003,
+          PART_001,
+          PART_002,
+          CHAN_001,
+          CHAN_002,
+          AGENT_001,
+          SYS_001,
+          SYS_002,
+          IDEMPOTENCY_CONFLICT,
+        ]
+
+    # --- §89 canonical channel enum ------------------------------------------
+    Channel:
+      type: string
+      description: |
+        §89: exactly these four strings in the database, APIs, manifests,
+        events and frontend state. Eligibility is a separate state, never
+        encoded into the channel constant.
+      enum: [PARTNER_WEB, PARTNER_APP, META, GOOGLE]
+
+    ChannelAvailability:
+      type: string
+      description: |
+        §40.5. An external channel is never `AVAILABLE` on the strength of the
+        enum alone -- it is `CONDITIONAL` until the eligibility service clears
+        it (§47.5, §48.4), or `NOT_OFFERED` when the feature flag is off (§84).
+      enum: [AVAILABLE, CONDITIONAL, BLOCKED, NOT_OFFERED]
+
+    ReachBucket:
+      type: string
+      description: |
+        §72. Reach is **always** a bucket. Exact reach is never Buyer-visible,
+        and buckets must not be summed across Partners as unique reach.
+      enum: [UNDER_10K, 10K_50K, 50K_100K, 100K_250K, 250K_500K, 500K_1M, OVER_1M]
+
+    Money:
+      type: object
+      description: '§53, §73: integer minor units plus ISO-4217 code. Never a float.'
+      required: [amount_minor, currency]
+      properties:
+        amount_minor: { type: integer, format: int64, minimum: 1 }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+
+    FrequencyCap:
+      type: object
+      required: [max_impressions, window]
+      properties:
+        max_impressions: { type: integer, minimum: 1, maximum: 100 }
+        window:
+          type: string
+          description: 'ISO-8601 duration, e.g. `P1D` (§67.2).'
+          pattern: '^P(?:\d+D)?(?:T(?:\d+H)?(?:\d+M)?(?:\d+S)?)?$'
+
+    PartnerRequestStatus:
+      type: string
+      description: '§76 + §101. `PARTNER_REVIEW` is canonical; `PENDING_APPROVAL` does not exist.'
+      enum: [DRAFT, PARTNER_REVIEW, CHANGE_REQUESTED, APPROVED, REJECTED, REVOKED, EXPIRED]
+
+    ActivationStatus:
+      type: string
+      enum: [PENDING_CHANNEL_CHECK, READY, SYNCING, LIVE, PAUSED, FAILED, ENDING, ENDED]
+
+    # --- request bodies ------------------------------------------------------
+    CreateOrganization:
+      type: object
+      required: [name, domain, type, country]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 200 }
+        domain: { type: string, description: 'Bare domain, verified per §66.3.' }
+        type:
+          { type: string, enum: [BUYER, DATA_PARTNER, BUYER_AND_PARTNER, NETWORK_SPONSOR, AGENCY] }
+        country: { type: string, minLength: 2, maxLength: 2 }
+        industry: { type: string }
+        tax_id: { type: string }
+
+    CreateSegment:
+      type: object
+      required:
+        [
+          internal_segment_id,
+          display_name,
+          description,
+          category,
+          geographies,
+          refresh_frequency,
+          allowed_channels,
+          reach_exact_local,
+        ]
+      properties:
+        internal_segment_id:
+          type: string
+          description: |
+            The Partner's own segment key. The Agent resolves membership by
+            this value locally; Oolix only ever passes it back inside a signed
+            manifest.
+        display_name: { type: string }
+        description: { type: string }
+        category: { type: string }
+        geographies: { type: array, items: { type: string }, minItems: 1 }
+        refresh_frequency: { type: string, enum: ['15m', hourly, '6h', daily, weekly] }
+        consent_eligibility: { type: string, enum: [ELIGIBLE, MIXED, UNAVAILABLE] }
+        allowed_channels:
+          { type: array, items: { $ref: '#/components/schemas/Channel' }, minItems: 1 }
+        allowed_categories: { type: array, items: { type: string } }
+        blocked_categories: { type: array, items: { type: string } }
+        reach_exact_local:
+          type: integer
+          minimum: 0
+          description: |
+            **Used only to derive the published bucket, then discarded** (§72).
+            It is not persisted on the segment and never appears in a response.
+        pricing:
+          type: object
+          properties:
+            model: { type: string, enum: [CPM, CPC, CPL, CPQL, FIXED, HYBRID] }
+            unit_price_minor: { type: integer, minimum: 0 }
+            currency: { type: string, minLength: 3, maxLength: 3 }
+            visibility: { type: string, enum: [PRIVATE_NETWORK, CURATED, MARKETPLACE] }
+            network_id: { type: [string, 'null'], format: uuid }
+
+    Segment:
+      type: object
+      description: |
+        Note the absence of any exact-count field: §72 keeps exact reach inside
+        the Partner, and there is no column for it to leak from.
+      properties:
+        segment_id: { type: string, format: uuid }
+        internal_segment_id: { type: string }
+        display_name: { type: string }
+        description: { type: string }
+        category: { type: string }
+        geographies: { type: array, items: { type: string } }
+        reach_bucket: { $ref: '#/components/schemas/ReachBucket' }
+        freshness_at: { type: [string, 'null'], format: date-time }
+        refresh_frequency: { type: string }
+        consent_eligibility: { type: string }
+        allowed_channels: { type: array, items: { $ref: '#/components/schemas/Channel' } }
+        status: { type: string, enum: [DRAFT, PUBLISHED, SUSPENDED, ARCHIVED] }
+        version: { type: integer }
+
+    CataloguePage:
+      type: object
+      properties:
+        items: { type: array, items: { type: object, additionalProperties: true } }
+        next_cursor: { type: [string, 'null'] }
+        notice:
+          type: string
+          description: |
+            §72 reminder carried in the response itself, because summing
+            buckets across Partners is the most tempting mistake a Buyer UI can
+            make.
+
+    Brand:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        category: { type: string }
+        website: { type: string, format: uri }
+        landing_domain:
+          type: string
+          description: 'Bare host. §40.7 permits campaign links on this domain only.'
+        logo_uri: { type: [string, 'null'], format: uri }
+        created_at: { type: string, format: date-time }
+
+    CreateBrand:
+      type: object
+      required: [name, category, website, landing_domain]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 120 }
+        category: { type: string, minLength: 2, maxLength: 80 }
+        website: { type: string, format: uri }
+        landing_domain:
+          type: string
+          description: |
+            Bare domain, no scheme or path — §40.7 compares it against a
+            campaign's landing URL host, and a value carrying a scheme would
+            never match, silently disabling the check.
+          minLength: 3
+          maxLength: 253
+        logo_uri: { type: string, format: uri }
+
+    AttributeDefinition:
+      type: object
+      description: 'v6 §4: one entry in the Oolix-controlled taxonomy.'
+      properties:
+        key: { type: string }
+        display_name: { type: string }
+        description: { type: [string, 'null'] }
+        category:
+          type: string
+          enum: [DEMOGRAPHIC, GEOGRAPHY, COMMERCE, PAYMENT_BEHAVIOUR, TRAVEL, ENGAGEMENT]
+        data_type: { type: string, enum: [NUMBER, ENUM, BOOLEAN, ID] }
+        operators:
+          type: array
+          items: { $ref: '#/components/schemas/RuleOperator' }
+        allowed_values: { type: [array, 'null'], items: { type: string } }
+        min_value: { type: [integer, 'null'] }
+        max_value: { type: [integer, 'null'] }
+        unit: { type: [string, 'null'] }
+        policy_class:
+          type: string
+          enum: [GENERAL, RESTRICTED, SENSITIVE]
+          description: |
+            §4: "Do not enable highly sensitive classes in the MVP without
+            explicit legal/policy design." Only GENERAL is targetable.
+        version: { type: integer }
+
+    RuleOperator:
+      type: string
+      description: |
+        v6 §4's MVP operator set. Deliberately small — every operator here is one
+        a Partner can evaluate against a restricted view without exposing a
+        general query engine (§17).
+      enum: [EQ, IN, LTE, GTE, BETWEEN]
+
+    AudienceRule:
+      type: object
+      required: [attribute, operator, value]
+      properties:
+        attribute: { type: string }
+        operator: { $ref: '#/components/schemas/RuleOperator' }
+        value:
+          description: 'Scalar, list, or [min, max] for BETWEEN.'
+        required:
+          type: boolean
+          default: true
+          description: |
+            §7: a Partner missing a REQUIRED rule is INCOMPATIBLE. A missing
+            OPTIONAL rule only lowers the match score.
+        weight:
+          type: integer
+          minimum: 1
+          maximum: 5
+          default: 3
+          description: |
+            Affects the match SCORE only. It never promotes an optional rule to
+            a required one, and it is excluded from the rule hash — a
+            reweighting must not invalidate a Partner's approval (§16).
+
+    CreateAudience:
+      type: object
+      required: [name, rules]
+      properties:
+        name: { type: string, minLength: 3, maxLength: 120 }
+        description: { type: string, maxLength: 1000 }
+        rules:
+          type: array
+          minItems: 4
+          maxItems: 20
+          items: { $ref: '#/components/schemas/AudienceRule' }
+
+    UpdateAudience:
+      type: object
+      properties:
+        name: { type: string, minLength: 3, maxLength: 120 }
+        description: { type: string, maxLength: 1000 }
+        rules:
+          type: array
+          minItems: 4
+          maxItems: 20
+          items: { $ref: '#/components/schemas/AudienceRule' }
+
+    PartnerMatch:
+      type: object
+      description: 'v6 §14.2.'
+      properties:
+        partner_org_id: { type: string, format: uuid }
+        partner_name: { type: string }
+        status: { type: string, enum: [COMPATIBLE, INCOMPATIBLE] }
+        match_score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: '§7: schema compatibility, NOT audience quality.'
+        supported_rules: { type: array, items: { type: string } }
+        missing_required_rules: { type: array, items: { type: string } }
+        missing_optional_rules: { type: array, items: { type: string } }
+        capability_version: { type: integer }
+        channels:
+          type: array
+          items:
+            type: object
+            properties:
+              channel: { $ref: '#/components/schemas/Channel' }
+              status: { $ref: '#/components/schemas/ChannelAvailability' }
+        reach_estimate:
+          type: [object, 'null']
+          properties:
+            reach_estimate_id: { type: string, format: uuid }
+            status: { $ref: '#/components/schemas/ReachEstimateStatus' }
+            reach_bucket: { $ref: '#/components/schemas/ReachBucket' }
+
+    ReachEstimateStatus:
+      type: string
+      description: |
+        v6 §16. BELOW_THRESHOLD is a successful evaluation, not a failure: the
+        Partner ran the rule and the cohort was too small to publish (§72).
+      enum: [REQUESTED, PROCESSING, READY, BELOW_THRESHOLD, UNAVAILABLE, FAILED, EXPIRED]
+
+    PublishCapabilities:
+      type: object
+      required: [attributes, geographies, channels]
+      description: |
+        v6 §5.1. Note what this cannot carry: there is no field for a Partner's
+        local field name (§5.2, §17).
+      properties:
+        attributes:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [attribute_key, operators]
+            properties:
+              attribute_key: { type: string }
+              operators:
+                type: array
+                minItems: 1
+                items: { $ref: '#/components/schemas/RuleOperator' }
+              status:
+                type: string
+                enum: [AVAILABLE, UNAVAILABLE]
+                default: AVAILABLE
+                description: '§17: UNAVAILABLE is how a Partner declines to be matched on an attribute.'
+        geographies: { type: array, minItems: 1, items: { type: string } }
+        channels:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/Channel' }
+        mapping_version:
+          type: integer
+          description: '§11: the local mapping version these were compiled against.'
+
+    CreateCampaign:
+      type: object
+      required:
+        [name, objective, brand_id, category, purpose_id, budget, start_at, end_at, geographies]
+      properties:
+        name: { type: string, minLength: 3, maxLength: 120 }
+        objective: { type: string, enum: [QUALIFIED_LEADS, CONVERSIONS, CLICKS, AWARENESS] }
+        brand_id: { type: string, format: uuid }
+        category: { type: string }
+        purpose_id:
+          type: string
+          description: '§81: explicit and versioned -- never a permanent "eligible" boolean.'
+        budget: { $ref: '#/components/schemas/Money' }
+        start_at: { type: string, format: date-time }
+        end_at: { type: string, format: date-time }
+        geographies: { type: array, items: { type: string }, minItems: 1 }
+        landing_url:
+          type: string
+          format: uri
+          description: |
+            §40.2, §40.7: HTTPS, on the brand's verified domain, and carrying no
+            PII query parameters. Required for click, lead and conversion
+            objectives.
+        lead_definition:
+          $ref: '#/components/schemas/LeadDefinition'
+
+    LeadDefinition:
+      type: object
+      description: |
+        §40.8. Required for outcome objectives: §50 forbids paying a Partner on
+        unverified clicks, so a CPQL campaign that never defines "qualified"
+        has no settleable basis.
+      required: [qualified_statuses]
+      properties:
+        qualified_statuses:
+          type: array
+          items: { type: string, enum: [VALID, QUALIFIED, CONVERTED] }
+          minItems: 1
+        duplicate_window_days: { type: integer, minimum: 1, maximum: 365, default: 30 }
+        valid_lead_rule: { type: string }
+        qualified_lead_rule: { type: string }
+        conversion_event: { type: string }
+
+    Campaign:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        objective: { type: string }
+        status: { type: string }
+        derived_status:
+          type: string
+          description: '§42: a projection over the activations, never a stored source of truth.'
+        budget: { $ref: '#/components/schemas/Money' }
+        version: { type: integer }
+        activations:
+          type: array
+          description: |
+            §42: each activation carries its OWN state. A campaign is routinely
+            LIVE at one Partner and REJECTED at another, and flattening that
+            into a single status would hide the rejection.
+          items:
+            type: object
+            properties:
+              activation_id: { type: string, format: uuid }
+              partner_org_id: { type: string, format: uuid }
+              channel: { $ref: '#/components/schemas/Channel' }
+              status: { $ref: '#/components/schemas/ActivationStatus' }
+              status_reason: { type: [string, 'null'] }
+
+    CreatePartnerRequest:
+      type: object
+      required: [partner_org_id, channels, creative_version_ids]
+      description: |
+        v6 §19: a request targets EITHER the campaign's linked Audience Group
+        (the primary path — omit `segment_id`) or a Partner's prebuilt segment
+        (the legacy path). Never both.
+      properties:
+        partner_org_id: { type: string, format: uuid }
+        segment_id:
+          type: string
+          format: uuid
+          description: |
+            v6 §19 legacy path. Omit to target the campaign's linked Audience
+            Group; `409 CAMP_002` if no audience is linked either.
+        reach_estimate_id:
+          type: string
+          format: uuid
+          description: |
+            v6 §9: the reach estimate the Buyer was looking at when they chose
+            this Partner, frozen onto the request so the Partner approves
+            against the same number. Must belong to this Partner and this exact
+            audience version.
+        channels:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [channel, allocation_minor, frequency_cap]
+            properties:
+              channel: { $ref: '#/components/schemas/Channel' }
+              placement_ids: { type: array, items: { type: string, format: uuid } }
+              allocation_minor: { type: integer, minimum: 1 }
+              frequency_cap: { $ref: '#/components/schemas/FrequencyCap' }
+        creative_version_ids: { type: array, items: { type: string, format: uuid }, minItems: 1 }
+        audience_expansion_allowed:
+          type: boolean
+          default: false
+          description: '§40.4, §41: off unless the Partner explicitly grants it.'
+        partner_payout:
+          type: object
+          properties:
+            model: { type: string, enum: [CPM, CPC, CPL, CPQL, FIXED, HYBRID] }
+            unit_price_minor: { type: integer, minimum: 0 }
+
+    Approve:
+      type: object
+      required: [approved_channels, approved_creative_version_ids]
+      description: '§41: the Partner may approve a SUBSET of what was requested.'
+      properties:
+        decision_version: { type: integer, minimum: 1, default: 1 }
+        approved_channels:
+          { type: array, items: { $ref: '#/components/schemas/Channel' }, minItems: 1 }
+        approved_placement_ids: { type: array, items: { type: string, format: uuid } }
+        approved_budget_minor: { type: integer, minimum: 1 }
+        approved_creative_version_ids:
+          type: array
+          items: { type: string, format: uuid }
+          minItems: 1
+          description: '§70: the Partner approves specific creative VERSIONS, bound to a content hash.'
+        audience_expansion_allowed: { type: boolean, default: false }
+        partner_payout:
+          type: object
+          properties:
+            model: { type: string, enum: [CPM, CPC, CPL, CPQL, FIXED, HYBRID] }
+            unit_price_minor: { type: integer, minimum: 0 }
+        approval_note: { type: string, maxLength: 1000 }
+
+    KillSwitch:
+      type: object
+      required: [scope, reason]
+      properties:
+        scope: { type: string, enum: [AGENT, PLACEMENT, ACTIVATION, CHANNEL, PARTNER_ALL] }
+        target_id:
+          type: [string, 'null']
+          description: |
+            For `PLACEMENT` this is the placement KEY -- what the Agent matches
+            on locally without a lookup (§75 offline enforcement).
+        reason: { type: string, minLength: 3, maxLength: 500 }
+
+    UploadSession:
+      type: object
+      properties:
+        creative_id: { type: string, format: uuid }
+        creative_version_id: { type: string, format: uuid }
+        version: { type: integer }
+        upload_url: { type: string, format: uri }
+        upload_headers: { type: object, additionalProperties: { type: string } }
+        expires_at: { type: string, format: date-time }
+        finalize_url: { type: string }
+
+    LeadEvent:
+      type: object
+      required: [click_token, crm_event_id, status, event_time]
+      properties:
+        click_token:
+          type: string
+          description: '§90: the opaque token the Buyer stored with the lead. Resolved by SHA-256.'
+        crm_event_id:
+          type: string
+          description: '§22.3: idempotency is on `(buyer_org_id, crm_event_id)`.'
+        status: { type: string, enum: [RECEIVED, VALID, QUALIFIED, CONVERTED, REJECTED] }
+        event_time: { type: string, format: date-time }
+        lead_reference: { type: string, description: "The Buyer's own reference. Opaque to Oolix." }
+        metadata:
+          type: object
+          additionalProperties: true
+          properties:
+            qualification_reason: { type: string }
+            rejection_reason: { type: string }
+
+    DeliveryBatch:
+      type: object
+      required: [batch_id, counters]
+      properties:
+        batch_id: { type: string, description: '§22.3: `partner_id + batch_id` deduplicates.' }
+        counters:
+          type: array
+          minItems: 1
+          maxItems: 10000
+          items:
+            type: object
+            required: [activation_id, bucket_start, impressions, clicks]
+            properties:
+              activation_id: { type: string, format: uuid }
+              bucket_start: { type: string, format: date-time }
+              impressions: { type: integer, minimum: 0 }
+              clicks: { type: integer, minimum: 0 }
+              spend_minor: { type: integer, minimum: 0, default: 0 }
+        payload_signature:
+          type: string
+          description: '§92.4: optional ES256 tamper evidence over the batch body.'
+
+    RegisterAgent:
+      type: object
+      required: [bootstrap_token, agent_public_key_jwk, agent_version, capabilities]
+      properties:
+        bootstrap_token: { type: string, minLength: 20 }
+        agent_public_key_jwk:
+          type: object
+          required: [kty, crv, x, y]
+          description: |
+            **Public** key only. A `d` parameter is rejected: its presence means
+            the Agent is leaking its own private key (§92.2).
+          properties:
+            kty: { type: string, const: EC }
+            crv: { type: string, const: P-256 }
+            x: { type: string }
+            y: { type: string }
+        agent_version: { type: string, maxLength: 32 }
+        capabilities: { type: array, items: { $ref: '#/components/schemas/Channel' }, minItems: 1 }
+
+    AgentConfigBundle:
+      type: object
+      properties:
+        config_version: { type: integer }
+        issued_at: { type: string, format: date-time }
+        partner_org_id: { type: string, format: uuid }
+        manifests:
+          type: array
+          items: { type: string }
+          description: 'Compact JWS, ES256, `typ: OOLIX-MANIFEST+JWS` (§75).'
+        creatives: { type: array, items: { type: object, additionalProperties: true } }
+        revoked_activation_ids:
+          type: array
+          items: { type: string, format: uuid }
+          description: '§24: the Agent must drop any cached manifest for these.'
+        kill_switches: { type: array, items: { type: object, additionalProperties: true } }
+        stale_grace_seconds:
+          type: integer
+          description: '§75: how long the Agent may serve from cache when Oolix is unreachable.'
+        jwks_uri: { type: string, format: uri }
+
+    CalculatePayout:
+      type: object
+      required: [activation_id, period_start, period_end]
+      properties:
+        activation_id: { type: string, format: uuid }
+        period_start: { type: string, format: date-time }
+        period_end: { type: string, format: date-time }
+
+    Settlement:
+      type: object
+      description: |
+        §102 worked example: CPQL INR 4,500 x 100 qualified = INR 450,000 media;
+        10% platform fee = INR 45,000; Buyer subtotal INR 495,000; Partner
+        payout basis INR 450,000.
+      properties:
+        payout_id: { type: string, format: uuid }
+        status: { type: string }
+        source_ref: { type: string }
+        settlement_inputs:
+          type: object
+          additionalProperties: true
+          description: '§50 rule 4: the immutable inputs the figure was derived from.'
+        settlement:
+          type: object
+          properties:
+            payable_count: { type: integer }
+            media_amount_minor: { type: integer, format: int64 }
+            platform_fee_minor: { type: integer, format: int64 }
+            invoice_subtotal_minor: { type: integer, format: int64 }
+            partner_payout_basis_minor: { type: integer, format: int64 }
+            currency: { type: string }
+            settles_on_verified_outcomes: { type: boolean }
+
+    Reconciliation:
+      type: object
+      properties:
+        activation_id: { type: string, format: uuid }
+        bucket_date: { type: string, format: date }
+        agent_count: { type: integer }
+        central_count: { type: integer }
+        difference: { type: integer }
+        tolerance: { type: integer, description: '§77.3: max(10 events, 0.5%).' }
+        status: { type: string, enum: [PASS, REVIEW_REQUIRED, RESOLVED] }
+        note:
+          type: [string, 'null']
+          description: '§77.3: a difference beyond tolerance does NOT alter payout.'
+
+    ReadinessReport:
+      type: object
+      properties:
+        readiness:
+          type: string
+          enum:
+            [
+              PROFILE_INCOMPLETE,
+              POLICY_PENDING,
+              AGENT_PENDING,
+              CONNECTOR_PENDING,
+              SEGMENTS_PENDING,
+              PLACEMENTS_PENDING,
+              TEST_CAMPAIGN_PENDING,
+              READY_FOR_CAMPAIGNS,
+              SUSPENDED,
+            ]
+        checks:
+          type: array
+          items:
+            type: object
+            properties:
+              step: { type: string }
+              complete: { type: boolean }
+              detail: { type: string }
+        blocking: { type: array, items: { type: string } }

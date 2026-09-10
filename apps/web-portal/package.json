@@ -1,0 +1,29 @@
+{
+  "name": "@oolix/web-portal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Single role-aware web application for Buyer, Data Partner, Network sponsor and Oolix Admin (spec v5 §34).",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:unit": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@oolix/contracts": "workspace:*",
+    "next": "16.3.2",
+    "openid-client": "6.8.7",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.4",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}

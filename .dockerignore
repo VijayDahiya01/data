@@ -1,0 +1,39 @@
+# Keep the build context small and free of anything that must not reach an
+# image. A large context is slow to send to the daemon on every build; a
+# context carrying secrets is worse than slow.
+
+# Dependencies and build output are produced inside the image, never copied in.
+node_modules
+**/node_modules
+dist
+**/dist
+.next
+**/.next
+**/src/generated
+
+# Local state and secrets. `.env` in particular must never be baked into a
+# layer: production configuration comes from the orchestrator's environment.
+.env
+.env.*
+!.env.example
+partner-agent/.agent-state
+partner-agent/config.local.yaml
+partner-agent/bin
+
+# Test and tooling output.
+test-results
+playwright-report
+screenshots
+coverage
+*.log
+
+# Version control and editor noise.
+.git
+.github
+.vscode
+.idea
+
+# Documentation and specs are not needed to build a service.
+docs
+implementation_examples
+newone-backup-*

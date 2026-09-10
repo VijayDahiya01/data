@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": "./src", "outDir": "./dist" },
+  "include": ["src/**/*"],
+  // Specs must not reach `dist`: they are dead weight in a production
+  // image, and vitest would then collect BOTH the source and the compiled
+  // copy and run every test twice.
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "src/**/*.spec.ts"]
+}

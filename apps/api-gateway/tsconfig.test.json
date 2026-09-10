@@ -1,0 +1,13 @@
+{
+  // The build tsconfig excludes `test/**` so integration tests never end up in
+  // `dist`. Without this second project they would also escape the typecheck
+  // gate entirely, and a type error in a test would surface only when someone
+  // ran it -- which, for a suite that needs Postgres and Redis, could be days.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["src/**/*", "test/**/*", "jest.config.cjs"],
+  "exclude": ["node_modules", "dist"]
+}

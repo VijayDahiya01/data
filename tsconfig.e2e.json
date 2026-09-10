@@ -1,0 +1,15 @@
+{
+  // Playwright's config and specs live at the repository root, outside every
+  // workspace, so `pnpm -r typecheck` never sees them. This project brings
+  // them into the gate.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"],
+    // `page.evaluate` callbacks run inside the browser, so these files
+    // legitimately reference `document` and `window` even though the test
+    // process itself is Node.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
+  },
+  "include": ["playwright.config.ts", "e2e/**/*.ts"]
+}

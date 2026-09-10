@@ -1,0 +1,24 @@
+# Redocly lint configuration -- spec v5 §79.1, §86.
+#
+# §86 makes the OpenAPI file canonical for HTTP shapes, so CI lints it on every
+# pull request. The `recommended` ruleset is kept as-is; only two deliberate
+# exceptions are declared, both narrow enough to name the exact paths.
+apis:
+  oolix:
+    root: implementation_examples/openapi.yaml
+
+extends:
+  - recommended
+
+rules:
+  # §69.2: /healthz, /readyz and the JWKS endpoint are unauthenticated, exempt
+  # from rate limiting (§94) and take no input. They genuinely have no 4xx to
+  # document, and inventing one would make the contract less accurate rather
+  # than more complete. The three exemptions are listed explicitly in
+  # .redocly.lint-ignore.yaml so a NEW endpoint without error responses still
+  # trips the rule.
+  operation-4xx-response: warn
+
+  # Descriptions here carry the spec citation that justifies each shape; a
+  # length cap on them would work against that.
+  tag-description: off

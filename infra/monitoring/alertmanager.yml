@@ -1,0 +1,39 @@
+# Where an alert actually goes.
+#
+# An alert rule with no route is a rule that fires into nothing, which is the
+# state this file exists to end. The receiver below is deliberately a
+# placeholder: fill in the webhook for whatever the on-call rota actually uses
+# before the pilot takes real traffic.
+route:
+  # Group by Partner: one Partner's outage is one incident, however many of
+  # their Agents are involved.
+  group_by: ['alertname', 'partner_org']
+  group_wait: 30s
+  group_interval: 5m
+  # Slow, on purpose. A repeat every few minutes is how a rota learns to ignore
+  # the channel.
+  repeat_interval: 4h
+  receiver: default
+  routes:
+    - matchers: [severity="page"]
+      receiver: oncall
+      repeat_interval: 1h
+
+receivers:
+  - name: default
+    # REPLACE: a chat webhook is usually enough for ticket-severity alerts.
+    webhook_configs:
+      - url: http://example.invalid/alerts
+        send_resolved: true
+
+  - name: oncall
+    # REPLACE: whatever actually wakes someone up.
+    webhook_configs:
+      - url: http://example.invalid/oncall
+        send_resolved: true
+
+inhibit_rules:
+  # If an Agent is unreachable, its config is stale too. Say it once.
+  - source_matchers: [alertname="AgentHeartbeatStale"]
+    target_matchers: [alertname=~"AgentConfig.*"]
+    equal: ['agent']

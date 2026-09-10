@@ -1,0 +1,239 @@
+# Oolix Partner Agent configuration -- spec v5 §69.1.
+#
+# This file lives INSIDE the Data Partner and is controlled by the Partner.
+# Nothing Oolix sends can widen what the Agent reads or where it sends data.
+#
+# Copy to config.local.yaml for local development (gitignored).
+
+agent:
+  # The Partner organization id issued during onboarding.
+  partner_id: 'org_partner_a'
+
+  # PRIVATE listener. §12 requires the Partner BACKEND to call this, never a
+  # browser: this is the only hop that carries a partner_user_id. Bind it to a
+  # private interface and never expose it publicly.
+  listen_addr: '0.0.0.0:8082'
+
+  # §75: how often to pull signed configuration.
+  control_sync_interval: 30s
+
+  # §75: how long the Agent may keep serving cached manifests when Oolix is
+  # unreachable. Also bounded by each manifest's own config_expires_at.
+  stale_grace: 15m
+
+  # §103: the whole decision budget. The SDK gives up at 150ms, so exceeding
+  # this is worse for the Partner's page than returning NO_AD.
+  decision_timeout: 100ms
+
+oolix:
+  api_base_url: 'http://localhost:4000'
+
+  # Issued by POST /agent/v1/register (§92.2).
+  agent_id: 'REPLACE_WITH_AGENT_ID'
+  client_id: 'REPLACE_WITH_CLIENT_ID'
+
+  # §92.2: generated locally, never leaves Partner infrastructure.
+  private_key_path: './.agent-state/agent-key.pem'
+
+  # §75: PINNED, not discovered. A manifest signed for another environment
+  # must not verify here.
+  manifest_issuer: 'http://localhost:4000'
+  manifest_audience: 'oolix-partner-agent'
+  token_audience: 'oolix-agent-api'
+
+connector:
+  # §7.1 integration mode. Only postgres_view is implemented in the MVP.
+  type: 'postgres_view'
+
+  # §69.1 prefers a secret reference; a literal dsn is for local development.
+  # dsn_secret_ref: "secret://partner/oolix/audience-dsn"
+  dsn: 'postgres://oolix_agent_ro:agent-local-only@localhost:5433/partner_audience'
+
+  # §7.2: PRE-COMPUTED membership. Never a booking/order join -- that would
+  # blow the §103 p95 < 30ms budget and load the Partner's production database
+  # on every page view.
+  membership_query: >-
+    SELECT 1 FROM oolix_segment_membership
+    WHERE partner_user_id = $1 AND segment_id = $2 AND expires_at > NOW()
+
+  # §45 / §81.1: the Partner's own consent and eligibility rules. Fails closed.
+  consent_query: >-
+    SELECT (eligible AND withdrawn_at IS NULL) FROM oolix_user_consent
+    WHERE partner_user_id = $1 AND purpose_id = $2
+
+  max_open_conns: 10
+  # §103 sets a p95 OBJECTIVE of 30ms for the lookup. This is the HARD
+  # deadline, deliberately larger: a p95 used as a per-request timeout fails
+  # the slowest 5% by construction, including the first query on a cold pool.
+  query_timeout: 50ms
+
+  # ---------------------------------------------------------------------------
+  # v6 §5.2: the Partner-local attribute mapping.
+  #
+  # This block is the whole reason v6 works without Oolix seeing Partner data.
+  # Oolix asks about `payment_method`; this Partner stores `pay_mode`. Oolix asks
+  # about `age`; this Partner stores a date of birth. The translation lives HERE,
+  # in the Partner's own config file, and §17 keeps it here: Oolix stores
+  # "Partner capability metadata, not Partner local field names".
+  #
+  # Nothing Oolix sends can add to this map. An attribute that is absent is one
+  # this Partner cannot be asked about -- §7 turns that into INCOMPATIBLE for a
+  # REQUIRED rule, which is the honest answer rather than a partial match.
+  audience:
+    # §5.2: a restricted, PRE-COMPUTED table. Never a live join across the
+    # production transactional schema.
+    attribute_table: 'oolix_audience_attributes'
+    # Reported with every estimate so an answer can be tied to the mapping that
+    # produced it (§8.2, §16). Bump it whenever anything below changes.
+    mapping_version: 8
+    # An estimate is a full-table count a Buyer waits seconds for, not an ad
+    # decision on a page render. Deliberately far above query_timeout.
+    evaluation_timeout: 30s
+    # §11: how long a compiled audience stays servable before a rebuild. The
+    # worker refreshes at half this, so members never expire under a live
+    # campaign.
+    materialization_ttl: 24h
+
+    mapping:
+      # --- demographic ------------------------------------------------------
+      # §5.2's own example of a derived attribute: Oolix asks for an age band,
+      # this Partner stores a birth date and never sends either.
+      age:
+        # `expr` alone is correct and unindexable: wrapping the column in a
+        # function means no index on dob can serve it, so every audience with
+        # an age rule reads the whole table. Naming the raw column and how the
+        # value derives from it lets the compiler emit a range over dob
+        # instead. Measured 76x faster on the reference dataset.
+        expr: "date_part('year', age(dob))"
+        type: 'NUMBER'
+        column: dob
+        derive: years_since
+      gender:
+        expr: 'sex_code'
+        type: 'ENUM'
+
+      # --- geography --------------------------------------------------------
+      country:
+        expr: 'country_code'
+        type: 'ENUM'
+      state_region:
+        expr: 'region_code'
+        type: 'ENUM'
+      city:
+        expr: 'city_code'
+        type: 'ENUM'
+
+      # --- commerce ---------------------------------------------------------
+      online_shopper:
+        expr: 'is_online_buyer'
+        type: 'BOOLEAN'
+      purchase_category:
+        expr: 'product_class'
+        type: 'ENUM'
+      purchase_recency_days:
+        expr: "date_part('day', now() - last_order_at)"
+        type: 'NUMBER'
+        column: last_order_at
+        derive: days_since
+      purchase_frequency:
+        expr: 'order_count_90d'
+        type: 'NUMBER'
+      payment_method:
+        expr: 'pay_mode'
+        type: 'ENUM'
+
+      # --- travel -----------------------------------------------------------
+      recent_booking:
+        expr: 'has_recent_trip'
+        type: 'BOOLEAN'
+      domestic_international:
+        expr: 'trip_scope'
+        type: 'ENUM'
+      booking_recency_days:
+        expr: "date_part('day', now() - last_booking_at)"
+        type: 'NUMBER'
+        column: last_booking_at
+        derive: days_since
+
+      # --- engagement -------------------------------------------------------
+      active_user_days:
+        expr: "date_part('day', now() - last_seen_at)"
+        type: 'NUMBER'
+        column: last_seen_at
+        derive: days_since
+      app_active:
+        expr: 'uses_app'
+        type: 'BOOLEAN'
+      loyalty_tier:
+        expr: 'tier_code'
+        type: 'ENUM'
+
+state:
+  # §76.1: "embedded" is SINGLE REPLICA ONLY. With several replicas each keeps
+  # its own counters, so a cap of 2/day across 3 replicas becomes 6/day.
+  # Multi-replica production MUST use partner-local Redis.
+  mode: 'embedded'
+  path: './.agent-state'
+  # mode: "redis"
+  # redis_url: "redis://localhost:6380"
+  redis_key_prefix: 'oolix:agent'
+
+channels:
+  # §15, §16, §84: external adapters stay off until the exact account and
+  # eligibility model is proven for this Partner/Buyer relationship.
+  #
+  # Switching one on is not sufficient by itself. Oolix runs a separate
+  # eligibility check (§47.5, §48.4) before it will sign a manifest for an
+  # external channel, and no upload happens without one.
+  meta:
+    enabled: false
+    # The credential stays HERE and never reaches Oolix (§17). Prefer the
+    # secret reference: `secret://meta-access-token` resolves from the
+    # environment, so a real secret manager substitutes without a config change.
+    # access_token_secret_ref: 'secret://meta-access-token'
+    #
+    # The ADVERTISER's ad account, without the "act_" prefix.
+    # ad_account_id: '1234567890'
+    # business_id: '9876543210'
+
+  google:
+    enabled: false
+    # access_token_secret_ref: 'secret://google-access-token'
+    #
+    # These three are different things and using the wrong one returns a 403
+    # that reads like a permissions bug rather than a routing mistake.
+    # operating_account_id: '111-222-3333'   # owns the audience
+    # login_account_id: '999-888-7777'       # the manager acting for it
+    # product_destination_id: 'userlist-42'  # the user list to ingest into
+
+  # Where the matching identifiers live (§47.8, §47.9).
+  #
+  # DELIBERATELY SEPARATE from connector.audience. That table holds TARGETING
+  # attributes -- age band, city code, loyalty tier -- and holds no contact
+  # details at all, because the ad-decision path never needs them and a table
+  # without an email address cannot leak one. This is the only place the Agent
+  # is told how to read contact details in bulk, and it is only ever read for
+  # an activation that has already cleared eligibility.
+  #
+  # §47.9: "Agent selects only allowed matching fields." A field you leave out
+  # is one the Agent CANNOT read. Leaving the whole block out means no external
+  # upload is possible, which is the right default.
+  export:
+    identity_table: ''
+    # fields:
+    #   email: email_address
+    #   phone: phone_e164
+    #   first_name: given_name
+    #   last_name: family_name
+    #   country: country_code
+    #   zip: postal_code
+
+logging:
+  level: 'info'
+  format: 'json'
+  # §69.1 / §78.1: never log these, at any level.
+  redact_fields:
+    - 'partner_user_id'
+    - 'email'
+    - 'phone'
+    - 'mobile_id'
