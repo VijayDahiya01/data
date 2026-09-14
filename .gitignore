@@ -50,3 +50,7 @@ apps/api-gateway/src/generated/
 
 # Pack-verification scratch config (contains a local test DSN)
 packtest-agent.yaml
+
+# Local backup destination used when rehearsing the production stack.
+# These are real database dumps and signing-key archives — never commit them.
+infra/docker/backups/

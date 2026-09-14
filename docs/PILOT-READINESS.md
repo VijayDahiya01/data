@@ -58,6 +58,55 @@ something else.
 
 ---
 
+## The production stack, actually booted — 2026-09-14
+
+Until now "the images build and run together" was asserted by the Dockerfiles,
+not proven. It is now proven.
+
+All three images built from the committed tree and tagged with the commit SHA
+(`9f192d3`), then the whole stack brought up from `compose.prod.yml`:
+
+| | |
+| --- | --- |
+| `api-gateway` | 766 MB, runs as `node` |
+| `worker` | 720 MB, runs as `node` |
+| `web-portal` | 322 MB, runs as `node` |
+
+Signing keys provisioned by the real image, migrations ran to completion and
+exited 0, and every service reported healthy. Served over HTTPS through Caddy:
+
+```
+https://api.oolix.localhost/healthz                       200
+https://app.oolix.localhost/login                         200
+https://auth.oolix.localhost/realms/oolix/.well-known/…   200
+```
+
+**The hardening was then checked inside the running stack**, not in the file
+that produces it: the imported realm carries **0 users**, `sslRequired:
+external`, the password grant **off**, and a client secret that is not the
+published literal.
+
+### Alert routing was still a hand-edit, and is not any more
+
+`pnpm preflight` blocked this deployment on it, correctly. The two webhook URLs
+were literals inside `infra/monitoring/alertmanager.yml` with a comment asking
+somebody to replace them — the most forgettable kind of deployment step,
+because every other setting comes from `.env.prod`.
+
+It also fails in the worst direction: every rule still evaluates, every alert
+still fires, and all of them go to a hostname that does not resolve. The stack
+stays green and nobody is told, and you find out during the incident the
+alerting existed to catch.
+
+They are now `ALERT_WEBHOOK_DEFAULT` and `ALERT_WEBHOOK_ONCALL`, substituted at
+deploy time by `infra/monitoring/render-alertmanager.mjs`, which **refuses** to
+render an unset value, an example placeholder, a non-HTTP URL, or `localhost`
+— which inside a container is Alertmanager itself. Verified all four refusals
+plus the success path, and the rendered file that Alertmanager actually loaded
+carries the real URLs. Webhook tokens are never logged; only hosts.
+
+---
+
 ## Found while preparing for a LIVE pilot — 2026-09-09
 
 Six defects that every test suite passed over, because none of them is wrong in

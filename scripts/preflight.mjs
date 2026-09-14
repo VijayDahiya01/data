@@ -209,29 +209,49 @@ if (env) {
 // ---------------------------------------------------------------------------
 console.log('\n5. Alerting');
 
-const amPath = path.resolve(root, 'infra/monitoring/alertmanager.yml');
-if (!existsSync(amPath)) {
-  warn('alertmanager configuration exists', amPath);
-} else {
-  const am = readFileSync(amPath, 'utf8');
-  // The failure this catches is total silence: every rule fires correctly,
-  // into nothing.
-  const placeholders = [...am.matchAll(/url:\s*(\S+)/g)]
-    .map((m) => m[1])
-    .filter((u) => /example\.invalid|example\.com|REPLACE|localhost/.test(u));
-  if (placeholders.length > 0) {
+// The URLs now live in .env.prod and are substituted at deploy time, so this
+// checks the values an operator actually set, rather than a file they were
+// supposed to remember to edit.
+if (env) {
+  const hooks = [
+    ['ALERT_WEBHOOK_DEFAULT', 'ticket-severity alerts'],
+    ['ALERT_WEBHOOK_ONCALL', 'the on-call page'],
+  ];
+  const bad = [];
+  for (const [name, what] of hooks) {
+    const v = (env[name] ?? '').trim();
+    if (!v) bad.push(`${name} is not set (${what})`);
+    else if (!/^https?:\/\//.test(v)) bad.push(`${name} is not an http(s) URL`);
+    else if (/example\.(invalid|com|org|net)|REPLACE|CHANGE_?ME|TODO/i.test(v))
+      bad.push(`${name} is still a placeholder`);
+    else if (/^https?:\/\/(localhost|127\.0\.0\.1)/.test(v))
+      // Inside a container this is Alertmanager itself, not the operator's box.
+      bad.push(`${name} points at localhost, which inside a container is Alertmanager itself`);
+  }
+  if (bad.length > 0) {
     fail(
       'alert webhooks are real',
-      `still placeholder: ${placeholders.join(', ')} -- every alert would fire into nothing.`,
+      `${bad.join('; ')} -- every alert would fire into nothing while the dashboard stays green.`,
     );
   } else {
     pass('alert webhooks are real');
   }
+}
 
-  if (/REPLACE/.test(am)) {
-    fail('no REPLACE markers remain in the alert routing');
+// The routing file itself must stay a template: a literal URL here is one that
+// bypasses the environment entirely.
+const amPath = path.resolve(root, 'infra/monitoring/alertmanager.yml');
+if (!existsSync(amPath)) {
+  warn('alert routing file exists', amPath);
+} else {
+  const am = readFileSync(amPath, 'utf8');
+  const literals = [...am.matchAll(/url:\s*(\S+)/g)]
+    .map((m) => m[1])
+    .filter((u) => !u.startsWith('${env.'));
+  if (literals.length > 0) {
+    fail('alert routing takes its URLs from the environment', `hard-coded: ${literals.join(', ')}`);
   } else {
-    pass('no REPLACE markers remain in the alert routing');
+    pass('alert routing takes its URLs from the environment');
   }
 }
 

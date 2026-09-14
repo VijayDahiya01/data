@@ -368,12 +368,33 @@ services:
     depends_on:
       - api
 
+  # Renders the alert routing for THIS deployment.
+  #
+  # The two webhook URLs used to be literals in the YAML with a comment asking
+  # somebody to change them. The renderer refuses to substitute a placeholder,
+  # so a deployment that would have fired every alert into a hostname that does
+  # not resolve now fails at start-up instead -- loudly, and before traffic.
+  alertmanager-render:
+    image: node:22-alpine
+    profiles: ['monitoring']
+    restart: 'no'
+    environment:
+      ALERT_WEBHOOK_DEFAULT: ${ALERT_WEBHOOK_DEFAULT:?set ALERT_WEBHOOK_DEFAULT}
+      ALERT_WEBHOOK_ONCALL: ${ALERT_WEBHOOK_ONCALL:?set ALERT_WEBHOOK_ONCALL}
+    volumes:
+      - ../monitoring:/src:ro
+      - alertmanager-config:/out
+    command: ['node', '/src/render-alertmanager.mjs']
+
   alertmanager:
     image: prom/alertmanager:v0.28.1
     profiles: ['monitoring']
     restart: unless-stopped
+    depends_on:
+      alertmanager-render:
+        condition: service_completed_successfully
     volumes:
-      - ../monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-config:/etc/alertmanager:ro
       - alertmanager-data:/alertmanager
     expose:
       - '9093'
@@ -418,4 +439,5 @@ volumes:
   api-keys:
   realm-import:
   prometheus-data:
+  alertmanager-config:
   alertmanager-data:

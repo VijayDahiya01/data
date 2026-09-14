@@ -1,9 +1,14 @@
 # Where an alert actually goes.
 #
-# An alert rule with no route is a rule that fires into nothing, which is the
-# state this file exists to end. The receiver below is deliberately a
-# placeholder: fill in the webhook for whatever the on-call rota actually uses
-# before the pilot takes real traffic.
+# An alert rule with no route is a rule that fires into nothing -- a stack that
+# is healthy, green and completely silent. This file used to carry
+# `http://example.invalid` placeholders with a comment asking somebody to edit
+# them, which is the single most forgettable kind of deployment step: every
+# other setting comes from `.env.prod`, so this one got missed.
+#
+# The two URLs are now substituted from the environment at deploy time by
+# infra/monitoring/render-alertmanager.mjs, which REFUSES to render a
+# placeholder. Set ALERT_WEBHOOK_DEFAULT and ALERT_WEBHOOK_ONCALL.
 route:
   # Group by Partner: one Partner's outage is one incident, however many of
   # their Agents are involved.
@@ -21,15 +26,15 @@ route:
 
 receivers:
   - name: default
-    # REPLACE: a chat webhook is usually enough for ticket-severity alerts.
+    # Ticket severity. A chat webhook is usually enough.
     webhook_configs:
-      - url: http://example.invalid/alerts
+      - url: ${env.ALERT_WEBHOOK_DEFAULT}
         send_resolved: true
 
   - name: oncall
-    # REPLACE: whatever actually wakes someone up.
+    # Page severity: whatever actually wakes someone up.
     webhook_configs:
-      - url: http://example.invalid/oncall
+      - url: ${env.ALERT_WEBHOOK_ONCALL}
         send_resolved: true
 
 inhibit_rules:
