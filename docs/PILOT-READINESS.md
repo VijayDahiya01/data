@@ -34,7 +34,9 @@ clean. `pnpm preflight` gates a deployment before a Partner is behind it.
 costs, how long it takes, and which one is actually on the critical path (only
 the host is; Meta and Google are optional for a first pilot).
 
-**Deploying it:** `docs/DEPLOYMENT-HANDBOOK.md` covers both sides — exact
+**Deploying it:** `docs/DEPLOY-DIGITALOCEAN.md` is a step-by-step runbook for
+a first DigitalOcean deployment (~$128/month, ~90 minutes).
+`docs/DEPLOYMENT-HANDBOOK.md` covers both sides — exact
 versions, ports, what the Partner provides, and the failures that look like
 something else.
 
