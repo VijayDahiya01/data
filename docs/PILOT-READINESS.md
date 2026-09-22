@@ -154,10 +154,29 @@ local `.env.prod` in this repository said `staging`, which would have deployed
 with Content-Security-Policy and HSTS off as well as MFA unenforced, while
 every other check passed.
 
-**Not yet re-run at the time of writing:** the portal e2e suite, against the
-shared `signIn` helper that now answers the second factor. The ten suites that
-each carried their own copy of that helper have been collapsed onto one, so
-that run is the regression check that matters.
+**The portal e2e suite passes: 32 tests, against a production portal build.**
+The ten suites that each carried their own copy of `signIn` now share one that
+answers the second factor.
+
+It failed the first time, and the reason is worth keeping. The realm sets
+`otpPolicyCodeReusable: false` -- correctly; a reusable code gives up much of
+what a second factor is for -- and Keycloak enforces it by remembering the
+30-second step a code came from and refusing that step again. The suites sign
+the same user in repeatedly and seconds apart, so the helper kept replaying a
+code Keycloak had already spent. Keycloak said "Invalid authenticator code",
+the sign-in stalled, and the test failed on a timeout waiting for the portal --
+pointing at the portal, which was fine. Eight failed, sixteen passed, and the
+sixteen were the tell: the secret and the arithmetic were right or nothing
+would have passed at all.
+
+Fixed in the helper rather than the realm: it tracks which step each account
+has spent a code from, waits past the boundary rather than replaying, and
+retries on refusal. The suite costs 10.3 minutes now against 2.6 before, almost
+all of it waiting for step boundaries.
+
+This is also the case for having collapsed the ten copies. One helper meant one
+fix; ten would have meant ten, and whichever was missed would fail
+intermittently depending on how fast the machine ran that day.
 
 ---
 
