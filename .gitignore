@@ -14,6 +14,13 @@ partner-agent/bin/
 .env
 .env.*
 !.env.example
+# The production TEMPLATE, which carries no values -- every secret in it is
+# blank. It has to be tracked: four documents tell an operator to run
+# `cp .env.prod.example .env.prod` as the first step of a deployment, and
+# `.env.*` above had been quietly swallowing it, so on a fresh clone that
+# command failed with "No such file or directory" at step one.
+# The real file, .env.prod, stays ignored by the rule above.
+!.env.prod.example
 *.pem
 *.key
 !**/testdata/*.key
