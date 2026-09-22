@@ -113,6 +113,53 @@ carries the real URLs. Webhook tokens are never logged; only hosts.
 
 ---
 
+## Nothing could verify a business — 2026-09-22
+
+Found by asking what a freshly deployed instance can actually do, which no
+drill had asked either: the production stack boot on 2026-09-14 checked
+`/healthz`, `/login` and realm discovery, and stopped there.
+
+An organization is created at `BUSINESS_VERIFICATION_PENDING`, and §66.3 lets
+it browse and draft but not submit or publish. **Nothing in the running system
+could move it on.** The only writer of `BUSINESS_VERIFIED` was
+`packages/db/prisma/seed/index.ts`, and `pnpm db:seed --env=production` refuses
+by design (§95). The OOLIX_ADMIN surface was read-only — a dashboard and a
+NO_AD distribution — and `/admin/organizations` in the portal was a placeholder
+that said in as many words that the capability did not exist.
+
+So a real deployment could onboard an organization and then refuse everything
+it tried to do: campaign submit, audience estimate, audience publish,
+partner-request creation, segment create and publish, placement create. The
+only way out was an `UPDATE` against the production database.
+
+**Fixed.** `GET /v1/admin/organizations`, `POST …/{id}/verify` and
+`POST …/{id}/revoke-verification`, all behind `admin:operate` — the one
+permission `assertOrgScope` lets read across organizations, and one no role but
+OOLIX_ADMIN holds. The portal placeholder is now a real screen. Ten unit tests;
+the API unit suite went from 86 to 96.
+
+Three properties are pinned because each is silent when wrong:
+
+- **Verify never regresses.** `ROLE_ONBOARDING` and `ACTIVE` are further along
+  than `BUSINESS_VERIFIED`, so a retried verify that rewrote the state would
+  undo progress and report success.
+- **Revoke requires a reason, verify does not.** Revoking is what somebody is
+  asked to explain months later.
+- **Revoke works from `ACTIVE`**, not only from `BUSINESS_VERIFIED`, or an
+  organization becomes unstoppable by reaching `ACTIVE`.
+
+§66's limit is unchanged, and enforced by the absence of a permission rather
+than by a check: verifying a business says it is a real legal entity. It never
+approves a campaign on a Data Partner's behalf.
+
+One thing surfaced on the way: `AuditService.recordTx` had never been called by
+anything, and could not be. Its transaction parameter was a property holding a
+function, which `strictFunctionTypes` checks contravariantly, so no Prisma
+transaction client could ever satisfy it. A method signature is checked
+bivariantly and does.
+
+---
+
 ## The MFA requirement could never be met — 2026-09-22
 
 Found by asking the narrow question "can a Partner admin actually sign in to a

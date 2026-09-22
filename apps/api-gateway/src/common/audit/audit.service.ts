@@ -13,6 +13,23 @@ import { redact } from '@oolix/observability';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { currentContext } from '../correlation/correlation.js';
 
+/**
+ * Just enough of a Prisma transaction client to write one audit row.
+ *
+ * `create` is declared as a METHOD rather than a property holding a function,
+ * and that is load-bearing. TypeScript checks method parameters bivariantly
+ * but property function types contravariantly under `strictFunctionTypes`, so
+ * the property form -- `create: (args: unknown) => Promise<unknown>` -- can
+ * never accept Prisma's generic `create`, however loose the argument type
+ * looks. This interface is structural on purpose: importing Prisma's own
+ * `TransactionClient` here would tie the audit trail to the generated client.
+ */
+export interface AuditTransactionClient {
+  auditEvent: {
+    create(args: { data: Record<string, unknown> }): Promise<unknown>;
+  };
+}
+
 export interface AuditInput {
   action: string;
   entityType: string;
@@ -54,10 +71,7 @@ export class AuditService {
    * change it describes commit or roll back together. An approval that
    * succeeded without an audit entry would be unprovable.
    */
-  async recordTx(
-    tx: { auditEvent: { create: (args: unknown) => Promise<unknown> } },
-    input: AuditInput,
-  ): Promise<void> {
+  async recordTx(tx: AuditTransactionClient, input: AuditInput): Promise<void> {
     const ctx = currentContext();
     await tx.auditEvent.create({
       data: {

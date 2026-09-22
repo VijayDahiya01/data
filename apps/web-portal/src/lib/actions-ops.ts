@@ -356,3 +356,65 @@ export async function reconcileActivation(
     return toState(err);
   }
 }
+
+/* --- platform organization administration (§35.2, §66, §98.1) -------------- */
+
+/**
+ * Record that an organization is a real legal entity.
+ *
+ * §66.3 gates campaign submission and supply publication on BUSINESS_VERIFIED,
+ * and until this existed nothing in the running system could grant it: the
+ * only writer of that state was the development seed, which refuses to run
+ * against production. A deployment could onboard an organization and then
+ * refuse everything it tried to do.
+ *
+ * §66's limit is untouched. Verifying a business says it is who it claims to
+ * be. It does not approve a campaign on a Data Partner's behalf, and
+ * OOLIX_ADMIN still holds no permission that could.
+ */
+export async function verifyOrganization(
+  orgId: string,
+  _prev: ActionState,
+  fd: FormData,
+): Promise<ActionState> {
+  const note = str(fd, 'note');
+
+  try {
+    await api(`/v1/admin/organizations/${orgId}/verify`, {
+      method: 'POST',
+      body: { ...(note ? { note } : {}) },
+    });
+  } catch (err) {
+    return toState(err);
+  }
+
+  revalidatePath('/admin/organizations');
+  return { ok: true };
+}
+
+/**
+ * Put a verified organization back to pending.
+ *
+ * A reason is required by the API, and asked for here rather than sent empty:
+ * this is the action somebody will be asked to explain months later.
+ */
+export async function revokeOrganizationVerification(
+  orgId: string,
+  _prev: ActionState,
+  fd: FormData,
+): Promise<ActionState> {
+  const reason = str(fd, 'reason');
+  if (reason.length < 3) return { error: 'Give a reason — it is written to the audit trail.' };
+
+  try {
+    await api(`/v1/admin/organizations/${orgId}/revoke-verification`, {
+      method: 'POST',
+      body: { reason },
+    });
+  } catch (err) {
+    return toState(err);
+  }
+
+  revalidatePath('/admin/organizations');
+  return { ok: true };
+}

@@ -2218,6 +2218,120 @@ paths:
 
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/admin/organizations:
+    get:
+      operationId: listOrganizations
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - name: verification_status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              [
+                SIGNUP_STARTED,
+                EMAIL_VERIFIED,
+                ORGANIZATION_CREATED,
+                BUSINESS_VERIFICATION_PENDING,
+                BUSINESS_VERIFIED,
+                ROLE_ONBOARDING,
+                ACTIVE,
+              ]
+      tags: [Admin]
+      summary: Every organization and its verification state
+      description: |
+        §35.2, §98.1. Cross-organization by nature, which is why it sits behind
+        `admin:operate` -- the only permission `assertOrgScope` lets read
+        across organizations, and one no role but OOLIX_ADMIN holds.
+
+        Carries no member identity and no customer data: a name, a domain, a
+        type, a country, a state and a member COUNT.
+      responses:
+        '200': { description: Organizations and their verification state }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/admin/organizations/{id}/verify:
+    post:
+      operationId: verifyOrganization
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      tags: [Admin]
+      summary: Record that an organization is a real legal entity
+      description: |
+        §35.2. Moves an organization to BUSINESS_VERIFIED, which is what §66.3
+        requires before it may submit a campaign or publish supply. Until this
+        existed the only writer of that state was the development seed, and
+        `db:seed --env=production` refuses -- so a real deployment could
+        onboard an organization and then refuse everything it tried to do.
+
+        Idempotent: an organization already at or past BUSINESS_VERIFIED is
+        returned unchanged, so a retry cannot drag ROLE_ONBOARDING or ACTIVE
+        backwards.
+
+        §66's limit is unchanged and is enforced by the absence of a
+        permission, not by this route: verifying a business is not approving a
+        campaign, and OOLIX_ADMIN still cannot do the latter.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  type: string
+                  maxLength: 500
+                  description: A reference to whatever evidence was checked.
+      responses:
+        '200': { description: 'Organization state, and whether this call changed it' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/admin/organizations/{id}/revoke-verification:
+    post:
+      operationId: revokeOrganizationVerification
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      tags: [Admin]
+      summary: Put a verified organization back to pending
+      description: |
+        §35.2. The counterpart that makes verification a decision rather than a
+        one-way door. Work already approved and running is untouched -- §66.3
+        gates the act of submitting, not what has already been submitted.
+
+        A reason is REQUIRED, unlike on verify: this is the action somebody
+        will be asked to explain months later, and an audit row saying only
+        that it happened would not survive the question.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  minLength: 3
+                  maxLength: 500
+      responses:
+        '200': { description: 'Organization state, and whether this call changed it' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
 # =============================================================================
 components:
   securitySchemes:

@@ -11,9 +11,11 @@ import { z } from 'zod';
 import {
   OolixError,
   ROLES,
+  VERIFICATION_STATES,
   canSubmitOrPublish,
   permissionsForRoles,
   type Role,
+  type VerificationState,
 } from '@oolix/contracts';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { AuditService } from '../../common/audit/audit.service.js';
@@ -39,6 +41,28 @@ export const InviteMemberSchema = z.object({
   role: z.enum(ROLES),
 });
 export type InviteMemberInput = z.infer<typeof InviteMemberSchema>;
+
+/** Optional free text -- a reference to whatever evidence was checked. */
+export const VerifyOrganizationSchema = z.object({
+  note: z.string().max(500).optional(),
+});
+export type VerifyOrganizationInput = z.infer<typeof VerifyOrganizationSchema>;
+
+/**
+ * A reason is REQUIRED to revoke, unlike to verify.
+ *
+ * Taking an organization's ability to submit or publish away is the action
+ * somebody will be asked to explain months later, and an audit row saying only
+ * that it happened would not survive the question.
+ */
+export const RevokeVerificationSchema = z.object({
+  reason: z.string().min(3).max(500),
+});
+export type RevokeVerificationInput = z.infer<typeof RevokeVerificationSchema>;
+
+export const ListOrganizationsQuerySchema = z.object({
+  verification_status: z.enum(VERIFICATION_STATES).optional(),
+});
 
 @Injectable()
 export class IdentityOrgService {
@@ -315,6 +339,131 @@ export class IdentityOrgService {
     });
 
     return updated;
+  }
+
+  // --- platform administration (§35.2, §66, §98.1) --------------------------
+  //
+  // An organization is created at BUSINESS_VERIFICATION_PENDING and §66.3 lets
+  // it browse and draft but not submit or publish. Until these three methods
+  // existed, NOTHING in the running system could move it on: the only writer
+  // of BUSINESS_VERIFIED was the development seed, and `db:seed
+  // --env=production` refuses by design. So a real deployment could onboard an
+  // organization and then never let it do anything, with no way out short of
+  // an UPDATE against the production database.
+  //
+  // Deliberately not in scope here, because §66 draws the line and this is
+  // where somebody would be tempted to cross it: verifying a business is not
+  // approving a campaign. An Oolix admin decides that an organization is a
+  // real legal entity. It never decides, on a Data Partner's behalf, that a
+  // campaign may run on their inventory.
+
+  /**
+   * Every organization on the platform, newest first.
+   *
+   * Cross-organization by nature, which is why it lives behind
+   * `admin:operate`: `assertOrgScope` lets that permission read across orgs,
+   * and no other role holds it.
+   */
+  async listOrganizations(filter?: { verificationStatus?: VerificationState }) {
+    const rows = await this.prisma.organization.findMany({
+      where: filter?.verificationStatus
+        ? { verificationStatus: filter.verificationStatus as never }
+        : {},
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        domain: true,
+        type: true,
+        country: true,
+        verificationStatus: true,
+        createdAt: true,
+        _count: { select: { members: true } },
+      },
+    });
+
+    return rows.map((org) => ({
+      ...this.orgToWire(org),
+      created_at: org.createdAt.toISOString(),
+      member_count: org._count.members,
+      // What the gate actually decides, rather than leaving every caller to
+      // re-derive it from the state name and get it subtly wrong.
+      can_submit_or_publish: canSubmitOrPublish(org.verificationStatus as VerificationState),
+    }));
+  }
+
+  /**
+   * Record that an organization is a real legal entity (§35.2).
+   *
+   * Idempotent: an organization already at or past BUSINESS_VERIFIED is
+   * returned unchanged rather than dragged backwards. ROLE_ONBOARDING and
+   * ACTIVE are both further along, and re-verifying must not undo that.
+   */
+  async verifyOrganization(orgId: string, actorUserId: string, note?: string) {
+    const org = await this.prisma.organization.findUnique({ where: { id: orgId } });
+    if (!org) throw new OolixError('PART_001', 'Organization not found.');
+
+    const current = org.verificationStatus as VerificationState;
+    if (canSubmitOrPublish(current)) {
+      return { ...this.orgToWire(org), changed: false };
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.organization.update({
+        where: { id: orgId },
+        data: { verificationStatus: 'BUSINESS_VERIFIED' },
+      });
+      await this.audit.recordTx(tx, {
+        action: 'ORGANIZATION_VERIFIED',
+        entityType: 'organization',
+        entityId: orgId,
+        orgId,
+        actor: actorUserId,
+        // §78.1: no person's identity, no customer data. What changed, and any
+        // reference the operator recorded for why.
+        metadata: { from: current, to: 'BUSINESS_VERIFIED', ...(note ? { note } : {}) },
+      });
+      return row;
+    });
+
+    return { ...this.orgToWire(updated), changed: true };
+  }
+
+  /**
+   * Put a verified organization back to pending (§35.2).
+   *
+   * The counterpart that makes verification a decision rather than a one-way
+   * door: a business that stops checking out can be stopped from submitting
+   * and publishing without deleting anything it has already done. Work in
+   * flight is unaffected -- §66.3 gates the act of submitting, not what is
+   * already approved and running.
+   */
+  async revokeVerification(orgId: string, actorUserId: string, reason: string) {
+    const org = await this.prisma.organization.findUnique({ where: { id: orgId } });
+    if (!org) throw new OolixError('PART_001', 'Organization not found.');
+
+    const current = org.verificationStatus as VerificationState;
+    if (!canSubmitOrPublish(current)) {
+      return { ...this.orgToWire(org), changed: false };
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.organization.update({
+        where: { id: orgId },
+        data: { verificationStatus: 'BUSINESS_VERIFICATION_PENDING' },
+      });
+      await this.audit.recordTx(tx, {
+        action: 'ORGANIZATION_VERIFICATION_REVOKED',
+        entityType: 'organization',
+        entityId: orgId,
+        orgId,
+        actor: actorUserId,
+        metadata: { from: current, to: 'BUSINESS_VERIFICATION_PENDING', reason },
+      });
+      return row;
+    });
+
+    return { ...this.orgToWire(updated), changed: true };
   }
 
   private orgToWire(org: {
