@@ -192,3 +192,126 @@ describe('the Keycloak realm import', () => {
     expect(doc.bruteForceProtected).toBe(true);
   });
 });
+
+/**
+ * Multi-factor authentication -- §4.2, §82.
+ *
+ * `auth.guard.ts` refuses PARTNER_ADMIN, PARTNER_SECURITY_ADMIN,
+ * PARTNER_CAMPAIGN_APPROVER, FINANCE, BUYER_ADMIN and OOLIX_ADMIN unless the
+ * access token says MFA happened -- but ONLY when APP_ENV is production. Every
+ * test and every verification run uses a lower APP_ENV, so the branch never
+ * executed and nothing ever checked that a real token could satisfy it.
+ *
+ * It could not. Keycloak 26 emits no `amr` claim at all, and `acr` is the
+ * Level of Authentication, which is "1" unless the realm both maps a name to a
+ * level AND has a browser flow that records reaching it. The realm had
+ * neither, so a production deployment locked six of the nine roles out of the
+ * product with AUTH_001 -- a failure that reads like a permissions bug.
+ *
+ * These tests pin the three things that have to agree. Any one of them drifting
+ * puts it back, silently, because a login still succeeds either way.
+ */
+describe('the realm can actually satisfy the API MFA check', () => {
+  interface Execution {
+    authenticator?: string;
+    authenticatorConfig?: string;
+    flowAlias?: string;
+    requirement?: string;
+  }
+  interface Flow {
+    alias: string;
+    topLevel?: boolean;
+    authenticationExecutions: Execution[];
+  }
+  interface RealmDoc {
+    browserFlow?: string;
+    attributes?: Record<string, string>;
+    authenticationFlows?: Flow[];
+    authenticatorConfig?: { alias: string; config: Record<string, string> }[];
+    requiredActions?: { alias: string; enabled?: boolean; defaultAction?: boolean }[];
+    clients: (RealmClient & { attributes?: Record<string, string> })[];
+  }
+
+  const doc = rendered(PROD) as unknown as RealmDoc;
+  const flows = doc.authenticationFlows ?? [];
+  const flow = (alias: string) => flows.find((f) => f.alias === alias);
+
+  it('does not use the built-in browser flow, which cannot record a level', () => {
+    // Keycloak's own `browser` flow authenticates perfectly well and reports
+    // acr "1" forever. Binding to it is the failure this whole block guards.
+    expect(doc.browserFlow).toBeDefined();
+    expect(doc.browserFlow).not.toBe('browser');
+    expect(flow(doc.browserFlow!)?.topLevel).toBe(true);
+  });
+
+  it('maps the acr value the API accepts to a level', () => {
+    // mfaSatisfied() accepts acr in {mfa, aal2, aal3}. The map is what turns a
+    // reached level back into one of those names in the token.
+    const map = JSON.parse(doc.attributes?.['acr.loa.map'] ?? '{}') as Record<string, number>;
+    expect(Object.keys(map)).toContain('mfa');
+    expect(map.mfa).toBeGreaterThan(1);
+  });
+
+  it('runs the OTP step at exactly the level the map calls mfa', () => {
+    // The subtle one. If the map says mfa=2 and the conditional subflow is
+    // configured for level 3, the OTP step never runs, the login still
+    // succeeds, and the token comes back acr "1".
+    const map = JSON.parse(doc.attributes?.['acr.loa.map'] ?? '{}') as Record<string, number>;
+    const configs = doc.authenticatorConfig ?? [];
+
+    const otpSubflow = flows.find((f) =>
+      f.authenticationExecutions.some((e) => e.authenticator === 'auth-otp-form'),
+    );
+    expect(otpSubflow, 'no subflow runs auth-otp-form').toBeDefined();
+
+    const condition = otpSubflow!.authenticationExecutions.find(
+      (e) => e.authenticator === 'conditional-level-of-authentication',
+    );
+    expect(condition, 'the OTP subflow has no level condition').toBeDefined();
+
+    const level = configs.find((c) => c.alias === condition!.authenticatorConfig)?.config[
+      'loa-condition-level'
+    ];
+    expect(Number(level)).toBe(map.mfa);
+  });
+
+  it('sends an account with no authenticator to enrol rather than past', () => {
+    const totp = doc.requiredActions?.find((a) => a.alias === 'CONFIGURE_TOTP');
+    expect(totp?.enabled).toBe(true);
+    expect(totp?.defaultAction).toBe(true);
+  });
+
+  it('still registers the required actions it does not mean to change', () => {
+    // Declaring `requiredActions` REPLACES the list. Declaring only
+    // CONFIGURE_TOTP unregisters UPDATE_PASSWORD -- which is how an operator
+    // hands out a temporary password when creating the first accounts on a
+    // fresh deployment, the exact situation this realm is for.
+    const aliases = (doc.requiredActions ?? []).map((a) => a.alias);
+    expect(aliases).toContain('UPDATE_PASSWORD');
+    expect(aliases).toContain('VERIFY_EMAIL');
+    expect(aliases).toContain('UPDATE_PROFILE');
+  });
+
+  it('gives the portal client the same mapping the realm uses', () => {
+    // Keycloak validates a client's ACR settings against the client's own
+    // view of the map; a client without it cannot ask for the level.
+    const web = doc.clients.find((c) => c.clientId === 'oolix-web');
+    const clientMap = JSON.parse(web?.attributes?.['acr.loa.map'] ?? '{}') as Record<
+      string,
+      number
+    >;
+    const realmMap = JSON.parse(doc.attributes?.['acr.loa.map'] ?? '{}') as Record<string, number>;
+    expect(clientMap).toEqual(realmMap);
+  });
+
+  it('asks for the level from the portal, which is the half a realm cannot do', () => {
+    // Keycloak records a level only when the login REQUESTS it. The realm can
+    // be perfect and every privileged role still locked out if the
+    // authorization request omits acr_values.
+    const oidc = readFileSync(
+      path.resolve(here, '../../../apps/web-portal/src/lib/oidc.ts'),
+      'utf8',
+    );
+    expect(oidc).toMatch(/acr_values:\s*'mfa'/);
+  });
+});

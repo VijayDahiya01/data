@@ -104,7 +104,8 @@ Done, and continuously re-verified:
 - Roles are read from the database for the active organization, never from a
   token claim (§4.2). An IdP misconfiguration therefore cannot become a
   privilege escalation inside Oolix.
-- MFA is required for the roles §66 names, checked on the request path.
+- MFA is required for the roles §66 names, checked on the request path — and,
+  since 2026-09-22, actually satisfiable. See the correction below.
 - Organization scoping is enforced server-side on every endpoint. `pnpm verify`
   asserts the negative cases directly: a Partner cannot mint a Buyer's CRM key,
   a Buyer cannot see another Buyer's campaign, and a Partner's report never
@@ -136,6 +137,50 @@ Open:
   guard that did not exist when this line was written, and which credential
   stuffing would otherwise hit. **Confirm the edge strips it, or narrow
   `trustProxy` to the balancer's CIDR, before exposing anything publicly.**
+
+**Corrected 2026-09-22. The MFA requirement could never be met, and that
+locked six of the nine roles out of any production deployment.**
+
+`auth.guard.ts` refuses `PARTNER_ADMIN`, `PARTNER_SECURITY_ADMIN`,
+`PARTNER_CAMPAIGN_APPROVER`, `FINANCE`, `BUYER_ADMIN` and `OOLIX_ADMIN` unless
+the access token carries `acr` in {`mfa`, `aal2`, `aal3`} or an `amr`
+containing `otp`/`mfa`/`hwk`/`swk` — and only when `APP_ENV` is exactly
+`production`. Every test and every verification run uses a lower `APP_ENV`, so
+that branch had never executed. Nothing anywhere checked that a real token
+could satisfy it.
+
+It could not. Measured against the running realm: Keycloak 26.5 emits **no
+`amr` claim at all**, and `acr` is the Level of Authentication, which stays
+`"1"` unless the realm both maps a name to a level and runs a browser flow that
+records reaching it. The realm had no `otpPolicy`, no `acr.loa.map`, no
+authentication flows and `CONFIGURE_TOTP` disabled as a default action. A
+production deployment would therefore have signed a Partner admin in
+successfully and then answered `AUTH_001` to every request — which reads like a
+permissions bug, not a missing realm setting.
+
+**Fixed and verified end to end.** The realm now binds a step-up browser flow
+whose OTP subflow is conditional on the level `acr.loa.map` calls `mfa`, and
+the portal's authorization request asks for that level (`acr_values`) — a realm
+alone cannot do it, because Keycloak records a level only when the login
+requests one. Against the API running with `APP_ENV=production`:
+
+| Login | `acr` | API |
+| --- | --- | --- |
+| with `acr_values=mfa` | `mfa` | **200** |
+| without | `basic` | **401 `AUTH_001`** |
+
+So the role works and the guard is still enforcing, rather than having been
+loosened to make the error go away. Thirteen tests pin it: seven in
+`packages/contracts/src/realm.test.ts` on realm-to-guard agreement (including
+that the OTP subflow's level and the map's `mfa` level are the same number —
+disagree and the OTP step silently never runs), and six in
+`packages/auth-rbac/src/rbac.test.ts` on `mfaSatisfied`, which had none.
+
+Two consequences worth knowing. MFA now applies to **every** account, not only
+the six roles: Keycloak cannot know Oolix roles, so realm-level MFA is
+all-or-nothing and the safe direction is on. And `pnpm preflight` now refuses
+any `APP_ENV` but `production`, because `staging` leaves Content-Security-Policy
+and HSTS off as well as MFA, while every other check still passes green.
 
 **Corrected 2026-09-10.** This item used to say rate limiting runs only *after*
 authentication and that unauthenticated flood protection was the edge's

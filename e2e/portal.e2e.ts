@@ -11,27 +11,10 @@
  *   pnpm infra:up && pnpm dev:api && pnpm --filter @oolix/web-portal start
  *   pnpm test:e2e:portal
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { signIn } from './lib/auth';
 
 const PORTAL = process.env.PORTAL_URL ?? 'http://localhost:3000';
-
-/** Sign in through Keycloak as one of the §95 seeded users. */
-async function signIn(page: Page, email: string) {
-  await page.goto(`${PORTAL}/login`);
-  await page.getByRole('link', { name: /continue to sign in/i }).click();
-
-  // Keycloak's own login form. The portal never sees the password (§64), which
-  // is the point of delegating identity at all.
-  //
-  // Targeted by id rather than by label: these ids are stable across Keycloak
-  // themes, while the visible labels are localised.
-  await page.waitForURL(/\/realms\/oolix\//, { timeout: 20_000 });
-  await page.locator('#username').fill(email);
-  await page.locator('#password').fill('password');
-  await page.locator('#kc-login, input[type="submit"], button[type="submit"]').first().click();
-
-  await page.waitForURL((url) => url.origin === new URL(PORTAL).origin, { timeout: 20_000 });
-}
 
 test.describe('Portal', () => {
   test('a Buyer signs in and sees Buyer navigation, not Partner navigation', async ({ page }) => {

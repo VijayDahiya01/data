@@ -57,6 +57,7 @@
     "keys:retire": "node apps/api-gateway/dist/keys/rotate-cli.js retire",
     "keys:init": "node apps/api-gateway/dist/keys/rotate-cli.js init",
     "verify:channels": "node scripts/verify-channels.mjs",
+    "verify:mfa": "node scripts/verify-mfa.mjs",
     "preflight": "node scripts/preflight.mjs",
     "dev:rebind": "node scripts/rebind-identities.mjs",
     "probe": "node scripts/pen-probe.mjs",

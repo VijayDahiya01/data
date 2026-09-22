@@ -11,8 +11,9 @@
  *
  * A page that renders is not a page that works. These tests submit.
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { buildShoeAudience } from './lib/audience-builder';
+import { signIn, signOut } from './lib/auth';
 
 const PORTAL = process.env.PORTAL_URL ?? 'http://localhost:3000';
 
@@ -26,23 +27,6 @@ const PNG_1PX = Buffer.from(
     '0557bfabd40000000049454e44ae426082',
   'hex',
 );
-
-async function signIn(page: Page, email: string) {
-  await page.goto(`${PORTAL}/login`);
-  await page.getByRole('link', { name: /continue to sign in/i }).click();
-  await page.waitForURL(/\/realms\/oolix\//, { timeout: 20_000 });
-  await page.locator('#username').fill(email);
-  await page.locator('#password').fill('password');
-  await page.locator('#kc-login, input[type="submit"], button[type="submit"]').first().click();
-  await page.waitForURL((url) => url.origin === new URL(PORTAL).origin, { timeout: 20_000 });
-}
-
-async function signOut(page: Page) {
-  await page.goto(`${PORTAL}/dashboard`).catch(() => undefined);
-  const button = page.getByRole('button', { name: /sign out/i });
-  if (await button.count()) await button.first().click();
-  await page.context().clearCookies();
-}
 
 test.describe.configure({ mode: 'serial' });
 

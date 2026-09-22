@@ -12,8 +12,10 @@ import {
   verifyAgentAccessToken,
   verifyClientAssertion,
   defaultAgentScopes,
+  mfaSatisfied,
   type UserPrincipal,
   type AgentPrincipal,
+  type VerifiedIdentity,
 } from './index.js';
 import { generateKeyPair, exportJWK, SignJWT, type JWK } from 'jose';
 import type { Role } from '@oolix/contracts';
@@ -270,5 +272,57 @@ describe('§92 agent workload authentication', () => {
         audience: 'https://api.oolix.example/agent/v1/token',
       }),
     ).rejects.toThrow(/lifetime exceeds/);
+  });
+});
+
+/**
+ * §4.2 / §82: what counts as "MFA happened".
+ *
+ * This predicate decides whether PARTNER_ADMIN, PARTNER_SECURITY_ADMIN,
+ * PARTNER_CAMPAIGN_APPROVER, FINANCE, BUYER_ADMIN and OOLIX_ADMIN can use the
+ * product at all on a production deployment -- and it had no tests. The claims
+ * below are not invented: the first case is exactly what Keycloak 26 returned
+ * before the realm grew a step-up flow, and the second is what it returns now.
+ */
+describe('§4.2 MFA evidence in a token', () => {
+  const identity = (over: Partial<VerifiedIdentity> = {}): VerifiedIdentity => ({
+    authSubject: 'sub_1',
+    email: 'person@example.test',
+    emailVerified: true,
+    amr: [],
+    ...over,
+  });
+
+  it('refuses a password-only login', () => {
+    // Keycloak's built-in browser flow, verbatim: acr is the Level of
+    // Authentication and stays "1", and there is no amr claim at all.
+    expect(mfaSatisfied(identity({ acr: '1' }))).toBe(false);
+  });
+
+  it('accepts the acr the realm step-up flow produces', () => {
+    expect(mfaSatisfied(identity({ acr: 'mfa' }))).toBe(true);
+  });
+
+  it('accepts the NIST assurance levels', () => {
+    expect(mfaSatisfied(identity({ acr: 'aal2' }))).toBe(true);
+    expect(mfaSatisfied(identity({ acr: 'aal3' }))).toBe(true);
+    expect(mfaSatisfied(identity({ acr: 'aal1' }))).toBe(false);
+  });
+
+  it('accepts an amr from an IdP that reports methods', () => {
+    // Not every IdP is Keycloak. One that lists methods is just as good.
+    expect(mfaSatisfied(identity({ amr: ['pwd', 'otp'] }))).toBe(true);
+    expect(mfaSatisfied(identity({ amr: ['hwk'] }))).toBe(true);
+    expect(mfaSatisfied(identity({ amr: ['pwd'] }))).toBe(false);
+  });
+
+  it('does not care about casing', () => {
+    expect(mfaSatisfied(identity({ acr: 'MFA' }))).toBe(true);
+    expect(mfaSatisfied(identity({ amr: ['OTP'] }))).toBe(true);
+  });
+
+  it('fails closed when the IdP says nothing', () => {
+    // No acr, no amr: the absence of evidence is not evidence.
+    expect(mfaSatisfied(identity())).toBe(false);
   });
 });

@@ -113,6 +113,17 @@ Agent replicas and never mixed with control-plane data.
 seeded address and the password `password` — identity is delegated to the local
 Keycloak realm, so Oolix never sees a password (§64).
 
+Keycloak then asks for a **one-time code**: the realm requires a second factor
+for everyone (§4.2, §82), because the API refuses the privileged roles without
+it. The seeded identities all carry the same development authenticator secret,
+`oolix-dev-totp-secret`, so you can add it once to any TOTP app (choose "enter
+a setup key") and it works for every one of them. The e2e suites compute the
+code themselves — see `e2e/lib/auth.ts`.
+
+That secret never reaches a deployment: these identities are merged in only
+when `KC_SEED_USERS` is exactly `true`, and `render-realm.mjs` refuses to seed
+them at all into a realm that requires TLS.
+
 What you can do end to end, in a browser:
 
 | As                              | You can                                                                                                                                                                    |

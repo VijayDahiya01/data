@@ -337,6 +337,41 @@ account in the Keycloak admin console at `https://auth.yourdomain.com/admin`
 using `KEYCLOAK_ADMIN` / `KEYCLOAK_ADMIN_PASSWORD`, in the **oolix** realm (not
 master).
 
+Set a **temporary** password, which attaches the `UPDATE_PASSWORD` required
+action so the person chooses their own on first sign-in and you never know it.
+
+**Every account enrols an authenticator on first sign-in.** The realm requires
+a second factor (§4.2, §82): after the password, Keycloak shows a QR code for
+Google Authenticator, FreeOTP, Microsoft Authenticator or any TOTP app, and the
+account is not usable until it is scanned. This is not optional and cannot be
+skipped per-user — Keycloak cannot know which Oolix role an account will hold,
+so the requirement is realm-wide.
+
+Budget a minute per person for this at the start of a demo, and have the phone
+that will scan it in the room. An account that has enrolled on one device
+cannot sign in from another without it.
+
+**Prove a privileged role can actually use it**, from your laptop rather than
+the droplet — it drives a real browser:
+
+```sh
+pnpm verify:mfa \
+  --api https://api.yourdomain.com \
+  --keycloak https://auth.yourdomain.com \
+  --portal https://app.yourdomain.com \
+  --user first.admin@yourdomain.com --password '<the temporary password>' \
+  --client-secret "$OIDC_CLIENT_SECRET"
+```
+
+It signs in twice: once asking for MFA, once not. The first must reach the API
+and the second must be refused. Run it against a **freshly created** account —
+it walks the enrolment page and prints the secret it enrolled, so keep that
+output if the account is one you intend to keep using.
+
+This is worth the two minutes because the failure it catches is invisible from
+outside: sign-in succeeds, health is green, and every API call the person makes
+answers `AUTH_001`.
+
 **Rehearse one restore**, before a Partner's data exists. A backup nobody has
 restored is a hypothesis. See `docs/BACKUP-AND-ROLLBACK.md`.
 
@@ -370,6 +405,8 @@ only.
 | Keycloak crash-loops with a driver error | `KEYCLOAK_JDBC_URL` was given the `postgresql://` form |
 | Keycloak crash-loops on a missing database | The `keycloak` database was never created (step 2) |
 | Every API call 401, everything looks fine | The three public URLs disagree with DNS. An OIDC issuer is a string |
+| Sign-in succeeds, then every call 401 `AUTH_001` | The token reached the API without MFA evidence. Either `acr_values` is missing from the authorization request, or the realm was imported without the `oolix-browser` flow. `pnpm --filter @oolix/contracts test:unit` checks both |
+| Everything passes preflight but CSP and HSTS headers are absent | `APP_ENV` is not the exact string `production`. `staging` also stops enforcing MFA |
 | Certificates never issue | DNS not resolving yet, or port 80 closed in the firewall |
 | Database connection refused | The droplet is not in the database's Trusted Sources |
 | Database connects locally but not from the droplet | Missing `?sslmode=require`, or port 5432 instead of 25060 |

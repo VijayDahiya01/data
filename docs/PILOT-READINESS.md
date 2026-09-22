@@ -109,6 +109,58 @@ carries the real URLs. Webhook tokens are never logged; only hosts.
 
 ---
 
+## The MFA requirement could never be met — 2026-09-22
+
+Found by asking the narrow question "can a Partner admin actually sign in to a
+production deployment?", which no test and no drill had asked.
+
+They could not. Neither could a Partner security admin, a campaign approver,
+finance, a Buyer admin or an Oolix admin — **six of the nine roles**.
+`auth.guard.ts` requires MFA evidence in the token for exactly those roles, and
+only when `APP_ENV` is `production`. Every suite and every verification phase
+runs at a lower `APP_ENV`, so the branch had never once executed.
+
+Measured against the running realm rather than assumed: Keycloak 26.5 emits
+**no `amr` claim at all**, and `acr` is the Level of Authentication — `"1"`
+unless the realm both maps a name to a level and runs a browser flow that
+records reaching it. The realm had no `otpPolicy`, no `acr.loa.map`, no
+authentication flows, and `CONFIGURE_TOTP` was not a default action. So the
+login would have succeeded and every subsequent request answered `AUTH_001`,
+which reads like a permissions bug rather than a missing realm setting.
+
+This is the same shape as the realm defects found on 2026-09-09: a file that is
+correct in development and wrong only once the deployment is real.
+
+**Fixed.** The realm binds a step-up browser flow whose OTP subflow is
+conditional on the level the map calls `mfa`, and the portal's authorization
+request asks for that level. Both halves are required — a realm cannot record a
+level the login never requested. Verified against the API running with
+`APP_ENV=production`: `acr_values=mfa` gives `acr: "mfa"` and **200**, omitting
+it gives `acr: "basic"` and **401 `AUTH_001`**. The role works and the guard is
+still enforcing.
+
+Two Keycloak behaviours that cost a cycle each and are now pinned by tests:
+declaring `requiredActions` in a realm import **replaces** the list, so
+declaring only `CONFIGURE_TOTP` silently unregisters `UPDATE_PASSWORD` — which
+is how an operator hands out a temporary password when creating the first
+accounts; and `default.acr.values` on a client is rejected at import, so the
+request parameter is the only way to ask for the level.
+
+**Consequences to plan around.** MFA now applies to every account, not only the
+six roles, because Keycloak cannot know Oolix roles. Each person enrols an
+authenticator at first sign-in — budget a minute each and have the phone in the
+room. And `pnpm preflight` now refuses any `APP_ENV` but `production`: the
+local `.env.prod` in this repository said `staging`, which would have deployed
+with Content-Security-Policy and HSTS off as well as MFA unenforced, while
+every other check passed.
+
+**Not yet re-run at the time of writing:** the portal e2e suite, against the
+shared `signIn` helper that now answers the second factor. The ten suites that
+each carried their own copy of that helper have been collapsed onto one, so
+that run is the regression check that matters.
+
+---
+
 ## Found while preparing for a LIVE pilot — 2026-09-09
 
 Six defects that every test suite passed over, because none of them is wrong in

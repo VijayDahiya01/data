@@ -10,23 +10,14 @@
  * `canSubmit` has four conditions and only two of them used to be explained.
  * The most common failure, no Partner added, was silent.
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { signIn } from './lib/auth';
 
 const PORTAL = process.env.PORTAL_URL ?? 'http://localhost:3000';
 const PNG_1PX = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
   'base64',
 );
-
-async function signIn(page: Page, email: string) {
-  await page.goto(`${PORTAL}/login`);
-  await page.getByRole('link', { name: /continue to sign in/i }).click();
-  await page.waitForURL(/\/realms\/oolix\//, { timeout: 20_000 });
-  await page.locator('#username').fill(email);
-  await page.locator('#password').fill('password');
-  await page.locator('#kc-login, input[type="submit"], button[type="submit"]').first().click();
-  await page.waitForURL((url) => url.origin === new URL(PORTAL).origin, { timeout: 20_000 });
-}
 
 test('a campaign with no Partner says so instead of just greying out Submit', async ({ page }) => {
   await signIn(page, 'buyer.admin@example.test');

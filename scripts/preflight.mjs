@@ -134,6 +134,27 @@ if (!env) {
 console.log('\n2. Identity');
 
 if (env) {
+  // APP_ENV is not a label. Three protections are switched on by the exact
+  // string "production" and by nothing else:
+  //
+  //   bootstrap.ts   Content-Security-Policy and HSTS
+  //   auth.guard.ts  the §4.2 MFA requirement for privileged roles
+  //
+  // `staging` therefore serves a public deployment with no CSP, no HSTS, and
+  // MFA not enforced -- while every other check on this page passes. It is the
+  // most expensive way to be wrong here, because nothing about the running
+  // stack looks any different.
+  if (env.APP_ENV === 'production') {
+    pass('APP_ENV enables the production protections', 'CSP, HSTS and the MFA requirement');
+  } else {
+    fail(
+      'APP_ENV enables the production protections',
+      `APP_ENV=${env.APP_ENV ?? '(unset)'} leaves Content-Security-Policy and HSTS off and does ` +
+        'not enforce MFA for PARTNER_ADMIN, PARTNER_SECURITY_ADMIN, PARTNER_CAMPAIGN_APPROVER, ' +
+        'FINANCE, BUYER_ADMIN or OOLIX_ADMIN. Only the exact string "production" turns them on.',
+    );
+  }
+
   // The realm renderer refuses this too, but saying so here means an operator
   // finds out before the deploy rather than during it.
   if (env.KC_SEED_USERS === 'true') {

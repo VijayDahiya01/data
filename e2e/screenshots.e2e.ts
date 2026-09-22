@@ -8,19 +8,10 @@
  *   pnpm exec playwright test --config playwright.portal.config.ts e2e/screenshots.e2e.ts
  */
 import { test, type Page } from '@playwright/test';
+import { signIn } from './lib/auth';
 
 const PORTAL = process.env.PORTAL_URL ?? 'http://localhost:3000';
 const OUT = 'screenshots';
-
-async function signIn(page: Page, email: string) {
-  await page.goto(`${PORTAL}/login`);
-  await page.getByRole('link', { name: /continue to sign in/i }).click();
-  await page.waitForURL(/\/realms\/oolix\//, { timeout: 20_000 });
-  await page.locator('#username').fill(email);
-  await page.locator('#password').fill('password');
-  await page.locator('#kc-login, input[type="submit"], button[type="submit"]').first().click();
-  await page.waitForURL((url) => url.origin === new URL(PORTAL).origin, { timeout: 20_000 });
-}
 
 const shoot = async (page: Page, path: string, name: string) => {
   await page.goto(`${PORTAL}${path}`, { waitUntil: 'networkidle' });

@@ -11,19 +11,10 @@
  * Sessions expire constantly in a real portal, so this is an ordinary path,
  * not an edge case.
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { signIn } from './lib/auth';
 
 const PORTAL = process.env.PORTAL_URL ?? 'http://localhost:3000';
-
-async function signIn(page: Page, email: string) {
-  await page.goto(`${PORTAL}/login`);
-  await page.getByRole('link', { name: /continue to sign in/i }).click();
-  await page.waitForURL(/\/realms\/oolix\//, { timeout: 20_000 });
-  await page.locator('#username').fill(email);
-  await page.locator('#password').fill('password');
-  await page.locator('#kc-login, input[type="submit"], button[type="submit"]').first().click();
-  await page.waitForURL((url) => url.origin === new URL(PORTAL).origin, { timeout: 20_000 });
-}
 
 test('a session that dies mid-form sends the user to sign in, not to an error', async ({
   page,

@@ -11,12 +11,19 @@
         "type": "password",
         "value": "password",
         "temporary": false
+      },
+      {
+        "type": "otp",
+        "userLabel": "seeded-authenticator",
+        "secretData": "{\"value\":\"oolix-dev-totp-secret\"}",
+        "credentialData": "{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA1\"}"
       }
     ],
     "realmRoles": ["default-roles-oolix"],
     "attributes": {
       "seed_ref": ["seed_user_buyer_admin"]
-    }
+    },
+    "requiredActions": []
   },
   {
     "username": "buyer.operator@example.test",
@@ -30,12 +37,19 @@
         "type": "password",
         "value": "password",
         "temporary": false
+      },
+      {
+        "type": "otp",
+        "userLabel": "seeded-authenticator",
+        "secretData": "{\"value\":\"oolix-dev-totp-secret\"}",
+        "credentialData": "{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA1\"}"
       }
     ],
     "realmRoles": ["default-roles-oolix"],
     "attributes": {
       "seed_ref": ["seed_user_buyer_operator"]
-    }
+    },
+    "requiredActions": []
   },
   {
     "username": "partner.admin@example.test",
@@ -49,12 +63,19 @@
         "type": "password",
         "value": "password",
         "temporary": false
+      },
+      {
+        "type": "otp",
+        "userLabel": "seeded-authenticator",
+        "secretData": "{\"value\":\"oolix-dev-totp-secret\"}",
+        "credentialData": "{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA1\"}"
       }
     ],
     "realmRoles": ["default-roles-oolix"],
     "attributes": {
       "seed_ref": ["seed_user_partner_admin"]
-    }
+    },
+    "requiredActions": []
   },
   {
     "username": "partner.security@example.test",
@@ -68,12 +89,19 @@
         "type": "password",
         "value": "password",
         "temporary": false
+      },
+      {
+        "type": "otp",
+        "userLabel": "seeded-authenticator",
+        "secretData": "{\"value\":\"oolix-dev-totp-secret\"}",
+        "credentialData": "{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA1\"}"
       }
     ],
     "realmRoles": ["default-roles-oolix"],
     "attributes": {
       "seed_ref": ["seed_user_partner_security"]
-    }
+    },
+    "requiredActions": []
   },
   {
     "username": "partner.approver@example.test",
@@ -87,12 +115,19 @@
         "type": "password",
         "value": "password",
         "temporary": false
+      },
+      {
+        "type": "otp",
+        "userLabel": "seeded-authenticator",
+        "secretData": "{\"value\":\"oolix-dev-totp-secret\"}",
+        "credentialData": "{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA1\"}"
       }
     ],
     "realmRoles": ["default-roles-oolix"],
     "attributes": {
       "seed_ref": ["seed_user_partner_approver"]
-    }
+    },
+    "requiredActions": []
   },
   {
     "username": "network.admin@example.test",
@@ -106,12 +141,19 @@
         "type": "password",
         "value": "password",
         "temporary": false
+      },
+      {
+        "type": "otp",
+        "userLabel": "seeded-authenticator",
+        "secretData": "{\"value\":\"oolix-dev-totp-secret\"}",
+        "credentialData": "{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA1\"}"
       }
     ],
     "realmRoles": ["default-roles-oolix"],
     "attributes": {
       "seed_ref": ["seed_user_network_admin"]
-    }
+    },
+    "requiredActions": []
   },
   {
     "username": "finance@example.test",
@@ -125,12 +167,19 @@
         "type": "password",
         "value": "password",
         "temporary": false
+      },
+      {
+        "type": "otp",
+        "userLabel": "seeded-authenticator",
+        "secretData": "{\"value\":\"oolix-dev-totp-secret\"}",
+        "credentialData": "{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA1\"}"
       }
     ],
     "realmRoles": ["default-roles-oolix"],
     "attributes": {
       "seed_ref": ["seed_user_finance"]
-    }
+    },
+    "requiredActions": []
   },
   {
     "username": "analyst@example.test",
@@ -144,12 +193,19 @@
         "type": "password",
         "value": "password",
         "temporary": false
+      },
+      {
+        "type": "otp",
+        "userLabel": "seeded-authenticator",
+        "secretData": "{\"value\":\"oolix-dev-totp-secret\"}",
+        "credentialData": "{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA1\"}"
       }
     ],
     "realmRoles": ["default-roles-oolix"],
     "attributes": {
       "seed_ref": ["seed_user_analyst"]
-    }
+    },
+    "requiredActions": []
   },
   {
     "username": "oolix.admin@example.test",
@@ -163,12 +219,19 @@
         "type": "password",
         "value": "password",
         "temporary": false
+      },
+      {
+        "type": "otp",
+        "userLabel": "seeded-authenticator",
+        "secretData": "{\"value\":\"oolix-dev-totp-secret\"}",
+        "credentialData": "{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA1\"}"
       }
     ],
     "realmRoles": ["default-roles-oolix"],
     "attributes": {
       "seed_ref": ["seed_user_oolix_admin"]
-    }
+    },
+    "requiredActions": []
   },
   {
     "username": "partnerb.admin@example.test",
@@ -182,9 +245,16 @@
         "type": "password",
         "value": "password",
         "temporary": false
+      },
+      {
+        "type": "otp",
+        "userLabel": "seeded-authenticator",
+        "secretData": "{\"value\":\"oolix-dev-totp-secret\"}",
+        "credentialData": "{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA1\"}"
       }
     ],
-    "realmRoles": ["default-roles-oolix"]
+    "realmRoles": ["default-roles-oolix"],
+    "requiredActions": []
   },
   {
     "username": "partnerb.approver@example.test",
@@ -198,9 +268,16 @@
         "type": "password",
         "value": "password",
         "temporary": false
+      },
+      {
+        "type": "otp",
+        "userLabel": "seeded-authenticator",
+        "secretData": "{\"value\":\"oolix-dev-totp-secret\"}",
+        "credentialData": "{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA1\"}"
       }
     ],
-    "realmRoles": ["default-roles-oolix"]
+    "realmRoles": ["default-roles-oolix"],
+    "requiredActions": []
   },
   {
     "username": "partner.finance@example.test",
@@ -214,9 +291,16 @@
         "type": "password",
         "value": "password",
         "temporary": false
+      },
+      {
+        "type": "otp",
+        "userLabel": "seeded-authenticator",
+        "secretData": "{\"value\":\"oolix-dev-totp-secret\"}",
+        "credentialData": "{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA1\"}"
       }
     ],
-    "realmRoles": ["default-roles-oolix"]
+    "realmRoles": ["default-roles-oolix"],
+    "requiredActions": []
   },
   {
     "username": "demo@example.test",
@@ -230,11 +314,18 @@
         "type": "password",
         "value": "password",
         "temporary": false
+      },
+      {
+        "type": "otp",
+        "userLabel": "seeded-authenticator",
+        "secretData": "{\"value\":\"oolix-dev-totp-secret\"}",
+        "credentialData": "{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA1\"}"
       }
     ],
     "realmRoles": ["default-roles-oolix"],
     "attributes": {
       "seed_ref": ["seed_user_demo_all_access"]
-    }
+    },
+    "requiredActions": []
   }
 ]

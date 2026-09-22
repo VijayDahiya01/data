@@ -10,21 +10,12 @@
  * Playwright defaults to light, so asserting the light path proves nothing.
  * This runs with `colorScheme: 'dark'` on purpose.
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { signIn } from './lib/auth';
 
 const PORTAL = process.env.PORTAL_URL ?? 'http://localhost:3000';
 
 test.use({ colorScheme: 'dark' });
-
-async function signIn(page: Page, email: string) {
-  await page.goto(`${PORTAL}/login`);
-  await page.getByRole('link', { name: /continue to sign in/i }).click();
-  await page.waitForURL(/\/realms\/oolix\//, { timeout: 20_000 });
-  await page.locator('#username').fill(email);
-  await page.locator('#password').fill('password');
-  await page.locator('#kc-login, input[type="submit"], button[type="submit"]').first().click();
-  await page.waitForURL((url) => url.origin === new URL(PORTAL).origin, { timeout: 20_000 });
-}
 
 /** `rgb(r, g, b)` -> perceived lightness, 0 (black) to 255 (white). */
 function lightness(colour: string): number {

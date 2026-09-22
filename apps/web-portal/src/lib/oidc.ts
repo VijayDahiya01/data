@@ -72,6 +72,14 @@ export async function beginLogin(): Promise<LoginChallenge> {
     // §67: the API validates the audience on the access token, so it has to be
     // requested here rather than assumed.
     audience: process.env.OIDC_AUDIENCE ?? 'oolix-api',
+    // §4.2 / §82: the API refuses the privileged roles unless the token says
+    // MFA was used, and Keycloak only records that if the login ASKS for the
+    // level. `mfa` is level 2 in the realm's acr.loa.map; the realm's browser
+    // flow runs the OTP step for it. Without this the login succeeds, the
+    // token comes back with acr "1", and every Partner admin, approver,
+    // finance and Buyer admin is locked out with AUTH_001 -- a failure that
+    // looks like a permissions bug rather than a missing request parameter.
+    acr_values: 'mfa',
   }).href;
 
   return { authorizationUrl, codeVerifier, state };

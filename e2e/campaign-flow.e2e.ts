@@ -9,31 +9,15 @@
  * This is the test that answers "can I sign up and run a campaign", and it is
  * the one to run after any change to the builder or the approval centre.
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { buildShoeAudience } from './lib/audience-builder';
+import { signIn, signOut } from './lib/auth';
 
 const PORTAL = process.env.PORTAL_URL ?? 'http://localhost:3000';
 
 // One run, one campaign name, so a failed run never collides with the next.
 const CAMPAIGN = `Portal flow ${Date.now()}`;
 const AUDIENCE = `Portal audience ${Date.now()}`;
-
-async function signIn(page: Page, email: string) {
-  await page.goto(`${PORTAL}/login`);
-  await page.getByRole('link', { name: /continue to sign in/i }).click();
-  await page.waitForURL(/\/realms\/oolix\//, { timeout: 20_000 });
-  await page.locator('#username').fill(email);
-  await page.locator('#password').fill('password');
-  await page.locator('#kc-login, input[type="submit"], button[type="submit"]').first().click();
-  await page.waitForURL((url) => url.origin === new URL(PORTAL).origin, { timeout: 20_000 });
-}
-
-async function signOut(page: Page) {
-  await page.goto(`${PORTAL}/dashboard`).catch(() => undefined);
-  const button = page.getByRole('button', { name: /sign out/i });
-  if (await button.count()) await button.first().click();
-  await page.context().clearCookies();
-}
 
 /** A tiny valid PNG, so the upload exercises §93.3's magic-byte check for real. */
 const PNG_1PX = Buffer.from(
