@@ -299,6 +299,11 @@ REDIS_URL=rediss://ELASTICACHE_ENDPOINT:6379
 
 POSTGRES_USER=<RDS master username>
 POSTGRES_PASSWORD=<RDS master password>
+# The backup runs pg_dump, which needs the host and port on their own, and
+# dumps POSTGRES_DB -- which must be the database named in DATABASE_URL.
+POSTGRES_HOST=RDS_ENDPOINT
+POSTGRES_PORT=5432
+POSTGRES_DB=oolix
 
 TLS_MODE=ops@yourdomain.com
 API_HOST=api.yourdomain.com

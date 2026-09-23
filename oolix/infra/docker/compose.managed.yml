@@ -43,3 +43,27 @@ services:
       KC_DB_URL: ${KEYCLOAK_JDBC_URL:?set KEYCLOAK_JDBC_URL, e.g. jdbc:postgresql://host:5432/keycloak}
       KC_DB_USERNAME: ${KEYCLOAK_DB_USER:?set KEYCLOAK_DB_USER}
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?set KEYCLOAK_DB_PASSWORD}
+
+  # The scheduled backup, which this overlay missed when the service was added
+  # to the base file on 2026-09-09. Until 2026-09-23 the two files together were
+  # an invalid project -- `backup` depended on a `postgres` service this overlay
+  # removes -- so `up` on the managed path failed before anything started. That
+  # is the path both deployment runbooks prescribe.
+  #
+  # Resetting the dependency is only half of it. The backup reaches Postgres
+  # with pg_dump through libpq's own environment, and the base file points that
+  # at a host called `postgres`, which does not exist on a managed deployment.
+  # Left alone, every nightly run would fail -- and a backup that fails quietly
+  # is found out during the restore it was meant to make possible.
+  #
+  # Host and port are separate variables because compose cannot take them apart
+  # from DATABASE_URL. PGUSER, PGPASSWORD and the database names come from the
+  # base file, which merges with this one.
+  backup:
+    depends_on: !reset []
+    environment:
+      PGHOST: ${POSTGRES_HOST:?set POSTGRES_HOST to the managed instance hostname, as in DATABASE_URL}
+      PGPORT: ${POSTGRES_PORT:-5432}
+      # Managed providers require TLS, and libpq's default ("prefer") would fall
+      # back to plaintext if the server allowed it.
+      PGSSLMODE: ${POSTGRES_SSLMODE:-require}

@@ -179,9 +179,18 @@ IMAGE_TAG=<commit-sha>
 # --- managed services -------------------------------------------------------
 DATABASE_URL=postgresql://doadmin:PASS@HOST:25060/defaultdb?sslmode=require
 KEYCLOAK_JDBC_URL=jdbc:postgresql://HOST:25060/keycloak?sslmode=require
+# A JDBC URL carries no credentials, so Keycloak's go here, separately.
+KEYCLOAK_DB_USER=doadmin
+KEYCLOAK_DB_PASSWORD=<the managed Postgres password>
 REDIS_URL=rediss://default:PASS@VALKEY_HOST:<port DO shows you>
 POSTGRES_USER=doadmin
 POSTGRES_PASSWORD=<the managed Postgres password>
+# The backup runs pg_dump, which needs the host and port on their own. And the
+# database it dumps must be the one DATABASE_URL uses -- on DigitalOcean that
+# is `defaultdb`, not `oolix`.
+POSTGRES_HOST=HOST
+POSTGRES_PORT=25060
+POSTGRES_DB=defaultdb
 
 # --- identity ---------------------------------------------------------------
 KEYCLOAK_ADMIN=oolix-admin
