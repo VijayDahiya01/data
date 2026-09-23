@@ -14,7 +14,7 @@ check that fails if the behaviour is removed — not that a file exists.
 | AudienceRule | `audience_group_versions.rules_json` | `verify-v6` §3 |
 | AttributeDefinition | `attribute_definitions` | `verify-v6` §1 |
 | PartnerCapability | `partner_capabilities` | `verify-v6` §2 |
-| PartnerAttributeMapping | **Partner only** — `partner-agent/config.*.yaml` | `internal/config` test |
+| PartnerAttributeMapping | **Partner only** — `partner/agent/config.*.yaml` | `internal/config` test |
 | PartnerMatchSnapshot | `partner_match_snapshots` | `verify-v6` §4 |
 | ReachEstimate | `reach_estimates` | `verify-v6` §8 |
 | AudienceMaterialization | **Partner only** — `oolix_audience_materialization` | `verify-v6-serving` §5 |
@@ -56,7 +56,7 @@ Adding a second, redundant control would let the two disagree.
 
 ## §7 Matching
 
-`matchPartner()` in `packages/contracts/src/audience.ts` implements §7's
+`matchPartner()` in `shared/contracts/src/audience.ts` implements §7's
 pseudocode literally, including:
 
 - per-attribute `status` — §17's Partner attribute block;

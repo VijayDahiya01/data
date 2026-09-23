@@ -16,7 +16,7 @@ import path from 'node:path';
 import process from 'node:process';
 
 const root = path.resolve(import.meta.dirname, '..');
-const pack = path.join(root, 'implementation_examples');
+const pack = path.join(root, 'partner', 'pack');
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -34,16 +34,16 @@ console.log('1. Every Appendix A artifact resolves to a real file');
 
 const APPENDIX_A = [
   ['.env.example', '.env.example'],
-  ['001_init.sql', 'implementation_examples/001_init.sql'],
-  ['Dockerfile.partner-agent', 'implementation_examples/Dockerfile.partner-agent'],
-  ['README.md', 'implementation_examples/README.md'],
-  ['agent-config.example.yaml', 'partner-agent/config.example.yaml'],
+  ['001_init.sql', 'partner/pack/001_init.sql'],
+  ['Dockerfile.partner-agent', 'partner/pack/Dockerfile.partner-agent'],
+  ['README.md', 'partner/pack/README.md'],
+  ['agent-config.example.yaml', 'partner/agent/config.example.yaml'],
   ['docker-compose.yml', 'docker-compose.yml'],
-  ['k8s-partner-agent.yaml', 'implementation_examples/k8s-partner-agent.yaml'],
-  ['openapi.yaml', 'implementation_examples/openapi.yaml'],
-  ['seed-data.yaml', 'implementation_examples/seed-data.yaml'],
-  ['agent-auth.md', 'implementation_examples/agent-auth.md'],
-  ['mock-partner/', 'apps/mock-partner'],
+  ['k8s-partner-agent.yaml', 'partner/pack/k8s-partner-agent.yaml'],
+  ['openapi.yaml', 'partner/pack/openapi.yaml'],
+  ['seed-data.yaml', 'partner/pack/seed-data.yaml'],
+  ['agent-auth.md', 'partner/pack/agent-auth.md'],
+  ['mock-partner/', 'partner/mock-partner'],
 ];
 
 for (const [name, rel] of APPENDIX_A) {
@@ -53,7 +53,7 @@ for (const [name, rel] of APPENDIX_A) {
 // ---------------------------------------------------------------------------
 console.log('\n2. 001_init.sql is a faithful snapshot (§96)');
 
-const migrationsDir = path.join(root, 'packages/db/prisma/migrations');
+const migrationsDir = path.join(root, 'oolix/packages/db/prisma/migrations');
 const initDir = readdirSync(migrationsDir)
   .filter((d) => d.endsWith('_init'))
   .sort()[0];
@@ -125,7 +125,7 @@ check('no migration declares a partner_user_id column (§54)', !withUserId, with
 // ---------------------------------------------------------------------------
 console.log('\n3. seed-data.yaml mirrors the executable seed (§95)');
 
-const seedTs = read(path.join(root, 'packages/db/prisma/seed/index.ts'));
+const seedTs = read(path.join(root, 'oolix/packages/db/prisma/seed/index.ts'));
 const seedYaml = read(path.join(pack, 'seed-data.yaml'));
 
 // Every stable id the seed defines must appear in the documented fixture set,

@@ -136,7 +136,7 @@ the manifest signing chain.
 
 - `docs/SECURITY-REVIEW.md` — what was already reviewed, and the named gaps
 - `pnpm probe` and `pnpm probe:authed` — so they start where these stop
-- `implementation_examples/openapi.yaml` — the full API surface
+- `partner/pack/openapi.yaml` — the full API surface
 - A staging deployment with two Partner tenants and one Buyer
 
 **Ask for a retest after fixes to be included in the price.** A report you

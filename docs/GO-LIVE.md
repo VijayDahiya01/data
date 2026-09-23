@@ -60,7 +60,7 @@ Done:
   will accept as genuine, so this is the single most sensitive artifact in the
   repository.
 - `pnpm db:seed --env=production` refuses, verified by a test that runs the real
-  command (`packages/db/prisma/seed/seed-guard.spec.ts`).
+  command (`oolix/packages/db/prisma/seed/seed-guard.spec.ts`).
 - No credential appears in the implementation pack; `pnpm verify:pack` scans for
   private keys and AWS key ids on every CI run.
 - The Kubernetes starter uses `REPLACE_ME` placeholders and reads the connector
@@ -74,20 +74,20 @@ Open:
   on the hosting decision above.
 
 **Corrected 2026-09-09.** This item previously read as though "no dev IdP users
-in production" was handled. It was not. `infra/keycloak/oolix-realm.json` is
+in production" was handled. It was not. `oolix/infra/keycloak/oolix-realm.json` is
 imported into production unchanged and shipped **thirteen development
 identities with the password `password`**, one of which (`demo@example.test`)
 holds OOLIX_ADMIN plus every Partner role — alongside a literal OIDC client
 secret, `sslRequired: none`, and the password grant enabled.
 
-All of it is fixed: `infra/keycloak/render-realm.mjs` substitutes every
+All of it is fixed: `oolix/infra/keycloak/render-realm.mjs` substitutes every
 environment-dependent setting, refuses to render without a client secret, and
 refuses to seed identities into a realm that requires TLS. The users live in
 `dev-users.json` and are merged only on an explicit `KC_SEED_USERS=true`.
 Verified against a running production stack — the password grant now answers
 "Client not allowed for direct access grants" for the demo account, and the old
 published secret returns 401. Guarded by 11 tests in
-`packages/contracts/src/realm.test.ts`.
+`shared/contracts/src/realm.test.ts`.
 
 Key **rotation** is done and exercised: `pnpm keys:list`, `keys:rotate`,
 `keys:retire`.
@@ -171,10 +171,10 @@ requests one. Against the API running with `APP_ENV=production`:
 
 So the role works and the guard is still enforcing, rather than having been
 loosened to make the error go away. Thirteen tests pin it: seven in
-`packages/contracts/src/realm.test.ts` on realm-to-guard agreement (including
+`shared/contracts/src/realm.test.ts` on realm-to-guard agreement (including
 that the OTP subflow's level and the map's `mfa` level are the same number —
 disagree and the OTP step silently never runs), and six in
-`packages/auth-rbac/src/rbac.test.ts` on `mfaSatisfied`, which had none.
+`oolix/packages/auth-rbac/src/rbac.test.ts` on `mfaSatisfied`, which had none.
 
 Two consequences worth knowing. MFA now applies to **every** account, not only
 the six roles: Keycloak cannot know Oolix roles, so realm-level MFA is
@@ -205,7 +205,7 @@ Done:
   `/readyz`, which drops it out of the Partner's load balancer instead of
   leaving it serving for the rest of the 15-minute grace window.
 - The contract is documented for Partners in
-  `implementation_examples/agent-auth.md`.
+  `partner/pack/agent-auth.md`.
 
 Open:
 
@@ -217,7 +217,7 @@ Open:
 
 ### ✅ Manifest tamper/expiry tests pass
 
-`packages/manifest-schema` covers signature verification, `typ`, issuer,
+`oolix/packages/manifest-schema` covers signature verification, `typ`, issuer,
 audience, `kid` and time bounds, and `pnpm verify` exercises the full path
 through a live Agent: a manifest signed for another audience is rejected, an
 expired manifest stops serving, and a revoked activation is dropped on the next
@@ -252,7 +252,7 @@ staleness and expiry conditions §78.2 names — including the escalation from a
 config-staleness warning at 5 minutes to critical at 15.
 
 **Since this was written**, the stack itself exists:
-`infra/monitoring/prometheus.yml` and `alerts.yml` (7 rules), with
+`oolix/infra/monitoring/prometheus.yml` and `alerts.yml` (7 rules), with
 `alertmanager.yml` for routing, all wired into `compose.prod.yml`.
 
 Open:

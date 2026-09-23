@@ -1,0 +1,45 @@
+# Run against managed PostgreSQL, Redis and object storage.
+#
+# An overlay on compose.prod.yml. The base file runs its own Postgres and Redis
+# so the stack can be proven end to end on one machine; on a real host those
+# should be managed services, for the reason that matters most in a pilot:
+# somebody else does the backups, the failover and the patching, and a pilot
+# team has no capacity to do any of the three well.
+#
+#   docker compose -f oolix/infra/docker/compose.prod.yml \
+#                  -f oolix/infra/docker/compose.managed.yml \
+#                  --env-file .env.prod up -d
+#
+# `!reset []` removes the base file's dependency edges. Without it Compose
+# still waits for a `postgres` service that is no longer part of the stack, and
+# the deployment hangs with no explanation.
+services:
+  postgres: !reset null
+  redis: !reset null
+
+  migrate:
+    depends_on: !reset []
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL to the managed instance}
+
+  api:
+    depends_on: !reset []
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL to the managed instance}
+      REDIS_URL: ${REDIS_URL:?set REDIS_URL to the managed instance}
+
+  worker:
+    depends_on: !reset []
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL to the managed instance}
+      REDIS_URL: ${REDIS_URL:?set REDIS_URL to the managed instance}
+
+  keycloak:
+    depends_on: !reset []
+    environment:
+      # Keycloak wants a JDBC URL, which is not the same string as
+      # DATABASE_URL. Giving it the postgres:// form fails at start-up with a
+      # driver error that does not mention the format.
+      KC_DB_URL: ${KEYCLOAK_JDBC_URL:?set KEYCLOAK_JDBC_URL, e.g. jdbc:postgresql://host:5432/keycloak}
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER:?set KEYCLOAK_DB_USER}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?set KEYCLOAK_DB_PASSWORD}

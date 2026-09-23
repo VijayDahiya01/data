@@ -16,9 +16,9 @@ dist
 .env
 .env.*
 !.env.example
-partner-agent/.agent-state
-partner-agent/config.local.yaml
-partner-agent/bin
+partner/agent/.agent-state
+partner/agent/config.local.yaml
+partner/agent/bin
 
 # Test and tooling output.
 test-results
@@ -35,5 +35,5 @@ coverage
 
 # Documentation and specs are not needed to build a service.
 docs
-implementation_examples
+partner/pack
 newone-backup-*

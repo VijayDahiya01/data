@@ -2,13 +2,13 @@ pnpm-lock.yaml
 dist
 .next
 node_modules
-partner-agent/bin
+partner/agent/bin
 docs
 
 # Generated code. Prettier fighting a generator is a loop nobody wins, and a
 # reformatted client would be rewritten on the next `prisma generate`.
-packages/db/src/generated/
-apps/api-gateway/src/generated/
+oolix/packages/db/src/generated/
+oolix/apps/api-gateway/src/generated/
 **/next-env.d.ts
 
 # Playwright output.

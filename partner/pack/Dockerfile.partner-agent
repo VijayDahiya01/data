@@ -1,0 +1,83 @@
+# =============================================================================
+# Partner Agent container -- Appendix A, spec v5 §64, §69, §82, §92.
+#
+# This image is built by Oolix and run INSIDE the Data Partner's own
+# infrastructure (§12.1). That inversion drives every decision below: the
+# Partner is running a binary they did not write, next to a database Oolix must
+# never see. The image therefore has to be small enough to audit, unprivileged
+# by default, and incapable of quietly acquiring shell access.
+#
+# Build (from the repository root):
+#   docker build -f partner/pack/Dockerfile.partner-agent \
+#     --build-arg VERSION=$(git describe --tags --always) -t oolix/partner-agent:dev .
+# =============================================================================
+
+# --- build stage -------------------------------------------------------------
+FROM golang:1.27-alpine AS build
+
+# git is needed only if the module graph pulls a VCS dependency; it does not
+# survive into the runtime image.
+RUN apk add --no-cache git ca-certificates
+
+WORKDIR /src
+
+# Dependencies first, so a source-only change does not re-download the module
+# cache on every build.
+COPY partner/agent/go.mod partner/agent/go.sum ./
+RUN go mod download
+
+COPY partner/agent/ ./
+
+# §80 stamps the running version so `agent_version` in a heartbeat is
+# meaningful during a staged rollout.
+ARG VERSION=dev
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+
+# CGO off: a static binary runs on a distroless base and cannot be surprised by
+# a missing libc at a Partner site. -trimpath and an empty build id keep the
+# build reproducible, so a Partner's security team can rebuild this Dockerfile
+# and compare hashes rather than trusting the registry.
+ENV CGO_ENABLED=0
+RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+      -trimpath \
+      -buildvcs=false \
+      -ldflags="-s -w -buildid= -X main.version=${VERSION}" \
+      -o /out/oolix-agent ./cmd/agent
+
+# --- runtime stage -----------------------------------------------------------
+# Distroless static: no shell, no package manager, no busybox. If this
+# container is ever compromised there is nothing in it to pivot with -- which
+# matters more here than anywhere else in the system, because this process sits
+# inside the Partner's network with read access to their segment tables.
+FROM gcr.io/distroless/static-debian12:nonroot
+
+# TLS roots for the Oolix control plane and the Partner's own database.
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+COPY --from=build /out/oolix-agent /usr/local/bin/oolix-agent
+
+# 65532:65532 is distroless' `nonroot`. Declared explicitly so the container
+# still runs unprivileged if the base image default ever changes.
+USER 65532:65532
+
+# 8082 is the Agent's single listener (`agent.listen_addr`): the private
+# ad-decision API plus /healthz and /readyz. §12.1 requires the PARTNER BACKEND
+# to be the only caller -- this is the one hop that carries a partner_user_id,
+# so it must never be reachable from a browser or the public internet. The
+# NetworkPolicy in k8s-partner-agent.yaml is what actually enforces that;
+# EXPOSE is documentation.
+EXPOSE 8082
+
+# §69.2 keeps liveness and readiness separate: readiness reports control-sync
+# staleness and identity validity, liveness only reports that the process is
+# alive. Probes are configured in the Kubernetes manifest rather than here,
+# because a HEALTHCHECK instruction would duplicate them with different
+# semantics.
+
+# The state directory holds the Agent's own P-256 private key (§92.2). It must
+# be a mounted volume with restrictive permissions -- see k8s-partner-agent.yaml.
+VOLUME ["/var/lib/oolix-agent"]
+
+ENTRYPOINT ["/usr/local/bin/oolix-agent"]
+CMD ["--config", "/etc/oolix/agent.yaml"]

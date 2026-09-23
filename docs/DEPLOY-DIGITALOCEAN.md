@@ -287,18 +287,18 @@ mistake is silent in production.
 
 ```sh
 # Build the three images (~10 minutes on first run)
-docker compose -f infra/docker/compose.prod.yml \
-               -f infra/docker/compose.managed.yml \
+docker compose -f oolix/infra/docker/compose.prod.yml \
+               -f oolix/infra/docker/compose.managed.yml \
                --env-file .env.prod build
 
 # Signing keys — ONCE. Back these up immediately (step 11).
-docker compose -f infra/docker/compose.prod.yml \
-               -f infra/docker/compose.managed.yml \
+docker compose -f oolix/infra/docker/compose.prod.yml \
+               -f oolix/infra/docker/compose.managed.yml \
                --env-file .env.prod --profile init run --rm keys
 
 # Up
-docker compose -f infra/docker/compose.prod.yml \
-               -f infra/docker/compose.managed.yml \
+docker compose -f oolix/infra/docker/compose.prod.yml \
+               -f oolix/infra/docker/compose.managed.yml \
                --env-file .env.prod --profile monitoring up -d
 ```
 
@@ -382,9 +382,9 @@ restored is a hypothesis. See `docs/BACKUP-AND-ROLLBACK.md`.
 ```sh
 git fetch && git checkout <new-sha>
 sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=<new-sha>/" .env.prod
-docker compose -f infra/docker/compose.prod.yml -f infra/docker/compose.managed.yml \
+docker compose -f oolix/infra/docker/compose.prod.yml -f oolix/infra/docker/compose.managed.yml \
   --env-file .env.prod build
-docker compose -f infra/docker/compose.prod.yml -f infra/docker/compose.managed.yml \
+docker compose -f oolix/infra/docker/compose.prod.yml -f oolix/infra/docker/compose.managed.yml \
   --env-file .env.prod up -d
 ```
 
@@ -413,7 +413,7 @@ only.
 | Build killed with no error | Out of memory — the swap file in step 1 |
 | Alerts never arrive | Placeholder webhooks. The renderer refuses these, so the stack would not have started |
 
-Logs: `docker compose -f infra/docker/compose.prod.yml -f infra/docker/compose.managed.yml --env-file .env.prod logs -f <service>`
+Logs: `docker compose -f oolix/infra/docker/compose.prod.yml -f oolix/infra/docker/compose.managed.yml --env-file .env.prod logs -f <service>`
 
 ---
 

@@ -162,7 +162,7 @@ policy scoped to those two buckets rather than `AmazonS3FullAccess`:
 
 Name it `oolix-app-role`.
 
-**Why a role rather than keys.** `apps/api-gateway/src/modules/creative/creative.module.ts`
+**Why a role rather than keys.** `oolix/apps/api-gateway/src/modules/creative/creative.module.ts`
 constructs the S3 client with a region and no explicit credentials, so the SDK
 uses its default provider chain and finds the instance role by itself. Leaving
 `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` **unset** in `.env.prod` is
@@ -345,7 +345,7 @@ in production.
 
 ```sh
 cd /srv/oolix
-COMPOSE="-f infra/docker/compose.prod.yml -f infra/docker/compose.managed.yml --env-file .env.prod"
+COMPOSE="-f oolix/infra/docker/compose.prod.yml -f oolix/infra/docker/compose.managed.yml --env-file .env.prod"
 
 docker compose $COMPOSE build                       # ~10 minutes first time
 docker compose $COMPOSE --profile init run --rm keys   # ONCE. Back these up.

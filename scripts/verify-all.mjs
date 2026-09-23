@@ -19,7 +19,12 @@ import process from 'node:process';
 import { agentUrl } from './lib/agent-port.mjs';
 
 const isWindows = process.platform === 'win32';
-const agentBin = path.join('partner-agent', 'bin', isWindows ? 'oolix-agent.exe' : 'oolix-agent');
+const agentBin = path.join(
+  'partner',
+  'agent',
+  'bin',
+  isWindows ? 'oolix-agent.exe' : 'oolix-agent',
+);
 
 let agentProc = null;
 
@@ -110,13 +115,13 @@ async function restartAgent() {
     'go',
     ['build', '-o', path.join('bin', path.basename(agentBin)), './cmd/agent'],
     {
-      cwd: 'partner-agent',
+      cwd: 'partner/agent',
     },
   );
   if (build.status !== 0) throw new Error('agent build failed');
 
   agentProc = spawn(path.resolve(agentBin), ['--config', './config.local.yaml'], {
-    cwd: 'partner-agent',
+    cwd: 'partner/agent',
     stdio: 'ignore',
     detached: false,
   });

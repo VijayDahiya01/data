@@ -39,7 +39,7 @@ a migration rather than a setting.
 
 ## 1.2 Exact versions
 
-Pinned in `docker-compose.yml`, `infra/docker/compose.prod.yml`, `.nvmrc` and
+Pinned in `docker-compose.yml`, `oolix/infra/docker/compose.prod.yml`, `.nvmrc` and
 `package.json`. Do not drift from these without testing.
 
 | Component | Version | Notes |
@@ -91,19 +91,19 @@ openssl rand -base64 32        # once per secret, never reused
 pnpm preflight --env-file .env.prod
 
 # 4. Signing keys — ONCE, and back them up immediately
-docker compose -f infra/docker/compose.prod.yml --env-file .env.prod \
+docker compose -f oolix/infra/docker/compose.prod.yml --env-file .env.prod \
   --profile init run --rm keys
 
 # 5. Up
-docker compose -f infra/docker/compose.prod.yml --env-file .env.prod up -d
+docker compose -f oolix/infra/docker/compose.prod.yml --env-file .env.prod up -d
 ```
 
 Use the managed overlay if the database and Redis are managed, which they
 should be:
 
 ```sh
-docker compose -f infra/docker/compose.prod.yml \
-               -f infra/docker/compose.managed.yml \
+docker compose -f oolix/infra/docker/compose.prod.yml \
+               -f oolix/infra/docker/compose.managed.yml \
                --env-file .env.prod up -d
 ```
 
@@ -147,7 +147,7 @@ when to restore.
 
 # Part 2 — Partner side
 
-This is what you send a Data Partner. `implementation_examples/INTEGRATION-GUIDE.md`
+This is what you send a Data Partner. `partner/pack/INTEGRATION-GUIDE.md`
 is the version written for them; this is the summary.
 
 ## 2.1 What the Partner provides
@@ -171,7 +171,7 @@ that does not exist yet — establish this before promising a date.
 | Go | **1.27** | Only if they build it themselves, which they should not need to |
 | PostgreSQL | any modern version | The Partner's own; Oolix never connects to it |
 | Redis | **7.4** | Partner-local. Must never share a datastore with Oolix |
-| Kubernetes | any | `implementation_examples/k8s-partner-agent.yaml` is a working starting point |
+| Kubernetes | any | `partner/pack/k8s-partner-agent.yaml` is a working starting point |
 
 Pin the image by version or digest. A moving tag means the binary they audited
 is not necessarily the one running.

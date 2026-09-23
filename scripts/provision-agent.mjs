@@ -51,9 +51,9 @@ if (!partner) {
   process.exit(1);
 }
 
-const agentDir = path.resolve('partner-agent', '.agent-state');
+const agentDir = path.resolve('partner', 'agent', '.agent-state');
 const keyPath = path.join(agentDir, 'agent-key.pem');
-const configPath = path.resolve('partner-agent', 'config.local.yaml');
+const configPath = path.resolve('partner', 'agent', 'config.local.yaml');
 
 async function call(pathname, { method = 'GET', token, body } = {}) {
   const res = await fetch(`${API}${pathname}`, {

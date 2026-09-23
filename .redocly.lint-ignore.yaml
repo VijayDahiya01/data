@@ -3,7 +3,7 @@
 # Each entry is a probe endpoint with no error response to document (§69.2).
 # Keeping the list explicit means a newly added endpoint that forgets its error
 # responses still fails review.
-implementation_examples/openapi.yaml:
+partner/pack/openapi.yaml:
   operation-4xx-response:
     - '#/paths/~1healthz/get/responses'
     - '#/paths/~1readyz/get/responses'

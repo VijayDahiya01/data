@@ -15,7 +15,7 @@
  *   Revocation        a Partner stop ends local serving
  *
  * Requires: the stack up, an Agent provisioned and running against the v6
- * fixture attribute table (infra/partner-db/init/02-v6-audience-attributes.sql).
+ * fixture attribute table (partner/dev-db/init/02-v6-audience-attributes.sql).
  *
  * Usage: node scripts/verify-v6-serving.mjs
  */

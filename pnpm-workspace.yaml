@@ -1,6 +1,21 @@
+# The repository is split by which side of the Data Partner boundary the code
+# runs on, because that is the line the whole product is built around:
+#
+#   oolix/    the control plane Oolix deploys and operates
+#   partner/  what runs inside a Data Partner's own infrastructure
+#   shared/   the contract both sides speak
+#
+# partner/ is listed by package rather than by glob because most of it is not
+# JavaScript: partner/agent is Go, partner/pack is the integration pack, and
+# partner/dev-db is the simulated Partner database. A glob would work today --
+# pnpm skips directories without a package.json -- but it would silently adopt
+# anything JavaScript that later lands there, on the wrong side's release train.
 packages:
-  - 'apps/*'
-  - 'packages/*'
+  - 'oolix/apps/*'
+  - 'oolix/packages/*'
+  - 'shared/*'
+  - 'partner/sdk-web'
+  - 'partner/mock-partner'
 
 # pnpm 10 requires postinstall scripts to be opted in explicitly. These four
 # genuinely need them: Prisma fetches/builds its query engine, and esbuild and

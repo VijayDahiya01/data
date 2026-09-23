@@ -8,7 +8,7 @@ export default tseslint.config(
       '**/dist/**',
       '**/.next/**',
       '**/coverage/**',
-      'partner-agent/**',
+      'partner/agent/**',
       'docs/**',
     ],
   },
@@ -40,7 +40,7 @@ export default tseslint.config(
       // stdout -- an operator reading `docker logs` is the audience, and the
       // structured logger they would otherwise use does not exist inside an
       // alpine container running one script.
-      'infra/**/*.mjs',
+      'oolix/infra/**/*.mjs',
     ],
     rules: { 'no-console': 'off' },
   },

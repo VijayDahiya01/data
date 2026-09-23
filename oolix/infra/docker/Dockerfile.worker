@@ -1,0 +1,92 @@
+# =============================================================================
+# Oolix worker — queue consumers and scheduled monitors.
+#
+# Deliberately a long-running process rather than a scheduled function: a cold
+# start in the ad-control path means a Partner Agent holding stale config, and
+# the §78.2 monitors measure queue lag in seconds, which a function that has to
+# boot cannot report honestly.
+#
+# It serves no HTTP traffic, so there is no port and no readiness endpoint —
+# liveness is "the process is alive and consuming", which the orchestrator sees
+# through the restart policy rather than a probe.
+#
+# Build from the repository root:
+#   docker build -f oolix/infra/docker/Dockerfile.worker -t oolix/worker:dev .
+# or let compose do it: `docker compose -f oolix/infra/docker/compose.prod.yml build`
+# =============================================================================
+
+ARG NODE_VERSION=24.19.0-alpine
+
+# -----------------------------------------------------------------------------
+# Stage 1 — dependencies
+# -----------------------------------------------------------------------------
+FROM node:${NODE_VERSION} AS deps
+WORKDIR /repo
+
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+
+# Every workspace manifest, the Partner side's included -- `--frozen-lockfile`
+# refuses unless each importer the lockfile names is present. See the API
+# gateway image.
+COPY oolix/apps/api-gateway/package.json       oolix/apps/api-gateway/
+COPY oolix/apps/web-portal/package.json        oolix/apps/web-portal/
+COPY oolix/apps/worker/package.json            oolix/apps/worker/
+COPY oolix/packages/auth-rbac/package.json     oolix/packages/auth-rbac/
+COPY oolix/packages/db/package.json            oolix/packages/db/
+COPY oolix/packages/manifest-schema/package.json oolix/packages/manifest-schema/
+COPY oolix/packages/observability/package.json oolix/packages/observability/
+COPY oolix/packages/runtime-config/package.json oolix/packages/runtime-config/
+COPY shared/contracts/package.json             shared/contracts/
+COPY partner/sdk-web/package.json              partner/sdk-web/
+COPY partner/mock-partner/package.json         partner/mock-partner/
+
+RUN pnpm install --frozen-lockfile
+
+# -----------------------------------------------------------------------------
+# Stage 2 — build
+# -----------------------------------------------------------------------------
+FROM deps AS build
+WORKDIR /repo
+
+COPY tsconfig.base.json ./
+COPY oolix/packages ./oolix/packages
+COPY shared ./shared
+COPY oolix/apps/worker ./oolix/apps/worker
+
+# See the API gateway image: prisma.config.ts resolves DATABASE_URL eagerly so
+# migrations cannot run against the wrong database. Generation never connects,
+# and this value never leaves the build.
+ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build?schema=public"
+
+# The worker's workspace dependencies, derived from its package.json. See the
+# API gateway image for why this is not a folder glob.
+RUN pnpm --filter "@oolix/worker^..." build \
+ && pnpm --filter @oolix/worker build
+
+# `--legacy` for the same reason as the API image: pnpm 10's modern deploy
+# refuses without `inject-workspace-packages` and then fails against a shared
+# lockfile. It copies more than a production tree needs; see the API gateway
+# Dockerfile for the measurements and what to do about it.
+RUN pnpm --filter @oolix/worker deploy --prod --legacy /out
+
+# -----------------------------------------------------------------------------
+# Stage 3 — runtime
+# -----------------------------------------------------------------------------
+FROM node:${NODE_VERSION} AS runtime
+
+# A real PID 1 matters more here than in the HTTP services: the worker holds
+# long-poll connections to the queue, and a SIGTERM that never arrives means
+# every deploy waits for the grace period to expire before killing it.
+RUN apk add --no-cache dumb-init
+
+ENV NODE_ENV=production
+WORKDIR /app
+
+COPY --from=build --chown=root:root /out ./
+
+USER node
+
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "dist/main.js"]

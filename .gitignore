@@ -8,7 +8,7 @@ build/
 .next/
 out/
 *.tsbuildinfo
-partner-agent/bin/
+partner/agent/bin/
 
 # env & secrets  (§82: no hard-coded credentials)
 .env
@@ -31,9 +31,9 @@ partner-agent/bin/
 # generated on first boot and belong in a secret manager everywhere else.
 .keys/
 *.keyfile.json
-apps/api-gateway/test/.keys-test/
-partner-agent/config.local.yaml
-partner-agent/.agent-state/
+oolix/apps/api-gateway/test/.keys-test/
+partner/agent/config.local.yaml
+partner/agent/.agent-state/
 
 # local data
 /var/
@@ -50,7 +50,7 @@ playwright-report/
 Thumbs.db
 
 # generated
-apps/api-gateway/src/generated/
+oolix/apps/api-gateway/src/generated/
 
 # Production compose environment — secrets, never committed.
 .env.prod
@@ -60,4 +60,4 @@ packtest-agent.yaml
 
 # Local backup destination used when rehearsing the production stack.
 # These are real database dumps and signing-key archives — never commit them.
-infra/docker/backups/
+oolix/infra/docker/backups/

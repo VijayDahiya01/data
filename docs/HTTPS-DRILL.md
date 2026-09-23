@@ -7,7 +7,7 @@ portal marks its session cookie `Secure` only when its public URL is `https`.
 Those values have to change together or nothing authenticates — and the errors
 do not name the cause.
 
-`infra/caddy/Caddyfile` terminates TLS in front of everything. The API, portal
+`oolix/infra/caddy/Caddyfile` terminates TLS in front of everything. The API, portal
 and Keycloak publish no host ports at all: the terminator is the only service
 that faces anything.
 
@@ -39,14 +39,14 @@ Point the three names at your own machine — Windows
 Then, once, create the signing keys. This is deliberately a separate step:
 
 ```sh
-docker compose -f infra/docker/compose.prod.yml --env-file .env.prod \
+docker compose -f oolix/infra/docker/compose.prod.yml --env-file .env.prod \
   --profile init run --rm keys
 ```
 
 And start:
 
 ```sh
-docker compose -f infra/docker/compose.prod.yml --env-file .env.prod up -d
+docker compose -f oolix/infra/docker/compose.prod.yml --env-file .env.prod up -d
 ```
 
 ## Checking it, without skipping the check

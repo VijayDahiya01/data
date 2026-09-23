@@ -15,7 +15,7 @@ taken *before* every migration rather than nightly only.
 
 ## What a backup contains
 
-`infra/backup/backup.sh` captures three things:
+`oolix/infra/backup/backup.sh` captures three things:
 
 1. The Oolix database — campaigns, approvals, activations, manifests
 2. The Keycloak database — who can sign in, and as what
@@ -28,7 +28,7 @@ a database restore does not fix that, and no error anywhere says "the key
 changed".
 
 ```sh
-./infra/backup/backup.sh /var/backups/oolix
+./oolix/infra/backup/backup.sh /var/backups/oolix
 ```
 
 Each run writes a timestamped directory with the two dumps, the key archive, a
@@ -46,7 +46,7 @@ do not matter.
 ## Restoring
 
 ```sh
-./infra/backup/restore.sh /var/backups/oolix/20260903T032609Z
+./oolix/infra/backup/restore.sh /var/backups/oolix/20260903T032609Z
 ```
 
 It verifies the checksums first and refuses a damaged backup rather than
@@ -84,7 +84,7 @@ IMAGE_TAG=<the previous tag>
 ```
 
 ```sh
-docker compose -f infra/docker/compose.prod.yml --env-file .env.prod up -d
+docker compose -f oolix/infra/docker/compose.prod.yml --env-file .env.prod up -d
 ```
 
 **Only safe if the release did not migrate the schema.** The old code will run
@@ -114,7 +114,7 @@ so that rolling back names a specific artefact rather than a hope.
 ## Scheduling
 
 The stack runs backups itself — the `backup` service in
-`infra/docker/compose.prod.yml`, every 24 hours by default. It is on by
+`oolix/infra/docker/compose.prod.yml`, every 24 hours by default. It is on by
 default rather than opt-in, because a backup that depends on somebody
 remembering is not a backup.
 

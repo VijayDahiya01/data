@@ -5,7 +5,7 @@ Agent runs inside your infrastructure, on hosts Oolix never touches and holds
 no credential to. Roughly **1 hour** once the prerequisites exist.
 
 It covers **where to run it** and **what to give it**.
-`implementation_examples/INTEGRATION-GUIDE.md` covers **how to configure it** —
+`partner/pack/INTEGRATION-GUIDE.md` covers **how to configure it** —
 the attribute view, the mappings, the placements — and the two are meant to be
 read together, this one first.
 
@@ -118,7 +118,7 @@ input.
 
 ### C. EKS — use the shipped manifest
 
-`implementation_examples/k8s-partner-agent.yaml` is a working starter:
+`partner/pack/k8s-partner-agent.yaml` is a working starter:
 `replicas: 2`, `state.mode: redis`, resource requests and limits, the DSN from
 a Secret, and comments explaining each decision. Replace
 `REPLACE_WITH_REGISTRY` and `REPLACE_WITH_VERSION`, and prefer an image digest
@@ -165,7 +165,7 @@ waits for a human.
 
 ### 3. Configure
 
-Copy `partner-agent/config.example.yaml` and work through
+Copy `partner/agent/config.example.yaml` and work through
 `INTEGRATION-GUIDE.md`. The fields that decide whether it works at all:
 
 | Field | Gets wrong how |
@@ -228,7 +228,7 @@ control-sync failure count and age.
 
 **Only you can collect these.** The Agent runs inside your infrastructure and
 Oolix deliberately cannot reach it; asking you to open a hole for us would
-contradict the whole design. `infra/monitoring/` has alert rules you can adapt.
+contradict the whole design. `oolix/infra/monitoring/` has alert rules you can adapt.
 Two are worth having from day one:
 
 - **control-sync age** — if config stops syncing, the Agent serves a stale

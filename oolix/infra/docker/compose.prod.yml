@@ -1,0 +1,465 @@
+# =============================================================================
+# The whole Oolix stack, from built images.
+#
+# This is not the development compose file. `docker-compose.yml` at the
+# repository root runs the DEPENDENCIES so the apps can be run with `pnpm dev`;
+# this one runs the apps themselves from the images in oolix/infra/docker,
+# which is how they will run in a pilot.
+#
+# Use it to verify an image behaves before choosing a host. It is deliberately
+# shaped like a real deployment — migrations as their own step, health-gated
+# start-up, no secrets in the file — so that what is learned here transfers.
+#
+#   docker compose -f oolix/infra/docker/compose.prod.yml --env-file .env.prod build
+#   docker compose -f oolix/infra/docker/compose.prod.yml --env-file .env.prod up -d
+#
+# `build` works because `api`, `portal` and `worker` carry `build:` blocks. They
+# did not until 2026-09-23: every service named an image and none said how to
+# make one, so the `build` step both deployment runbooks prescribe completed
+# instantly having built nothing, and `up` then tried to PULL
+# oolix/api-gateway:<sha> from Docker Hub, where no such image exists. The one
+# end-to-end boot that was ever recorded worked because its images had been
+# built by hand first. `migrate` and `keys` reuse the api image and carry no
+# build block of their own, so it is built once rather than three times.
+#
+# ── ONE THING TO SET UP FIRST ────────────────────────────────────────────────
+#
+# Add this line to your hosts file (Windows:
+# C:\Windows\System32\drivers\etc\hosts, needs administrator):
+#
+#     127.0.0.1  api.oolix.localhost app.oolix.localhost auth.oolix.localhost
+#
+# Why: an OIDC issuer is a string, and it has to be the SAME string for the
+# browser and for the portal's server side. The browser is redirected to
+# Keycloak to sign in; the portal then exchanges the code server-side. If the
+# browser uses one name and the container another, the issuer in the token will
+# not match what the API validates against, and every request is rejected as an
+# invalid token — while everything looks correct.
+#
+# Using names that resolve in both places avoids the whole class of problem. In
+# a real deployment these are simply the public DNS names and this note stops
+# applying.
+#
+# Everything is served over HTTPS. With TLS_MODE=internal, Caddy issues from a
+# local certificate authority, so a browser will warn once until that CA is
+# trusted — the certificate is real, its issuer is simply not yet known. See
+# docs/HTTPS-DRILL.md.
+# =============================================================================
+
+name: oolix-prod
+
+x-app-env: &app-env
+  NODE_ENV: production
+  APP_ENV: ${APP_ENV:-staging}
+  TZ: UTC
+
+services:
+  # ---------------------------------------------------------------------------
+  # Dependencies
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16.10-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-oolix}
+      KEYCLOAK_DB: ${KEYCLOAK_DB:-keycloak}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Creates Keycloak's database on first initialisation. Without it
+      # Keycloak crash-loops on a missing database after everything else has
+      # come up healthy, which reads as an identity problem rather than a
+      # missing CREATE DATABASE.
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Renders the realm import for THIS deployment's hostnames.
+  #
+  # Keycloak does not substitute environment variables inside a realm import,
+  # so a checked-in file can only ever name one environment. It refuses to
+  # start on an unsubstituted placeholder -- "Invalid client oolix-web: A
+  # redirect URI is not a valid URI" -- which at least fails loudly rather than
+  # leaving a realm whose redirect URIs silently do not match the portal.
+  # Renders the realm import for THIS deployment.
+  #
+  # Keycloak does not substitute environment variables inside a realm import,
+  # so a checked-in file can only ever describe one environment. The renderer
+  # fills in the placeholders, validates the result, and -- the part that
+  # matters -- decides whether the development identities are included at all.
+  # See oolix/infra/keycloak/render-realm.mjs.
+  realm-render:
+    image: node:22-alpine
+    restart: 'no'
+    environment:
+      WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:?set WEB_PUBLIC_URL}
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:?set KEYCLOAK_PUBLIC_URL}
+      # Required, with no default. The realm file used to carry a literal
+      # secret, which meant a public repository published the production one.
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?set OIDC_CLIENT_SECRET}
+      # "external": Keycloak tolerates the TLS terminator's plain HTTP hop but
+      # refuses an external request that is not HTTPS.
+      KC_SSL_REQUIRED: ${KC_SSL_REQUIRED:-external}
+      # §66 hands these accounts to real people at a real Partner.
+      KC_PASSWORD_POLICY: ${KC_PASSWORD_POLICY:-length(12) and notUsername and upperCase(1) and lowerCase(1) and digits(1)}
+      # The password grant bypasses the browser sign-in entirely, and with it
+      # any step-up authentication ever added.
+      KC_DIRECT_GRANTS: ${KC_DIRECT_GRANTS:-false}
+      # NOT SET, deliberately. The development identities carry the password
+      # `password`, and one of them holds OOLIX_ADMIN plus every Partner role.
+      # The renderer refuses to seed them into a realm that requires TLS, so
+      # this is belt and braces rather than the only guard.
+      KC_SEED_USERS: 'false'
+    volumes:
+      - ../keycloak:/src:ro
+      - realm-import:/out
+    command: ['node', '/src/render-realm.mjs']
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.5
+    restart: unless-stopped
+    # `start`, not `start-dev`: production mode refuses to run with the insecure
+    # defaults that development mode tolerates, which is the point of using it
+    # here rather than discovering those differences in a pilot.
+    # `--proxy-headers=xforwarded` is what makes Keycloak build its redirect
+    # URLs with the scheme the browser actually used. Without it every login
+    # redirect comes back as http:// from behind a TLS terminator, and the
+    # browser refuses the mixed-content navigation.
+    command: [
+        'start',
+        '--http-port=8081',
+        '--http-enabled=true',
+        '--hostname-strict=false',
+        '--proxy-headers=xforwarded',
+        '--import-realm',
+        # A single instance, so no cluster to join. The default distributed
+        # cache makes Keycloak discover peers over JGroups, and a node whose
+        # record survives a container replacement is retried forever --
+        # thousands of connection-refused errors and a restart loop, with the
+        # real cause buried. Scaling Keycloak past one replica means revisiting
+        # this deliberately.
+        '--cache=local',
+      ]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:?set KEYCLOAK_ADMIN}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${KEYCLOAK_DB:-keycloak}
+      KC_DB_USERNAME: ${POSTGRES_USER}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_HEALTH_ENABLED: 'true'
+      # Pins the issuer so it is identical whichever side asks. See the note at
+      # the top of this file.
+      KC_HOSTNAME: ${KEYCLOAK_PUBLIC_URL:?set KEYCLOAK_PUBLIC_URL}
+      # Substituted into the realm import: the portal's redirect URIs have to
+      # be the address the browser actually uses, or sign-in fails at the last
+      # step with "Invalid parameter: redirect_uri".
+      WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:?set WEB_PUBLIC_URL}
+    volumes:
+      # Imported on first start. Without it the realm does not exist, the OIDC
+      # discovery document 404s, and nobody can sign in to a stack that is
+      # otherwise entirely healthy.
+      - realm-import:/opt/keycloak/data/import:ro
+    # No published port: Keycloak is reached through the TLS terminator, which
+    # is the only service that faces anything.
+    expose:
+      - '8081'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      realm-render:
+        condition: service_completed_successfully
+
+  # ---------------------------------------------------------------------------
+  # Schema migration — runs to completion, then the apps start
+  #
+  # Its own step rather than something the API does on boot: two API replicas
+  # starting together would race each other through the migration, and a failed
+  # migration should stop a deployment rather than leave one instance serving
+  # against a half-migrated schema.
+  # ---------------------------------------------------------------------------
+  migrate:
+    image: oolix/api-gateway:${IMAGE_TAG:-dev}
+    restart: 'no'
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-oolix}?schema=public
+    # The runtime image carries the Prisma CLI, which is one upside of the
+    # packaging compromise documented in Dockerfile.api-gateway. It is invoked
+    # by name rather than through npx: `pnpm deploy --prod` writes no `.bin`
+    # entry, so npx exits 127. The Dockerfile installs a launcher on PATH.
+    working_dir: /app
+    entrypoint: ['sh', '-c']
+    command: ['prisma migrate deploy --schema node_modules/@oolix/db/prisma/schema.prisma']
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Applications
+  # ---------------------------------------------------------------------------
+  api:
+    image: oolix/api-gateway:${IMAGE_TAG:-dev}
+    # Context is the repository root -- three levels up from here -- because
+    # the image needs the workspace manifests and the shared/ contracts, not
+    # just this side's code.
+    build:
+      context: ../../..
+      dockerfile: oolix/infra/docker/Dockerfile.api-gateway
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      API_PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-oolix}?schema=public
+      REDIS_URL: redis://redis:6379
+      OIDC_ISSUER_URL: ${KEYCLOAK_PUBLIC_URL:?set KEYCLOAK_PUBLIC_URL}/realms/oolix
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-oolix-web}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?set OIDC_CLIENT_SECRET}
+      API_PUBLIC_URL: ${API_PUBLIC_URL:?set API_PUBLIC_URL}
+      WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:?set WEB_PUBLIC_URL}
+      # Both stay off until an eligibility model is proven for each platform.
+      FEATURE_META_ENABLED: 'false'
+      FEATURE_GOOGLE_ENABLED: 'false'
+    volumes:
+      # The manifest signing key (§75) and the Agent token key (§92.3).
+      #
+      # This volume outliving the container is the whole point. Every manifest
+      # a Partner Agent has cached was signed by the key inside it, so losing
+      # it invalidates all of them at once. Outside development the API refuses
+      # to start rather than generate a replacement, which turns a lost volume
+      # into a loud failure instead of a fleet of Agents quietly rejecting
+      # every manifest they are sent.
+      - api-keys:/app/.keys
+    expose:
+      - '4000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  portal:
+    image: oolix/web-portal:${IMAGE_TAG:-dev}
+    build:
+      context: ../../..
+      dockerfile: oolix/infra/docker/Dockerfile.web-portal
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      PORT: 3000
+      # Server-to-server, so it stays on the internal network and never leaves
+      # the deployment.
+      OOLIX_API_INTERNAL_URL: http://api:4000
+      WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:?set WEB_PUBLIC_URL}
+      OIDC_ISSUER_URL: ${KEYCLOAK_PUBLIC_URL:?set KEYCLOAK_PUBLIC_URL}/realms/oolix
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-oolix-web}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?set OIDC_CLIENT_SECRET}
+      PORTAL_SESSION_SECRET: ${PORTAL_SESSION_SECRET:?set PORTAL_SESSION_SECRET}
+    expose:
+      - '3000'
+    depends_on:
+      api:
+        condition: service_healthy
+
+  worker:
+    image: oolix/worker:${IMAGE_TAG:-dev}
+    build:
+      context: ../../..
+      dockerfile: oolix/infra/docker/Dockerfile.worker
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-oolix}?schema=public
+      REDIS_URL: redis://redis:6379
+      # Without a queue URL the worker runs schedulers only, which is a valid
+      # deployment — see the keepalive note in oolix/apps/worker/src/main.ts.
+      SQS_DOMAIN_EVENTS_URL: ${SQS_DOMAIN_EVENTS_URL:-}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # ---------------------------------------------------------------------------
+  # One-time key provisioning
+  #
+  # Deliberately NOT part of `up`. Creating a signing key is a decision, and if
+  # it happened automatically then a lost volume would be repaired silently
+  # with a new key -- leaving the stack healthy while every Agent rejected
+  # every manifest it was sent. Run it once, on first deployment:
+  #
+  #   docker compose -f oolix/infra/docker/compose.prod.yml --env-file .env.prod   #     --profile init run --rm keys
+  #
+  # It is idempotent: an existing key is reported, never replaced.
+  # ---------------------------------------------------------------------------
+  keys:
+    image: oolix/api-gateway:${IMAGE_TAG:-dev}
+    profiles: ['init']
+    restart: 'no'
+    environment:
+      <<: *app-env
+    volumes:
+      - api-keys:/app/.keys
+    working_dir: /app
+    entrypoint: ['sh', '-c']
+    command:
+      [
+        'node dist/keys/rotate-cli.js init manifest && node dist/keys/rotate-cli.js init agent-token',
+      ]
+
+  # ---------------------------------------------------------------------------
+  # Scheduled backups
+  #
+  # On by default. `oolix/infra/backup/backup.sh` is the one an operator runs by
+  # hand; this is the one that runs whether anyone remembers or not, which is
+  # the only kind that helps.
+  #
+  # It speaks to Postgres over the network rather than shelling into the
+  # container, so it needs no Docker socket -- mounting that into a long-lived
+  # service is handing it root on the host.
+  #
+  # BACKUP_DEST must be a path that LEAVES THIS HOST: an NFS mount, an object
+  # storage gateway, anything but this disk. A backup beside the database
+  # survives only the failures that do not matter.
+  # ---------------------------------------------------------------------------
+  backup:
+    image: postgres:16.10-alpine
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:?set POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      APP_DB: ${POSTGRES_DB:-oolix}
+      KEYCLOAK_DB: ${KEYCLOAK_DB:-keycloak}
+      BACKUP_DIR: /backups
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+      BACKUP_KEEP: ${BACKUP_KEEP:-7}
+      KEYS_DIR: /keys
+    volumes:
+      - ../backup:/scripts:ro
+      # Read-only: this job reads the signing keys, it must never alter them.
+      - api-keys:/keys:ro
+      - ${BACKUP_DEST:-./backups}:/backups
+    entrypoint: ['sh', '/scripts/scheduled-backup.sh']
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Monitoring — opt-in
+  #
+  #   docker compose ... --profile monitoring up -d
+  #
+  # A profile rather than part of the default stack: a pilot may already have a
+  # collector, and running a second one that nobody watches is worse than
+  # running none, because it looks like coverage.
+  #
+  # Both scrape and alert over the internal network. Neither is published: the
+  # exposition names Partner organisations and Agent ids, and an alert console
+  # reachable from the internet is a map of who your Partners are.
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v3.7.3
+    profiles: ['monitoring']
+    restart: unless-stopped
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    expose:
+      - '9090'
+    depends_on:
+      - api
+
+  # Renders the alert routing for THIS deployment.
+  #
+  # The two webhook URLs used to be literals in the YAML with a comment asking
+  # somebody to change them. The renderer refuses to substitute a placeholder,
+  # so a deployment that would have fired every alert into a hostname that does
+  # not resolve now fails at start-up instead -- loudly, and before traffic.
+  alertmanager-render:
+    image: node:22-alpine
+    profiles: ['monitoring']
+    restart: 'no'
+    environment:
+      ALERT_WEBHOOK_DEFAULT: ${ALERT_WEBHOOK_DEFAULT:?set ALERT_WEBHOOK_DEFAULT}
+      ALERT_WEBHOOK_ONCALL: ${ALERT_WEBHOOK_ONCALL:?set ALERT_WEBHOOK_ONCALL}
+    volumes:
+      - ../monitoring:/src:ro
+      - alertmanager-config:/out
+    command: ['node', '/src/render-alertmanager.mjs']
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    profiles: ['monitoring']
+    restart: unless-stopped
+    depends_on:
+      alertmanager-render:
+        condition: service_completed_successfully
+    volumes:
+      - alertmanager-config:/etc/alertmanager:ro
+      - alertmanager-data:/alertmanager
+    expose:
+      - '9093'
+
+  # ---------------------------------------------------------------------------
+  # TLS termination
+  #
+  # The only service bound to a host port. Everything else is reachable solely
+  # through it, so a misconfigured application cannot accidentally expose
+  # itself in plain HTTP.
+  # ---------------------------------------------------------------------------
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      # `internal` issues from a local CA, which is what makes an HTTPS drill
+      # possible without owning a domain. An email address here switches the
+      # same file to real Let's Encrypt certificates.
+      TLS_MODE: ${TLS_MODE:?set TLS_MODE — "internal" for a local drill, or an email address for Let's Encrypt}
+      API_HOST: ${API_HOST:?set API_HOST}
+      APP_HOST: ${APP_HOST:?set APP_HOST}
+      AUTH_HOST: ${AUTH_HOST:?set AUTH_HOST}
+    volumes:
+      - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates and ACME account keys. Losing this volume means
+      # re-issuing every certificate, and Let's Encrypt rate-limits that.
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - '80:80'
+      - '443:443'
+    depends_on:
+      - api
+      - portal
+      - keycloak
+
+volumes:
+  postgres-data:
+  redis-data:
+  caddy-data:
+  caddy-config:
+  api-keys:
+  realm-import:
+  prometheus-data:
+  alertmanager-config:
+  alertmanager-data:

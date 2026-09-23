@@ -44,7 +44,7 @@ jobs:
       # Packages must be built before typecheck: apps resolve workspace deps
       # through their published `types` entry, not their source.
       - name: Build shared packages
-        run: pnpm -r --filter "./packages/*" build
+        run: pnpm build:libs
 
       - run: pnpm format:check
       - run: pnpm lint
@@ -81,10 +81,10 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: partner-agent/go.sum
+          cache-dependency-path: partner/agent/go.sum
 
       - name: Verify formatting
-        working-directory: partner-agent
+        working-directory: partner/agent
         run: |
           unformatted=$(gofmt -l .)
           if [ -n "$unformatted" ]; then
@@ -94,11 +94,11 @@ jobs:
           fi
 
       - name: Vet
-        working-directory: partner-agent
+        working-directory: partner/agent
         run: go vet ./...
 
       - name: Test with race detector
-        working-directory: partner-agent
+        working-directory: partner/agent
         # -race requires cgo. The ubuntu runner has a C toolchain; a Windows
         # dev box may not, which is why the local gate runs without it.
         env:
@@ -106,7 +106,7 @@ jobs:
         run: go test -race -count=1 ./...
 
       - name: Build
-        working-directory: partner-agent
+        working-directory: partner/agent
         run: go build -o bin/oolix-agent ./cmd/agent
 
   # -------------------------------------------------------------------------
@@ -165,7 +165,7 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm -r --filter "./packages/*" build
+      - run: pnpm build:libs
 
       # §79.1: migrations are dry-run against a disposable database before the
       # integration suite depends on them.
@@ -188,7 +188,7 @@ jobs:
 
       - name: Adversarial probes
         run: |
-          node apps/api-gateway/dist/main.js &
+          node oolix/apps/api-gateway/dist/main.js &
           API_PID=$!
           # Fail loudly if it never listens, rather than reporting probe
           # failures that are really a start-up failure.
@@ -229,7 +229,7 @@ jobs:
       # `pnpm dlx @redocly/cli` alone fails: the package ships two binaries
       # (`redocly` and `openapi`) and pnpm refuses to guess. Name the binary.
       - name: Lint OpenAPI contract
-        run: pnpm --package=@redocly/cli@2.47.0 dlx redocly lint implementation_examples/openapi.yaml
+        run: pnpm --package=@redocly/cli@2.47.0 dlx redocly lint partner/pack/openapi.yaml
 
       # Appendix A: the pack's snapshot, mirror and README describe code rather
       # than being it. Documentation that has drifted is worse than none,
@@ -298,11 +298,11 @@ jobs:
       matrix:
         include:
           - service: api-gateway
-            dockerfile: infra/docker/Dockerfile.api-gateway
+            dockerfile: oolix/infra/docker/Dockerfile.api-gateway
           - service: web-portal
-            dockerfile: infra/docker/Dockerfile.web-portal
+            dockerfile: oolix/infra/docker/Dockerfile.web-portal
           - service: worker
-            dockerfile: infra/docker/Dockerfile.worker
+            dockerfile: oolix/infra/docker/Dockerfile.worker
           # The Partner Agent runs inside a Data Partner's own infrastructure,
           # on a host Oolix never touches. Its Dockerfile says "built by
           # Oolix" and until now nothing built it -- so the shipped Kubernetes
@@ -312,7 +312,7 @@ jobs:
           # Publishing it is what lets a Partner pin a version, verify a
           # digest, and skip installing a Go toolchain to run our software.
           - service: partner-agent
-            dockerfile: implementation_examples/Dockerfile.partner-agent
+            dockerfile: partner/pack/Dockerfile.partner-agent
     steps:
       - uses: actions/checkout@v5
 

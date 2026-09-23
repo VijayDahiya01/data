@@ -69,7 +69,7 @@ services:
     ports:
       - '4566:4566'
     volumes:
-      - ./infra/localstack/init:/etc/localstack/init/ready.d:ro
+      - ./oolix/infra/localstack/init:/etc/localstack/init/ready.d:ro
       - localstack-data:/var/lib/localstack
     healthcheck:
       test: ['CMD-SHELL', 'awslocal sqs list-queues && awslocal s3 ls']
@@ -109,7 +109,7 @@ services:
       # The thirteen seeded identities. Local only -- see dev-users.json.
       KC_SEED_USERS: ${KC_SEED_USERS:-true}
     volumes:
-      - ./infra/keycloak:/src:ro
+      - ./oolix/infra/keycloak:/src:ro
       - realm-import:/out
     command: ['node', '/src/render-realm.mjs']
 
@@ -159,7 +159,7 @@ services:
       - '5433:5432'
     volumes:
       - partner-postgres-data:/var/lib/postgresql/data
-      - ./infra/partner-db/init:/docker-entrypoint-initdb.d:ro
+      - ./partner/dev-db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U partner -d partner_audience']
       interval: 5s

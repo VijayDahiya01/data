@@ -261,7 +261,7 @@ if (env) {
 
 // The routing file itself must stay a template: a literal URL here is one that
 // bypasses the environment entirely.
-const amPath = path.resolve(root, 'infra/monitoring/alertmanager.yml');
+const amPath = path.resolve(root, 'oolix/infra/monitoring/alertmanager.yml');
 if (!existsSync(amPath)) {
   warn('alert routing file exists', amPath);
 } else {
@@ -279,7 +279,7 @@ if (!existsSync(amPath)) {
 // ---------------------------------------------------------------------------
 console.log('\n6. Backups');
 
-const backupScript = path.resolve(root, 'infra/backup/backup.sh');
+const backupScript = path.resolve(root, 'oolix/infra/backup/backup.sh');
 if (!existsSync(backupScript)) {
   fail('a backup script exists', backupScript);
 } else {

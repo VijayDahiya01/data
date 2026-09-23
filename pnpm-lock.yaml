@@ -13,10 +13,10 @@ importers:
     devDependencies:
       '@oolix/contracts':
         specifier: workspace:*
-        version: link:packages/contracts
+        version: link:shared/contracts
       '@oolix/manifest-schema':
         specifier: workspace:*
-        version: link:packages/manifest-schema
+        version: link:oolix/packages/manifest-schema
       '@playwright/test':
         specifier: ^1.62.1
         version: 1.62.1
@@ -45,7 +45,7 @@ importers:
         specifier: 8.67.0
         version: 8.67.0(eslint@9.39.1(jiti@2.7.0))(typescript@5.9.3)
 
-  apps/api-gateway:
+  oolix/apps/api-gateway:
     dependencies:
       '@aws-sdk/client-s3':
         specifier: 3.1116.0
@@ -79,7 +79,7 @@ importers:
         version: link:../../packages/auth-rbac
       '@oolix/contracts':
         specifier: workspace:*
-        version: link:../../packages/contracts
+        version: link:../../../shared/contracts
       '@oolix/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -154,33 +154,11 @@ importers:
         specifier: ^2.9.0
         version: 2.9.0
 
-  apps/mock-partner:
+  oolix/apps/web-portal:
     dependencies:
       '@oolix/contracts':
         specifier: workspace:*
-        version: link:../../packages/contracts
-      fastify:
-        specifier: 5.11.3
-        version: 5.11.3
-    devDependencies:
-      '@types/node':
-        specifier: 24.10.1
-        version: 24.10.1
-      tsx:
-        specifier: 4.23.12
-        version: 4.23.12
-      typescript:
-        specifier: 5.9.3
-        version: 5.9.3
-      vitest:
-        specifier: 4.1.11
-        version: 4.1.11(@types/node@24.10.1)(vite@8.2.2(@types/node@24.10.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
-
-  apps/web-portal:
-    dependencies:
-      '@oolix/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
+        version: link:../../../shared/contracts
       next:
         specifier: 16.3.2
         version: 16.3.2(@playwright/test@1.62.1)(@types/node@24.10.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -213,14 +191,14 @@ importers:
         specifier: 4.1.11
         version: 4.1.11(@types/node@24.10.1)(vite@8.2.2(@types/node@24.10.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
 
-  apps/worker:
+  oolix/apps/worker:
     dependencies:
       '@aws-sdk/client-sqs':
         specifier: 3.1116.0
         version: 3.1116.0
       '@oolix/contracts':
         specifier: workspace:*
-        version: link:../../packages/contracts
+        version: link:../../../shared/contracts
       '@oolix/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -256,11 +234,11 @@ importers:
         specifier: 4.1.11
         version: 4.1.11(@types/node@24.10.1)(vite@8.2.2(@types/node@24.10.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
 
-  packages/auth-rbac:
+  oolix/packages/auth-rbac:
     dependencies:
       '@oolix/contracts':
         specifier: workspace:*
-        version: link:../contracts
+        version: link:../../../shared/contracts
       jose:
         specifier: 6.2.10
         version: 6.2.10
@@ -272,20 +250,7 @@ importers:
         specifier: 4.1.11
         version: 4.1.11(@types/node@24.10.1)(vite@8.2.2(@types/node@24.10.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
 
-  packages/contracts:
-    dependencies:
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
-    devDependencies:
-      typescript:
-        specifier: 5.9.3
-        version: 5.9.3
-      vitest:
-        specifier: 4.1.11
-        version: 4.1.11(@types/node@24.10.1)(vite@8.2.2(@types/node@24.10.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
-
-  packages/db:
+  oolix/packages/db:
     dependencies:
       '@prisma/adapter-pg':
         specifier: 7.9.1
@@ -319,11 +284,11 @@ importers:
         specifier: 4.1.11
         version: 4.1.11(@types/node@24.10.1)(vite@8.2.2(@types/node@24.10.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
 
-  packages/manifest-schema:
+  oolix/packages/manifest-schema:
     dependencies:
       '@oolix/contracts':
         specifier: workspace:*
-        version: link:../contracts
+        version: link:../../../shared/contracts
       jose:
         specifier: 6.2.10
         version: 6.2.10
@@ -338,11 +303,11 @@ importers:
         specifier: 4.1.11
         version: 4.1.11(@types/node@24.10.1)(vite@8.2.2(@types/node@24.10.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
 
-  packages/observability:
+  oolix/packages/observability:
     dependencies:
       '@oolix/contracts':
         specifier: workspace:*
-        version: link:../contracts
+        version: link:../../../shared/contracts
       pino:
         specifier: 10.3.1
         version: 10.3.1
@@ -360,7 +325,7 @@ importers:
         specifier: 4.1.11
         version: 4.1.11(@types/node@24.10.1)(vite@8.2.2(@types/node@24.10.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
 
-  packages/runtime-config:
+  oolix/packages/runtime-config:
     devDependencies:
       typescript:
         specifier: 5.9.3
@@ -369,7 +334,29 @@ importers:
         specifier: 4.1.11
         version: 4.1.11(@types/node@24.10.1)(vite@8.2.2(@types/node@24.10.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
 
-  packages/sdk-web:
+  partner/mock-partner:
+    dependencies:
+      '@oolix/contracts':
+        specifier: workspace:*
+        version: link:../../shared/contracts
+      fastify:
+        specifier: 5.11.3
+        version: 5.11.3
+    devDependencies:
+      '@types/node':
+        specifier: 24.10.1
+        version: 24.10.1
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.11
+        version: 4.1.11(@types/node@24.10.1)(vite@8.2.2(@types/node@24.10.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+
+  partner/sdk-web:
     dependencies:
       react-dom:
         specifier: '>=18'
@@ -381,6 +368,19 @@ importers:
       react:
         specifier: 19.2.8
         version: 19.2.8
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.11
+        version: 4.1.11(@types/node@24.10.1)(vite@8.2.2(@types/node@24.10.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+
+  shared/contracts:
+    dependencies:
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
       typescript:
         specifier: 5.9.3
         version: 5.9.3

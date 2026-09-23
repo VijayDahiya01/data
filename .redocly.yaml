@@ -5,7 +5,7 @@
 # exceptions are declared, both narrow enough to name the exact paths.
 apis:
   oolix:
-    root: implementation_examples/openapi.yaml
+    root: partner/pack/openapi.yaml
 
 extends:
   - recommended

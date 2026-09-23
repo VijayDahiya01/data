@@ -20,8 +20,8 @@ backups, the failover and the patching, and a pilot team has capacity to do
 none of the three well.
 
 ```sh
-docker compose -f infra/docker/compose.prod.yml \
-               -f infra/docker/compose.managed.yml \
+docker compose -f oolix/infra/docker/compose.prod.yml \
+               -f oolix/infra/docker/compose.managed.yml \
                --env-file .env.prod up -d
 ```
 
@@ -60,9 +60,9 @@ form fails at start-up with a driver error that never mentions the format.
 5. **Verify over HTTPS** — the four checks in `docs/HTTPS-DRILL.md`, especially
    that Keycloak reports an `https://` issuer.
 6. **Monitoring:** `--profile monitoring`, and **replace the placeholder
-   webhooks in `infra/monitoring/alertmanager.yml`**. Until you do, every alert
+   webhooks in `oolix/infra/monitoring/alertmanager.yml`**. Until you do, every alert
    fires into nothing.
-7. **Backups:** schedule `infra/backup/backup.sh` to off-host storage, then
+7. **Backups:** schedule `oolix/infra/backup/backup.sh` to off-host storage, then
    **restore one** into a scratch environment. A backup nobody has restored is
    a hypothesis.
 

@@ -52,16 +52,16 @@ Opt-in, because a pilot may already have one and a second collector nobody
 watches is worse than none — it looks like coverage:
 
 ```sh
-docker compose -f infra/docker/compose.prod.yml --env-file .env.prod \
+docker compose -f oolix/infra/docker/compose.prod.yml --env-file .env.prod \
   --profile monitoring up -d
 ```
 
-`infra/monitoring/alertmanager.yml` ships with placeholder webhooks. **Replace
+`oolix/infra/monitoring/alertmanager.yml` ships with placeholder webhooks. **Replace
 them before the pilot takes real traffic**, or every rule fires into nothing.
 
 ## The rules
 
-`infra/monitoring/alerts.yml`, validated with `promtool` — 7 rules.
+`oolix/infra/monitoring/alerts.yml`, validated with `promtool` — 7 rules.
 
 The thresholds are not invented there: they are the same numbers the worker
 already enforces (`HEARTBEAT_STALE_SECONDS = 300`,

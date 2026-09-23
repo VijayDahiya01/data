@@ -22,7 +22,8 @@ const CONFIG_PATH = path.resolve(
   path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')),
   '..',
   '..',
-  'partner-agent',
+  'partner',
+  'agent',
   'config.local.yaml',
 );
 

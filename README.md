@@ -15,7 +15,7 @@ Buyer**. Concretely, in this codebase:
 
 - The central database has **no** `customers`, `audience_members`,
   `segment_members`, or cross-partner identity table, and **no column anywhere
-  stores a `partner_user_id`** (§54, §73). `apps/api-gateway/prisma/schema.prisma`
+  stores a `partner_user_id`** (§54, §73). `oolix/packages/db/prisma/schema.prisma`
   states this at the top; treat a migration that violates it as a design defect.
 - Segment membership is resolved **inside the Partner**, by the Partner Agent,
   against the Partner's own store (§12, §45).
@@ -26,26 +26,53 @@ Buyer**. Concretely, in this codebase:
 
 ## Repository layout
 
+The repository is split by **which side of the Data Partner boundary the code
+runs on**, because that is the line the whole product is built around. Code in
+`oolix/` is deployed and operated by Oolix. Code in `partner/` runs inside a
+Data Partner's own infrastructure, where Oolix holds no access. `shared/` is the
+contract both sides speak.
+
 ```
-apps/
-  api-gateway/     Oolix Cloud control plane (NestJS). /v1 user API, /agent/v1 Agent API.
-  worker/          Queue consumers, aggregation, schedulers (§55).
-  web-portal/      One role-aware web app for every persona (§34).
-  mock-partner/    Runnable synthetic Data Partner (§91).
-packages/
-  contracts/       Canonical enums, states, error registry, money (§66, §76, §77, §89).
-  db/              Canonical schema, migrations, seed and Prisma client (§73, §95, §96).
-  manifest-schema/ Canonical JSON + ES256 manifest signing/verification (§75).
-  auth-rbac/       Principals, RBAC scoping, OIDC, Agent workload auth (§66, §92).
-  observability/   Structured logging, PII redaction, metrics and alerts (§78).
-  sdk-web/         @oolix/ad-sdk-web — render, timeout, fallback, click (§68).
-partner-agent/     Go. Runs INSIDE the Data Partner. Local ad decisions (§45, §69).
-infra/             docker-compose dependencies: Keycloak realm, LocalStack, mock partner DB.
-implementation_examples/  OpenAPI, k8s starter, agent config, seed data (Appendix A).
-docs/              The v5 specification.
+oolix/                   ── OUR SIDE: the control plane Oolix deploys ──────────
+  apps/
+    api-gateway/         Control plane (NestJS). /v1 user API, /agent/v1 Agent API.
+    worker/              Queue consumers, aggregation, schedulers (§55).
+    web-portal/          One role-aware web app for every persona (§34).
+  packages/
+    db/                  Canonical schema, migrations, seed and Prisma client (§73, §95, §96).
+    manifest-schema/     Canonical JSON + ES256 manifest signing (§75).
+    auth-rbac/           Principals, RBAC scoping, OIDC, Agent workload auth (§66, §92).
+    observability/       Structured logging, PII redaction, metrics and alerts (§78).
+    runtime-config/      Secrets from files, validated configuration (§65.1).
+  infra/                 Dockerfiles, prod compose, Caddy, Keycloak realm, monitoring, backup.
+
+partner/                 ── THEIR SIDE: runs inside the Data Partner ────────────
+  agent/                 Go. Local ad decisions against the Partner's own data (§45, §69).
+  sdk-web/               @oolix/ad-sdk-web — the SDK a Partner embeds on its pages (§68).
+  mock-partner/          Runnable reference Partner backend (§91).
+  pack/                  What a Partner is handed: integration guide, OpenAPI, k8s, schema.
+  dev-db/                The simulated Partner database the local stack runs.
+
+shared/                  ── BOTH: the contract across the boundary ─────────────
+  contracts/             Canonical enums, states, error registry, money (§66, §76, §77, §89).
+
+docs/                    Runbooks, readiness, security review, and the v5/v6 specifications.
+e2e/                     Browser suites that drive both sides together.
+scripts/                 Verification phases, preflight, provisioning.
 ```
 
-`services/*` from §61 are implemented as **modules inside `apps/api-gateway`**,
+**What goes where.** If it runs on infrastructure Oolix operates, it belongs in
+`oolix/`. If a Data Partner runs it — or it is handed to one — it belongs in
+`partner/`. If both sides import it, it belongs in `shared/`, and it must stay
+free of anything only one side needs. `contracts` is the only thing there today
+because it is genuinely the only thing both sides use: the Oolix apps and the
+reference Partner backend both import it.
+
+A new top-level side — for example a Trusted Execution Environment that
+evaluates audiences inside an enclave — gets its own folder beside these, and
+its own line in `pnpm-workspace.yaml` if it is JavaScript.
+
+`services/*` from §61 are implemented as **modules inside `oolix/apps/api-gateway`**,
 following §61's own guidance: _"Start as a modular monolith… Do not create
 dozens of microservices before traffic and team size justify them."_
 
@@ -77,7 +104,7 @@ pnpm dev:mock-partner  # http://localhost:4001
 Partner Agent (separate toolchain, runs as if inside the Partner):
 
 ```bash
-cp partner-agent/config.example.yaml partner-agent/config.local.yaml
+cp partner/agent/config.example.yaml partner/agent/config.local.yaml
 pnpm agent:run         # http://localhost:8082/healthz
 ```
 
@@ -179,7 +206,7 @@ Local Keycloak users, all with password `password` (§65, §95):
 ### If the Agent will not start
 
 `pnpm agent:provision` probes for a bindable port and writes it into
-`partner-agent/config.local.yaml`; the verification scripts read it back, so the
+`partner/agent/config.local.yaml`; the verification scripts read it back, so the
 Agent is not always on 8082.
 
 This exists because Windows reserves TCP ranges dynamically for Hyper-V and

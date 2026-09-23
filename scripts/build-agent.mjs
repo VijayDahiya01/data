@@ -23,7 +23,7 @@ const output = path.join('bin', binary);
 const go = process.platform === 'win32' ? 'go.exe' : 'go';
 
 const build = spawnSync(go, ['build', '-o', output, './cmd/agent'], {
-  cwd: 'partner-agent',
+  cwd: 'partner/agent',
   stdio: 'inherit',
 });
 
@@ -32,4 +32,4 @@ if (build.status !== 0) {
   process.exit(build.status ?? 1);
 }
 
-console.log(`built partner-agent/${output}`);
+console.log(`built partner/agent/${output}`);

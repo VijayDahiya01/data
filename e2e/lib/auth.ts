@@ -9,7 +9,7 @@
  * page. One implementation means the next suite cannot be written without it.
  *
  * The realm's browser flow runs OTP at Level of Authentication 2, and the
- * portal asks for that level on every login (see apps/web-portal/src/lib/oidc
+ * portal asks for that level on every login (see oolix/apps/web-portal/src/lib/oidc
  * -- `acr_values`). The API then refuses the privileged roles unless the token
  * says MFA happened, so a suite that signs in as a Partner admin is exercising
  * the whole chain rather than just a form.

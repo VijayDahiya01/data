@@ -39,7 +39,7 @@ the host is; Meta and Google are optional for a first pilot).
 `docs/DEPLOY-DIGITALOCEAN.md` (~$128/month, ~90 minutes). The Data Partner
 deploys separately, into infrastructure Oolix never touches:
 `docs/DEPLOY-PARTNER-AGENT.md` covers where to run the Agent and what to give
-it, and `implementation_examples/INTEGRATION-GUIDE.md` covers configuring it.
+it, and `partner/pack/INTEGRATION-GUIDE.md` covers configuring it.
 `docs/DEPLOYMENT-HANDBOOK.md` is the provider-neutral version — exact
 versions, ports, what the Partner provides, and the failures that look like
 something else.
@@ -95,7 +95,7 @@ published literal.
 ### Alert routing was still a hand-edit, and is not any more
 
 `pnpm preflight` blocked this deployment on it, correctly. The two webhook URLs
-were literals inside `infra/monitoring/alertmanager.yml` with a comment asking
+were literals inside `oolix/infra/monitoring/alertmanager.yml` with a comment asking
 somebody to replace them — the most forgettable kind of deployment step,
 because every other setting comes from `.env.prod`.
 
@@ -105,7 +105,7 @@ stays green and nobody is told, and you find out during the incident the
 alerting existed to catch.
 
 They are now `ALERT_WEBHOOK_DEFAULT` and `ALERT_WEBHOOK_ONCALL`, substituted at
-deploy time by `infra/monitoring/render-alertmanager.mjs`, which **refuses** to
+deploy time by `oolix/infra/monitoring/render-alertmanager.mjs`, which **refuses** to
 render an unset value, an example placeholder, a non-HTTP URL, or `localhost`
 — which inside a container is Alertmanager itself. Verified all four refusals
 plus the success path, and the rendered file that Alertmanager actually loaded
@@ -122,7 +122,7 @@ drill had asked either: the production stack boot on 2026-09-14 checked
 An organization is created at `BUSINESS_VERIFICATION_PENDING`, and §66.3 lets
 it browse and draft but not submit or publish. **Nothing in the running system
 could move it on.** The only writer of `BUSINESS_VERIFIED` was
-`packages/db/prisma/seed/index.ts`, and `pnpm db:seed --env=production` refuses
+`oolix/packages/db/prisma/seed/index.ts`, and `pnpm db:seed --env=production` refuses
 by design (§95). The OOLIX_ADMIN surface was read-only — a dashboard and a
 NO_AD distribution — and `/admin/organizations` in the portal was a placeholder
 that said in as many words that the capability did not exist.
@@ -238,7 +238,7 @@ development. Each was found by asking "what would this configuration do with a
 real Partner behind it".
 
 ### The realm file published a working admin account
-`infra/keycloak/oolix-realm.json` is imported into production unchanged, and it
+`oolix/infra/keycloak/oolix-realm.json` is imported into production unchanged, and it
 carried:
 
 - `"secret": "local-only-secret"` — the portal's OIDC client secret, in a
@@ -253,11 +253,11 @@ carried:
 - No password policy at all.
 
 **Fixed.** Every environment-dependent setting is now a placeholder filled in
-by `infra/keycloak/render-realm.mjs`, which also validates the result and
+by `oolix/infra/keycloak/render-realm.mjs`, which also validates the result and
 refuses to seed identities into a realm that requires TLS. The users live in
 `dev-users.json` and are merged only on an explicit `KC_SEED_USERS=true`, so
 forgetting a flag yields no accounts rather than thirteen known ones. Nine
-tests in `packages/contracts/src/realm.test.ts` keep it that way. Verified both
+tests in `shared/contracts/src/realm.test.ts` keep it that way. Verified both
 ways against a running Keycloak.
 
 ### The Partner Agent image was never published
@@ -329,7 +329,7 @@ Corrected to say what is actually enforced and where.
 ## P0 · Nothing can be piloted without these
 
 ### 1. Container images for Oolix Cloud
-**Status: DONE.** `infra/docker/Dockerfile.{api-gateway,web-portal,worker}`,
+**Status: DONE.** `oolix/infra/docker/Dockerfile.{api-gateway,web-portal,worker}`,
 each built and verified running against the live stack:
 
 | Image | Size | Verified |
@@ -356,13 +356,13 @@ rolling back to it rolls back to nothing.
 ### 2. A deployment target
 **Status: everything but the host itself — 2026-09-03.**
 
-`infra/docker/compose.prod.yml` now runs the whole stack the way a pilot will:
+`oolix/infra/docker/compose.prod.yml` now runs the whole stack the way a pilot will:
 TLS termination in front, no application publishing a host port, migrations as
 their own gated step, Keycloak in production mode with its realm rendered per
 deployment, signing keys on a persistent volume provisioned by an explicit
 one-time step, and an opt-in monitoring profile.
 
-`infra/docker/compose.managed.yml` is the overlay for a real host: it removes
+`oolix/infra/docker/compose.managed.yml` is the overlay for a real host: it removes
 the bundled Postgres and Redis and requires managed `DATABASE_URL`, `REDIS_URL`
 and a separate `KEYCLOAK_JDBC_URL` — separate because Keycloak needs a JDBC
 string, and handing it the `postgres://` form fails with a driver error that
@@ -379,7 +379,7 @@ restored and a release rolled back — on one machine rather than a rented one.
 
 
 ### 3. HTTPS end to end
-**Status: DONE — 2026-09-03.** `infra/caddy/Caddyfile` terminates TLS in front
+**Status: DONE — 2026-09-03.** `oolix/infra/caddy/Caddyfile` terminates TLS in front
 of the whole stack; the API, portal and Keycloak publish no host ports at all.
 One variable, `TLS_MODE`, covers both a local certificate authority and real
 Let's Encrypt certificates, because both are valid `tls` arguments — so the
@@ -415,7 +415,7 @@ the secret never appears where `docker inspect`, `/proc/1/environ`, a crash
 reporter and every child process would otherwise see it. A missing file is
 refused rather than defaulted; a variable and its `_FILE` form set to different
 values is refused rather than resolved by a precedence rule nobody remembers.
-Eight tests in `packages/runtime-config`.
+Eight tests in `oolix/packages/runtime-config`.
 
 **Key rotation, with an operator entry point.** `rotate()` already existed and
 nothing called it: the key signing every activation manifest had never been
@@ -439,7 +439,7 @@ Two defects surfaced doing it:
   API now refuses to start, and provisioning is an explicit step.
 
 ### 5. Backups and restore, proven
-**Status: DONE — 2026-09-03.** `infra/backup/backup.sh` and `restore.sh`, and
+**Status: DONE — 2026-09-03.** `oolix/infra/backup/backup.sh` and `restore.sh`, and
 the restore has been performed, not just written.
 
 The backup captures both databases **and the signing keys**. The keys are the
@@ -491,7 +491,7 @@ unindexable expression, which is correct and 76x slower.
 
 ### 7. Verify the Partner pack actually works
 **Status: done — 2026-09-02.** Run the way a Partner would, using only the
-files in `implementation_examples/`: image built from the pack Dockerfile,
+files in `partner/pack/`: image built from the pack Dockerfile,
 schema created in a database that is not ours, connector user granted and its
 limits confirmed (reads work, writes to Agent-owned tables work, `CREATE TABLE`
 refused), Agent registered from behind a network boundary, control config
@@ -543,7 +543,7 @@ as the assertion audience. Reaching the same API by another address fails with
 documented in the guide.
 
 ### 8. An integration guide a Partner engineer can follow alone
-**Status: done.** `implementation_examples/INTEGRATION-GUIDE.md` walks from
+**Status: done.** `partner/pack/INTEGRATION-GUIDE.md` walks from
 "we agreed to do this" to "an ad is serving", with a check after each step and
 a table of every reason an ad does not appear. `partner-schema.sql` ships the
 Partner-side tables, which the pack had been missing entirely.
@@ -571,7 +571,7 @@ Agent side: decisions by outcome and reason, a duration histogram bucketed
 around the §103 100ms budget, budget breaches, and control-sync failure count
 and age.
 
-`infra/monitoring/` carries the scrape config, 7 alert rules and the
+`oolix/infra/monitoring/` carries the scrape config, 7 alert rules and the
 Alertmanager routing, all three validated with `promtool`/`amtool`. The
 thresholds are the same numbers the worker already enforces rather than new
 ones, so a rule cannot disagree with the code. Collector runs behind a

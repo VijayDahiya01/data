@@ -1,0 +1,314 @@
+# =============================================================================
+# Deterministic local demo and test seed -- Appendix A, spec v5 §95.
+#
+# WHAT THIS FILE IS. A readable description of the fixture set that
+# `pnpm db:seed` creates. The executable seed is
+# `oolix/packages/db/prisma/seed/index.ts`; this file exists so a developer can see
+# which identities, segments and placements they can rely on without reading
+# 600 lines of TypeScript.
+#
+# `node scripts/verify-pack.mjs` fails if the identifiers here and the ones in
+# the seed script ever disagree, so this is documentation that cannot quietly
+# go stale.
+#
+# §95: "Seed IDs are stable in test/CI so assertions do not depend on generated
+# UUIDs." Every id below is fixed, which is why the phase verifications can
+# assert against them directly.
+#
+# NOTHING HERE IS REAL DATA. Every organization, person and email is invented,
+# and every address is under `.test` (RFC 6761), which cannot resolve. §95:
+# "staging -- synthetic test organizations only; never copied production
+# customer data", and production seeding is refused outright.
+# =============================================================================
+
+seed:
+  command: pnpm db:seed --env=<development|test|staging>
+  # §95: the command must refuse. Production organizations are created only
+  # through controlled onboarding and admin workflows.
+  production: REFUSED
+
+  environments:
+    development: Synthetic Buyer + Partner + Network + users/roles + segments + placements + creatives + one draft campaign.
+    test: Same fixtures with the same fixed IDs, so integration and E2E assertions are repeatable.
+    staging: Synthetic organizations only; never copied production customer data.
+
+# -----------------------------------------------------------------------------
+# Organizations (§35)
+# -----------------------------------------------------------------------------
+organizations:
+  - id: 11111111-1111-4111-8111-111111111111
+    name: ABC Insurance
+    type: BUYER
+    note: The Buyer in every worked example, including the §102 settlement.
+
+  - id: 22222222-2222-4222-8222-222222222222
+    name: Travel A
+    type: DATA_PARTNER
+    note: >-
+      The primary Data Partner. Owns the §91 fixture segments and the
+      booking_success_offer placement, and is the Partner the Mock Partner app
+      stands in for.
+
+  - id: 33333333-3333-4333-8333-333333333333
+    name: Rewards B
+    type: DATA_PARTNER
+    note: >-
+      A second Partner. Exists so isolation is testable: no report, catalogue
+      view or payout may ever let one Partner see the other (§66, §67).
+
+  - id: 44444444-4444-4444-8444-444444444444
+    name: Meridian Ventures
+    type: NETWORK_SPONSOR
+    note: >-
+      Sponsors the private network. §31: a sponsor can curate supply but can
+      NEVER override a Partner's approval decision.
+
+  - id: 99999999-9999-4999-8999-999999999999
+    name: Oolix Platform Operations
+    type: BUYER
+    note: >-
+      The platform's own organization, so OOLIX_ADMIN has an org scope for the
+      §98.1 ops dashboard. §66 still applies: it cannot bypass Partner approval
+      or read a Partner's raw database.
+
+networks:
+  - id: 55555555-5555-4555-8555-555555555555
+    name: Meridian Portfolio Network
+    mode: PRIVATE
+    sponsor: 44444444-4444-4444-8444-444444444444
+
+brands:
+  - id: 66666666-6666-4666-8666-666666666666
+    name: ABC Travel Insurance
+    org: 11111111-1111-4111-8111-111111111111
+
+# -----------------------------------------------------------------------------
+# Users and roles (§66.1)
+#
+# §95 asks for at least three role-bearing users per organization. The roles are
+# split deliberately: PARTNER_SECURITY_ADMIN mints Agent bootstrap tokens while
+# PARTNER_ADMIN handles commercial terms, and neither can do the other's job.
+#
+# `auth_subject` starts as `pending:<email>` and binds to the real OIDC subject
+# on first login, so recreating the local Keycloak realm does not orphan a row.
+# -----------------------------------------------------------------------------
+users:
+  - id: aaaaaaaa-0001-4001-8001-000000000001
+    email: buyer.admin@example.test
+    name: Bala Buyer
+    org: ABC Insurance
+    role: BUYER_ADMIN
+  - id: aaaaaaaa-0002-4002-8002-000000000002
+    email: buyer.operator@example.test
+    name: Omar Operator
+    org: ABC Insurance
+    role: BUYER_OPERATOR
+  - id: aaaaaaaa-0003-4003-8003-000000000003
+    email: finance@example.test
+    name: Fiona Finance
+    org: ABC Insurance
+    role: FINANCE
+  - id: bbbbbbbb-0001-4001-8001-000000000001
+    email: partner.admin@example.test
+    name: Priya Partner
+    org: Travel A
+    role: PARTNER_ADMIN
+  - id: bbbbbbbb-0002-4002-8002-000000000002
+    email: partner.security@example.test
+    name: Sam Security
+    org: Travel A
+    role: PARTNER_SECURITY_ADMIN
+  - id: bbbbbbbb-0003-4003-8003-000000000003
+    email: partner.approver@example.test
+    name: Arun Approver
+    org: Travel A
+    role: PARTNER_CAMPAIGN_APPROVER
+  - id: bbbbbbbb-0004-4004-8004-000000000004
+    email: partner.finance@example.test
+    name: Farah Finance
+    org: Travel A
+    role: FINANCE
+  - id: cccccccc-0001-4001-8001-000000000001
+    email: partnerb.admin@example.test
+    name: Bea Partner
+    org: Rewards B
+    role: PARTNER_ADMIN
+  - id: cccccccc-0002-4002-8002-000000000002
+    email: partnerb.approver@example.test
+    name: Ben Approver
+    org: Rewards B
+    role: PARTNER_CAMPAIGN_APPROVER
+  - id: dddddddd-0001-4001-8001-000000000001
+    email: network.admin@example.test
+    name: Nadia Network
+    org: Meridian Ventures
+    role: NETWORK_ADMIN
+  - id: eeeeeeee-0001-4001-8001-000000000001
+    email: analyst@example.test
+    name: Alex Analyst
+    org: ABC Insurance
+    role: ANALYST
+  - id: ffffffff-0001-4001-8001-000000000001
+    email: oolix.admin@example.test
+    name: Ola Admin
+    org: Oolix Platform Operations
+    role: OOLIX_ADMIN
+
+  # One login that reaches every persona (§34: "role switching must not require
+  # a second account"). Roles are held per ORGANIZATION, which is what keeps it
+  # legitimate -- the same person is a Buyer admin at ABC Insurance and a
+  # Partner admin at Travel A, as a real agency employee might be.
+  #
+  # It does NOT get around §66.2: this user still cannot approve a campaign
+  # request they created themselves. Separation of duties is enforced per
+  # ACTION, not per account.
+  - id: ffffffff-0002-4002-8002-000000000002
+    email: demo@example.test
+    name: Dev Demo
+    org: ABC Insurance / Travel A / Meridian Ventures / Oolix Platform Operations
+    role: BUYER_ADMIN + FINANCE + ANALYST / PARTNER_ADMIN + PARTNER_SECURITY_ADMIN + PARTNER_CAMPAIGN_APPROVER + FINANCE / NETWORK_ADMIN / OOLIX_ADMIN
+
+# -----------------------------------------------------------------------------
+# Attribute taxonomy (v6 §4, Appendix A)
+#
+# PLATFORM data rather than a fixture: every environment needs it, including
+# production, and the seeder is idempotent by (key, version).
+#
+# v6 inverts the Buyer flow. Instead of browsing the segments below, a Buyer
+# composes rules from THIS taxonomy and Oolix finds which Partners can evaluate
+# them. §17 forbids arbitrary SQL, JavaScript or regex, so what a Buyer can
+# express is exactly what is defined here.
+#
+# Everything seeded is policy_class GENERAL. §4: "Do not enable highly sensitive
+# classes in the MVP without explicit legal/policy design" -- so health,
+# financial standing and the like are ABSENT rather than present and disabled.
+# -----------------------------------------------------------------------------
+attribute_taxonomy:
+  count: 16
+  categories:
+    DEMOGRAPHIC: [age, gender]
+    GEOGRAPHY: [country, state_region, city]
+    COMMERCE: [online_shopper, purchase_category, purchase_recency_days, purchase_frequency]
+    PAYMENT_BEHAVIOUR: [payment_method]
+    TRAVEL: [recent_booking, domestic_international, booking_recency_days]
+    ENGAGEMENT: [active_user_days, app_active, loyalty_tier]
+  note: >-
+    Each definition declares a data type, the operators it permits, allowed
+    values and a policy class. A rule is legal only if the taxonomy says that
+    attribute exists, supports that operator and permits that value.
+
+# -----------------------------------------------------------------------------
+# Segments (§38.1, §72)
+#
+# Oolix holds METADATA only. There is no membership list here and no exact
+# count -- `reach_bucket` is what the catalogue publishes, and the exact figure
+# stays inside the Partner. The local counts in the comments below exist only in
+# the Partner-side fixture database.
+# -----------------------------------------------------------------------------
+segments:
+  - id: 77777777-0001-4001-8001-000000000001
+    internal_segment_id: RECENT_TRAVELLER_60D # §91 fixture segment
+    display_name: Recent Travellers
+    partner: Travel A
+    category: travel_intent
+    reach_bucket: HUNDRED_K_250K # 213,418 locally; never published
+    refresh_frequency: DAILY
+    allowed_channels: [PARTNER_WEB, PARTNER_APP]
+
+  - id: 77777777-0002-4002-8002-000000000002
+    internal_segment_id: PREMIUM_USER # §91 fixture segment
+    display_name: Premium Members
+    partner: Travel A
+    category: affluence
+    reach_bucket: FIFTY_K_100K # 64,207 locally; never published
+    refresh_frequency: HOURLY
+    allowed_channels: [PARTNER_WEB, PARTNER_APP]
+
+  - id: 77777777-0003-4003-8003-000000000003
+    internal_segment_id: TRAVEL_SHOPPER_30D
+    display_name: Travel Shoppers
+    partner: Travel A
+    category: travel_intent
+    reach_bucket: TWOFIFTY_K_500K
+    refresh_frequency: SIX_HOURS
+    allowed_channels: [PARTNER_WEB]
+
+  - id: 77777777-0004-4004-8004-000000000004
+    internal_segment_id: TRAVEL_REWARDS
+    display_name: Travel Rewards Members
+    partner: Rewards B
+    category: travel_intent
+    reach_bucket: HUNDRED_K_250K
+    refresh_frequency: DAILY
+    # META appears here so the §84 feature-flag gate is genuinely exercised.
+    # Listing a channel does NOT make it usable: the flag is off by default and
+    # the eligibility service must still clear it (§15, §16, §47.5).
+    allowed_channels: [PARTNER_WEB, META]
+
+# -----------------------------------------------------------------------------
+# Placements (§43)
+# -----------------------------------------------------------------------------
+placements:
+  - id: 88888888-0001-4001-8001-000000000001
+    placement_key: booking_success_offer
+    display_name: Booking Success Offer
+    partner: Travel A
+    surface: web
+    format: native_card
+  - id: 88888888-0002-4002-8002-000000000002
+    placement_key: rewards_home_banner
+    display_name: Rewards Home Banner
+    partner: Travel A
+    surface: web
+    format: banner
+  - id: 88888888-0003-4003-8003-000000000003
+    placement_key: rewards_checkout_offer
+    display_name: Rewards Checkout Offer
+    partner: Rewards B
+    surface: web
+    format: native_card
+
+# -----------------------------------------------------------------------------
+# Partner-side fixtures (§91)
+#
+# These live in the PARTNER's database (`partner-postgres`, port 5433 in the
+# local stack), NOT in Oolix. They are the customer data the whole architecture
+# exists to keep where it is -- which is exactly why they appear in a separate
+# database with a separate credential.
+# -----------------------------------------------------------------------------
+partner_local_fixtures:
+  database: postgres://partner:partner@localhost:5433/partner_audience
+  known_identities:
+    - partner_user_id: U123
+      segments: [RECENT_TRAVELLER_60D, PREMIUM_USER]
+      consent: eligible
+      expected_decision: SHOW
+      note: §95's canonical eligible identity.
+
+    - partner_user_id: U456
+      segments: []
+      consent: eligible
+      expected_decision: NO_AD
+      expected_reason: NO_ELIGIBLE_CAMPAIGN
+      note: §95's canonical ineligible identity -- in no segment.
+
+    - partner_user_id: U321
+      segments: [RECENT_TRAVELLER_60D]
+      consent: withdrawn
+      expected_decision: NO_AD
+      expected_reason: CONSENT_NOT_ELIGIBLE
+      note: >-
+        Segment membership alone is never sufficient. §45 and §81.1 require the
+        Partner's own consent check to pass, and it fails closed.
+
+# -----------------------------------------------------------------------------
+# What the seed deliberately does NOT create
+# -----------------------------------------------------------------------------
+never_seeded:
+  - Any real person, email or organization.
+  - Any table §73 forbids -- customers, audience_members, segment_members,
+    partner_transactions, cross_partner_identity.
+  - Any exact segment reach in Oolix (§72 publishes a bucket).
+  - Any approved activation. §31 gives the Partner the final decision, and a
+    seed that pre-approved one would make the approval path untested.
+  - Any production data, in any environment.
