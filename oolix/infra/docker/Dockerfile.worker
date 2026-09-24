@@ -79,7 +79,15 @@ FROM node:${NODE_VERSION} AS runtime
 # A real PID 1 matters more here than in the HTTP services: the worker holds
 # long-poll connections to the queue, and a SIGTERM that never arrives means
 # every deploy waits for the grace period to expire before killing it.
-RUN apk add --no-cache dumb-init
+#
+# The same layer removes the base image's package managers and applies Alpine's
+# security updates. The worker runs `node` and nothing else; see the API gateway
+# image for what the scanner found in them.
+RUN apk upgrade --no-cache \
+ && apk add --no-cache dumb-init \
+ && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v* \
+           /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+           /usr/local/bin/yarn /usr/local/bin/yarnpkg
 
 ENV NODE_ENV=production
 WORKDIR /app

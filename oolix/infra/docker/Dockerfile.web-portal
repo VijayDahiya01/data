@@ -89,7 +89,15 @@ RUN pnpm --filter "@oolix/web-portal^..." build \
 # -----------------------------------------------------------------------------
 FROM node:${NODE_VERSION} AS runtime
 
-RUN apk add --no-cache dumb-init
+# "No package manager" has to be made true: the base image ships npm, npx,
+# corepack and yarn, and npm's bundled dependencies were most of what the image
+# scanner reported. They go, and Alpine's security updates come in. See the API
+# gateway image for the details.
+RUN apk upgrade --no-cache \
+ && apk add --no-cache dumb-init \
+ && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v* \
+           /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+           /usr/local/bin/yarn /usr/local/bin/yarnpkg
 
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \

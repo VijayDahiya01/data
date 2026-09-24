@@ -104,7 +104,25 @@ FROM node:${NODE_VERSION} AS runtime
 
 # dumb-init gives the process a real PID 1, so SIGTERM reaches Node and the
 # server can finish in-flight requests instead of being killed mid-response.
-RUN apk add --no-cache dumb-init
+#
+# The same layer strips what the base image ships for BUILDING software -- npm,
+# npx, corepack and yarn -- and applies Alpine's security updates.
+#
+# The package managers were most of what the image scanner reported, because
+# npm bundles its own copies of tar, undici and brace-expansion and those lag
+# behind Node releases. Nothing in this container installs anything: the
+# migration step runs the `prisma` launcher below and key provisioning runs
+# `node`. Removing them closes those findings for good rather than until npm's
+# next bundle, and it is what makes the header's "no package manager" true.
+#
+# `apk upgrade` because Alpine ships fixes (OpenSSL, most recently) before a new
+# Node base image is cut. Without it a pinned tag carries a known vulnerability
+# until someone notices and bumps it by hand.
+RUN apk upgrade --no-cache \
+ && apk add --no-cache dumb-init \
+ && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v* \
+           /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+           /usr/local/bin/yarn /usr/local/bin/yarnpkg
 
 ENV NODE_ENV=production
 WORKDIR /app

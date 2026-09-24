@@ -16,6 +16,10 @@ dist
 .env
 .env.*
 !.env.example
+# Local signing keys. No Dockerfile copies them today; this keeps them out of
+# the build context too, so a later broad COPY cannot pick them up.
+.keys
+**/.keys
 partner/agent/.agent-state
 partner/agent/config.local.yaml
 partner/agent/bin
