@@ -32,3 +32,36 @@ onlyBuiltDependencies:
 # incompatible across the boundary. Pin one version for the whole workspace.
 overrides:
   fastify: '5.11.3'
+
+  # Security floors for transitive dependencies, raised to the first patched
+  # release. Each arrives through something we do not control directly, so an
+  # override is the only lever -- and each is scoped to the major line already
+  # in use, so no consumer is silently moved across a breaking major.
+  #
+  # fast-uri: GHSA advisories fixed in 3.1.6 and 4.1.3. The 4.x copy is in the
+  # API's request path, through fastify -> @fastify/ajv-compiler; the 3.x copy
+  # comes in through the Nest CLI's @angular-devkit/core.
+  'fast-uri@<3.1.6': '^3.1.8'
+  'fast-uri@>=4.0.0 <4.1.3': '^4.2.1'
+
+  # Build- and deploy-time tooling. None of these serves a request, but the
+  # Prisma CLI runs in the migrate container and the Nest CLI's tree is copied
+  # into the API image by `pnpm deploy --legacy`, so they do reach a server.
+  # Selectors name only the vulnerable range: glob 7 and 10 and picomatch 2 are
+  # also in the tree, unaffected, and deliberately left where they are.
+  'glob@>=11.0.0 <11.1.0': '^11.1.0'
+  'picomatch@>=4.0.0 <4.0.4': '^4.0.7'
+  # The MySQL driver arrives with the Prisma CLI. Oolix runs on PostgreSQL and
+  # never loads it, but it ships in the image all the same.
+  'mysql2@<3.22.0': '^3.24.4'
+  # Dev-only: jest's coverage loader (3.x) and eslint (4.x). Never shipped.
+  'js-yaml@>=3.0.0 <3.15.2': '^3.15.2'
+  'js-yaml@>=4.0.0 <4.3.2': '^4.3.2'
+  # A MAJOR bump inside Prisma's config loader (@prisma/config wants ^7). Kept
+  # only because generate, validate, migrate and seed were all run against it
+  # before it was committed. If a Prisma upgrade ever conflicts with this, the
+  # advisory is stack exhaustion when merging a recursive object graph, and
+  # the only graph this merges is our own prisma.config.ts -- so the fallback
+  # is to drop this line and ignore that one advisory with that reason, not
+  # to hold back Prisma.
+  'deepmerge-ts@<8.0.0': '^8.0.2'
