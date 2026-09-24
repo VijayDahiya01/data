@@ -90,7 +90,7 @@ already operates.
 | | |
 | --- | --- |
 | Task | 0.25 vCPU / 0.5 GB is enough |
-| Image | `ghcr.io/<oolix-org>/partner-agent:<sha>` — pin the SHA, never `latest` |
+| Image | `ghcr.io/vijaydahiya01/data/partner-agent:<sha>` — pin the SHA, never `latest` |
 | Networking | Private subnets. **No** public IP. A NAT gateway or VPC endpoint for outbound HTTPS |
 | Secrets | `PARTNER_AUDIENCE_DSN` from Secrets Manager, injected as an environment variable |
 | Service discovery | Cloud Map, so your backend reaches it by name |
@@ -108,7 +108,7 @@ docker run -d --name oolix-agent --restart unless-stopped \
   -p 127.0.0.1:8082:8082 \
   -v /srv/oolix-agent:/state \
   -e PARTNER_AUDIENCE_DSN='postgres://oolix_agent_ro:...@db:5432/audience?sslmode=require' \
-  ghcr.io/<oolix-org>/partner-agent:<sha> \
+  ghcr.io/vijaydahiya01/data/partner-agent:<sha> \
   --config /state/config.yaml
 ```
 
@@ -131,13 +131,20 @@ a Secret, and comments explaining each decision. Replace
 ### 1. Pull the image
 
 ```sh
-docker pull ghcr.io/<oolix-org>/partner-agent:<sha>
-docker image inspect ghcr.io/<oolix-org>/partner-agent:<sha> --format '{{.Size}}'
+docker pull ghcr.io/vijaydahiya01/data/partner-agent:<sha>
+docker image inspect ghcr.io/vijaydahiya01/data/partner-agent:<sha> --format '{{.Size}}'
 ```
 
 ~25 MB, runs as uid 65532, and contains no shell. Oolix builds and Trivy-scans
 it in CI and pushes it by commit SHA, so you are not building a third party's
 software from source, unscanned, to run next to your customer database.
+
+The path is `ghcr.io/<owner>/<repository>/partner-agent`, all lowercase —
+registries reject capitals, which is why it does not match the repository's
+own spelling. A pull refused with `denied` means the package is still
+private: GitHub makes every new package private, and **Oolix** has to switch
+`partner-agent` to public once, in the package's settings on GitHub. The Oolix
+service images can stay private; the Oolix deployment builds its own.
 
 ### 2. Register an identity
 
@@ -147,7 +154,7 @@ registers the public half. Oolix never sees the private key:
 ```sh
 docker run --rm -v /srv/oolix-agent:/state \
   -e OOLIX_BOOTSTRAP_TOKEN='<one-time token>' \
-  ghcr.io/<oolix-org>/partner-agent:<sha> \
+  ghcr.io/vijaydahiya01/data/partner-agent:<sha> \
   --register --config /state/config.yaml
 ```
 

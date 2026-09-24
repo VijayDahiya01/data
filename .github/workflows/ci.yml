@@ -373,6 +373,17 @@ jobs:
           exit-code: '1'
           ignore-unfixed: true
 
+      # A registry path must be all lowercase, and github.repository keeps the
+      # owner's casing -- VijayDahiya01/data -- which buildx rejects outright:
+      # "repository name must be lowercase". Expressions have no lower(), so
+      # the shell does it.
+      - name: Registry path
+        if: github.ref == 'refs/heads/main'
+        id: registry
+        env:
+          SERVICE: ${{ matrix.service }}
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}/${SERVICE}" >> "$GITHUB_OUTPUT"
+
       - name: Push
         if: github.ref == 'refs/heads/main'
         uses: docker/build-push-action@v6
@@ -381,8 +392,8 @@ jobs:
           file: ${{ matrix.dockerfile }}
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ github.sha }}
-            ghcr.io/${{ github.repository }}/${{ matrix.service }}:latest
+            ${{ steps.registry.outputs.image }}:${{ github.sha }}
+            ${{ steps.registry.outputs.image }}:latest
           cache-from: type=gha,scope=${{ matrix.service }}
 
   # -------------------------------------------------------------------------
