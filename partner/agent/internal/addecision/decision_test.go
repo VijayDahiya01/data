@@ -397,8 +397,24 @@ func TestSelectionIsDeterministic(t *testing.T) {
 	}}
 
 	build := func() *ConfigSnapshot {
-		low := testManifest(func(m *manifest.Payload) { m.ActivationID = "act_zzz" })
-		high := testManifest(func(m *manifest.Payload) { m.ActivationID = "act_aaa" })
+		// ONE schedule for both, so that pacing genuinely ties and the
+		// activation_id tie-break is what decides -- which is the thing this
+		// test exists to pin.
+		//
+		// testManifest stamps each call with its own time.Now(). On Windows
+		// two consecutive calls usually return the same instant, so the two
+		// campaigns got identical schedules, pacing tied, and this passed. On
+		// Linux the clock has nanosecond resolution: act_zzz, built first,
+		// started a few nanoseconds earlier, had a fractionally larger pacing
+		// deficit, and won on pacing before the tie-break was ever consulted.
+		// That failed CI on every run, and it was never a fault in Decide --
+		// ranking by pacing before activation_id is exactly what §76.1 says.
+		start := time.Now().UTC().Add(-time.Hour)
+		end := start.Add(30*24*time.Hour + time.Hour)
+		sameSchedule := func(m *manifest.Payload) { m.StartAt, m.EndAt = start, end }
+
+		low := testManifest(func(m *manifest.Payload) { sameSchedule(m); m.ActivationID = "act_zzz" })
+		high := testManifest(func(m *manifest.Payload) { sameSchedule(m); m.ActivationID = "act_aaa" })
 		creatives := map[string]Creative{
 			creativeID: {CreativeVersionID: creativeID, DestinationURL: "https://insurance.example/quote"},
 		}

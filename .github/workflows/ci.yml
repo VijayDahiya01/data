@@ -248,6 +248,15 @@ jobs:
       - name: Implementation pack drift
         run: pnpm verify:pack
 
+      # manifest-schema imports @oolix/contracts, which resolves through its
+      # built `dist/`, and a fresh checkout has none. This job never built
+      # anything, so the step below failed with "Failed to resolve entry for
+      # package @oolix/contracts" the first time it was ever reached -- it had
+      # been skipped on every earlier run behind a failing `static` job.
+      # `^...` builds exactly manifest-schema's workspace dependencies.
+      - name: Build manifest-schema's dependencies
+        run: pnpm --filter "@oolix/manifest-schema^..." build
+
       # An Agent in the field may be one protocol version behind (§80 keeps
       # N-1 compatibility during rollout), so a breaking manifest schema change
       # must be a deliberate, reviewed act.
@@ -355,7 +364,7 @@ jobs:
       # The filesystem scan elsewhere in this pipeline cannot see the base
       # image, which is where most of an image's vulnerability surface lives.
       - name: Scan the image
-        uses: aquasecurity/trivy-action@v0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
           image-ref: oolix/${{ matrix.service }}:${{ github.sha }}
@@ -409,7 +418,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Filesystem vulnerability scan
-        uses: aquasecurity/trivy-action@v0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scanners: vuln,secret,misconfig
