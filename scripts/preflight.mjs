@@ -119,12 +119,25 @@ if (!env) {
 
   // The same value reused across two different secrets means compromising one
   // compromises both.
+  //
+  // Except where the two names hold ONE secret. With a managed database,
+  // Keycloak and the backup job log in as the same user -- the backup dumps
+  // both databases with one login, and every managed runbook sets it up that
+  // way -- so POSTGRES_PASSWORD and KEYCLOAK_DB_PASSWORD are one password
+  // written twice. Treating that as reuse failed every documented managed
+  // deployment. It is only exempt while the users match; any other shared
+  // value is still refused.
+  const oneCredential = (a, b) =>
+    [a, b].sort().join() === 'KEYCLOAK_DB_PASSWORD,POSTGRES_PASSWORD' &&
+    Boolean(env.POSTGRES_USER) &&
+    env.POSTGRES_USER === env.KEYCLOAK_DB_USER;
+
   const seen = new Map();
   const reused = [];
   for (const [k, v] of Object.entries(env)) {
     if (!isSecretName(k) || !v) continue;
-    if (seen.has(v)) reused.push(`${seen.get(v)} and ${k}`);
-    else seen.set(v, k);
+    if (!seen.has(v)) seen.set(v, k);
+    else if (!oneCredential(seen.get(v), k)) reused.push(`${seen.get(v)} and ${k}`);
   }
   if (reused.length > 0) fail('each secret is distinct', reused.join('; '));
   else pass('each secret is distinct');

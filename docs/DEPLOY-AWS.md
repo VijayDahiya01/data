@@ -1,583 +1,612 @@
-# Deploying to AWS
+# Deploying Oolix to AWS
 
-A first deployment, start to finish. Roughly **2 hours**, most of it waiting
-for RDS to provision.
+A first deployment, start to finish, written for someone doing it for the first time. About
+**90 minutes**, most of it waiting for things to build.
 
-Everything here is specific to AWS. `docs/DEPLOY-DIGITALOCEAN.md` is the same
-walk on DigitalOcean, and `docs/DEPLOYMENT-HANDBOOK.md` is the
-provider-neutral version. For the Data Partner's side of the boundary, see
-`docs/DEPLOY-PARTNER-AGENT.md` — they deploy separately, into infrastructure
-you never touch.
+One EC2 instance in **Mumbai** runs everything Oolix operates, and the database is on **Neon**'s
+free plan. Your laptop needs nothing installed beyond a browser and `ssh`, which Windows already
+has.
 
-## Five AWS differences worth knowing first
+This is **Oolix's side** of the Data Partner boundary only: the portal, the API, the worker and
+sign-in. Each Data Partner runs its own Agent inside its own infrastructure — that is
+`docs/DEPLOY-PARTNER-AGENT.md`, and it comes after this.
+
+For a paying client, the box at the end of §G swaps Neon for RDS in Mumbai.
+
+## What you will have at the end
+
+| Address                    | What it is                                    |
+| -------------------------- | --------------------------------------------- |
+| `https://app.<your-host>`  | The portal. Every persona signs in here       |
+| `https://api.<your-host>`  | The API. Partner Agents call it               |
+| `https://auth.<your-host>` | Sign-in, including the authenticator-app step |
+
+The instance runs these as Docker containers: `caddy` (HTTPS), `portal`, `api`, `worker`,
+`keycloak` (sign-in), `redis`, `backup`, and `prometheus` and `alertmanager` for alerts. Only
+Caddy can be reached from outside.
+
+## Four things worth knowing first
 
 | | |
 | --- | --- |
-| **Containers cannot reach the instance role by default** | IMDSv2 defaults to a hop limit of **1**, and a container on Docker's bridge network is one hop further out. The AWS SDK inside the API then finds no credentials and creative uploads fail. Set the hop limit to 2 — §D |
-| **Public IPv4 is billed** | Roughly **$3.60/month** per address since February 2024, even while attached to a running instance |
-| **RDS gives you one database, not two** | Keycloak will not share a schema. You create `keycloak` yourself, and it needs a **JDBC** URL, which is not the string `DATABASE_URL` holds |
-| **ElastiCache is plaintext unless you say otherwise** | `rediss://` requires encryption-in-transit enabled at creation. It cannot be turned on later without replacing the cluster |
-| **Nothing is reachable across VPCs** | RDS and ElastiCache are private by default, which is correct. The EC2 security group has to be allowed explicitly on each |
+| **Neon's free plan runs out partway through each month** | It includes 100 compute-hours a month, and Oolix never lets the database sleep: the worker checks Agent health every 60 seconds. That uses about 6 compute-hours a day, so the allowance lasts **roughly 16 days** — then Neon suspends the database until the next month and Oolix stops working. Fine for a demo; for a pilot, a paid Neon plan or RDS (§G) |
+| **Neon has no India region** | The database is in Singapore, about 60 ms from Mumbai, and every page makes several database round trips. Expect pages up to a second slower than with the database next door. It also means the data sits in Singapore |
+| **Containers cannot reach the instance's AWS role by default** | EC2's metadata service allows one network hop and Docker adds a second, so creative uploads to S3 fail with a credentials error that names no cause. §D sets the hop limit to 2 |
+| **Public IPv4 is billed** | About **$3.60/month** per address, even while attached to a running instance |
 
-Choose region **`ap-south-1` (Mumbai)**. The spec prices in INR and targets
-`IN` geographies, so if real Indian customers are involved the DPDP Act 2023
-governs where the data physically sits. `ap-south-2` (Hyderabad) also exists.
-Decide **before** provisioning — moving an RDS instance between regions later
-is a migration, not a setting.
+Two things you do **not** need. **An email service:** Oolix sends no email — an admin creates each
+account with a temporary password, and the second factor is an authenticator app. **Certificate
+tooling:** Caddy gets and renews Let's Encrypt certificates by itself.
 
-**Using Neon's free database instead of RDS?** Neon has no region in India.
-Read [Neon instead of RDS and ElastiCache](#neon-instead-of-rds-and-elasticache)
-before choosing one.
-
----
-
-## What you will create
-
-| | What | Approx / month |
-| --- | --- | ---: |
-| EC2 | `t3.large` — 2 vCPU / 8 GB, Ubuntu 24.04 | ~$60 |
-| EBS | 40 GiB gp3 | ~$3.50 |
-| RDS PostgreSQL 16 | `db.t4g.small`, 20 GiB gp3 | ~$25 |
-| ElastiCache | `cache.t4g.micro`, encryption in transit | ~$12 |
-| S3 | one bucket, creative assets | ~$1 |
-| Elastic IP | one | ~$3.60 |
-| Route 53 | one hosted zone | ~$0.50 |
-| **Total** | | **~$105** |
-
-**Verify against current AWS pricing — these move, and they differ by region.**
-The measured load baseline (`docs/LOAD-BASELINE.md`) puts a pilot far below
-what this handles; the sizing is driven by RAM during image builds, not by
-traffic.
-
----
-
-## Neon instead of RDS and ElastiCache
-
-Neon's free Postgres replaces RDS, and the Redis container that already ships
-in the stack replaces ElastiCache. Redis holds only the API's rate-limit
-windows, so it gains little from a managed service; the database is the part
-worth handing to someone else.
-
-### Know the free plan's limits first
-
-Taken from Neon's pricing and documentation pages on 2026-09-24. Check them
-again before relying on them.
-
-| Limit | What it means for Oolix |
-| --- | --- |
-| **100 compute-hours a month**; when they run out, the database is suspended until the next month | Oolix never lets the database idle: the worker checks Agent health every 60 seconds and live Agents report in, so Neon's 5-minute auto-suspend never triggers. Always on at the smallest size, 0.25 CU, is about 6 compute-hours a day — **the allowance runs out after roughly 16 days, and Oolix goes down with it.** Fine for a demo. For a pilot, take a paid Neon plan or run Postgres on the instance |
-| **No region in India** | The nearest is Singapore. Put the instance there too, in `ap-southeast-1`; otherwise every query crosses about 60 ms, and one portal page runs many. Oolix's database holds your users' accounts and campaigns — a Partner's customer records never reach it — but if even that must stay in India, Neon is not an option: run Postgres on the instance in Mumbai |
-| **Reachable from the internet** | IP allow-lists are a Scale-plan feature, so on Free the password is the only lock. Never reuse it, and keep `.env.prod` at `chmod 600` |
-| **0.5 GB of storage**; writes are blocked beyond it | Ample for a pilot's control-plane data. Watch it in the Neon console |
-| **A 6-hour restore window** | Keep the stack's nightly backup (§H). It is the only copy older than six hours |
-
-### What changes in the walk below
-
-| Step | With Neon |
-| --- | --- |
-| Region | **`ap-southeast-1` (Singapore)** wherever the steps say `ap-south-1`: the Elastic IP, the instance, both buckets, and the backup mount in §H |
-| B. Security groups | Create only `oolix-app`. Neon is reached over TLS across the internet, so there is no `oolix-data` group |
-| C. RDS | **Skip.** Create the Neon project below instead |
-| D. ElastiCache | **Skip.** Redis runs in the stack |
-| 3. Configuration | The Neon values below |
-| 5. Deploy | One overlay instead of two, below |
-
-| | What | Approx / month |
-| --- | --- | ---: |
-| EC2 | `t3.large`, Singapore | ~$77 |
-| EBS | 40 GiB gp3 | ~$3.80 |
-| Neon | Free plan | $0 |
-| S3, Elastic IP, Route 53 | as above | ~$5 |
-| **Total** | | **~$86** |
-
-### Create the Neon project
-
-**console.neon.tech → New project**
-
-| Field | Value |
-| --- | --- |
-| Region | **AWS Asia Pacific (Singapore)** |
-| Postgres version | **16**. The stack's backup runs `pg_dump` 16, which refuses to dump a newer server — on 17 or 18 the nightly backup fails, every night |
-| Name | `oolix` |
-
-Open **Connect**, turn **connection pooling off**, and copy the host
-(`ep-….ap-southeast-1.aws.neon.tech`), the role and the password. The pooled
-host, with `-pooler` in its name, is a transaction pooler, and Prisma's
-migrations need a real session. Oolix opens few enough connections that the
-direct host is right for everything.
-
-Then create the two databases the stack uses — Neon starts you with `neondb`,
-which nothing here uses. From the instance once it exists:
-
-```sh
-sudo apt install -y postgresql-client
-psql "postgresql://ROLE:PASS@HOST/neondb?sslmode=require" \
-     -c 'CREATE DATABASE oolix;' -c 'CREATE DATABASE keycloak;'
-```
-
-### Configuration and deploy
-
-In step 3, these replace the database and Redis lines:
-
-```ini
-DATABASE_URL=postgresql://ROLE:PASS@HOST/oolix?sslmode=require
-KEYCLOAK_JDBC_URL=jdbc:postgresql://HOST/keycloak?sslmode=require
-KEYCLOAK_DB_USER=ROLE
-KEYCLOAK_DB_PASSWORD=PASS
-# Empty: Redis runs in the stack.
-REDIS_URL=
-
-POSTGRES_USER=ROLE
-POSTGRES_PASSWORD=PASS
-POSTGRES_HOST=HOST
-POSTGRES_PORT=5432
-POSTGRES_DB=oolix
-
-AWS_REGION=ap-southeast-1
-```
-
-In step 5, one overlay rather than two:
-
-```sh
-COMPOSE="-f oolix/infra/docker/compose.prod.yml -f oolix/infra/docker/compose.managed-postgres.yml --env-file .env.prod"
-```
-
-Everything else is the same, and `redis` joins the long-running containers.
+> **Demo or pilot? Read this first.** Oolix cannot yet create the _first_ administrator in an
+> empty database: signing in needs an existing Oolix account, and accounts are created by
+> inviting from an existing organisation. For a **demo**, §11 loads the synthetic demo
+> organisations — the ones the test suite uses — and the question never comes up. A **real
+> pilot** with real companies needs a first-administrator step that does not exist yet.
 
 ---
 
 ## Browser path — the AWS Console
 
-### A. Elastic IP first
+Everything up to a terminal on the instance. Set the region menu (top right) to **Asia Pacific
+(Mumbai)** first — every step below must be in the same region.
 
-**EC2 → Network & Security → Elastic IPs → Allocate Elastic IP address**
+### A. Elastic IP
 
-Allocate in `ap-south-1`, and copy the address. Every DNS name below points
-here, and because it never changes, TLS certificates are a one-time job.
+**EC2 → Network & Security → Elastic IPs → Allocate Elastic IP address → Allocate.**
 
-### B. Security groups
+Write the address down. This guide uses `13.233.10.20` as the example — **replace it with yours
+everywhere**. It never changes, so DNS and certificates are a one-time job.
 
-Create two, in this order, because the second references the first.
+### B. Two S3 buckets
 
-**`oolix-app`** — the EC2 instance:
+**S3 → Create bucket**, twice. Leave **Block all public access** ticked on both.
 
-| Type | Port | Source |
-| --- | --- | --- |
-| SSH | 22 | **My IP**, never `0.0.0.0/0` |
-| HTTP | 80 | Anywhere IPv4 + IPv6 |
-| HTTPS | 443 | Anywhere IPv4 + IPv6 |
+| Bucket name                     | Holds                                                 |
+| ------------------------------- | ----------------------------------------------------- |
+| `oolix-creatives-<yourcompany>` | Ad creatives, served through the API — never publicly |
+| `oolix-backups-<yourcompany>`   | Nightly database dumps and the signing keys           |
 
-Port 80 is not optional — Let's Encrypt validates over it and Caddy redirects
-it to 443.
+Bucket names are unique across all of AWS; if a name is taken, add a few random characters.
 
-**`oolix-data`** — RDS and ElastiCache:
+### C. A role that lets the instance use the buckets
 
-| Type | Port | Source |
-| --- | --- | --- |
-| PostgreSQL | 5432 | **the `oolix-app` security group**, by id |
-| Custom TCP | 6379 | **the `oolix-app` security group**, by id |
+The instance reaches S3 with a role instead of access keys pasted into a file.
 
-Source is the *group*, not a CIDR. The instance's private address can change;
-the group membership cannot.
+1. **IAM → Policies → Create policy → JSON.** Paste this with your two bucket names, **Next**,
+   name it `oolix-s3`, **Create policy**:
 
-**Nothing inbound is needed for Data Partners.** Their Agent makes outbound
-HTTPS to your API and Oolix never connects back. If a Partner's security team
-asks what to open for you, the answer is nothing.
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+         "Resource": [
+           "arn:aws:s3:::oolix-creatives-YOURCOMPANY/*",
+           "arn:aws:s3:::oolix-backups-YOURCOMPANY/*"
+         ]
+       },
+       {
+         "Effect": "Allow",
+         "Action": ["s3:ListBucket"],
+         "Resource": [
+           "arn:aws:s3:::oolix-creatives-YOURCOMPANY",
+           "arn:aws:s3:::oolix-backups-YOURCOMPANY"
+         ]
+       }
+     ]
+   }
+   ```
 
-### C. RDS
+2. **IAM → Roles → Create role.** Trusted entity **AWS service**, use case **EC2**, **Next**.
+   Tick `oolix-s3` **and** `AmazonSSMManagedInstanceCore` — the second lets you open a terminal
+   through Session Manager (§I) with no SSH port at all. **Next**, name it `oolix-app-role`,
+   **Create role**.
 
-**RDS → Create database → Standard create → PostgreSQL 16**
+### D. Launch the instance
 
-| Field | Value |
-| --- | --- |
-| Template | Dev/Test (Production adds Multi-AZ and cost) |
-| Instance | `db.t4g.small` |
-| Storage | 20 GiB gp3 |
-| Public access | **No** |
-| VPC security group | `oolix-data` |
-| Initial database name | `oolix` |
-| Backup retention | 7 days |
-
-~10 minutes. Note the endpoint, the master username and the password.
-
-**Then create Keycloak's database.** From the EC2 instance once it exists:
-
-```sh
-sudo apt install -y postgresql-client
-psql "postgresql://USER:PASS@RDS_ENDPOINT:5432/oolix?sslmode=require" \
-     -c 'CREATE DATABASE keycloak;'
-```
-
-Skipping this produces a Keycloak crash-loop on a missing database *after*
-everything else has come up healthy, which reads as an identity problem rather
-than a missing `CREATE DATABASE`.
-
-### D. ElastiCache
-
-**ElastiCache → Redis OSS / Valkey caches → Create**
-
-| Field | Value |
-| --- | --- |
-| Design | Cluster mode **disabled** |
-| Node type | `cache.t4g.micro`, 1 replica or none for a pilot |
-| **Encryption in transit** | **Enabled** — this is the one that cannot be changed later |
-| Security group | `oolix-data` |
-
-If you enable an AUTH token, it goes in the URL:
-`rediss://:TOKEN@endpoint:6379`. Without a token, `rediss://endpoint:6379`.
-
-Note `rediss://` — two s's, meaning TLS. A plain `redis://` against an
-encrypted cluster fails at connect with a timeout rather than a protocol error.
-
-### E. S3 and the instance role
-
-**S3 → Create bucket**, `ap-south-1`, name it `oolix-creatives-<something
-unique>`, **Block Public Access ON** for all four settings. Creatives are
-served through the API, not from a public bucket.
-
-Create a second bucket, `oolix-backups-<unique>`, for §H.
-
-**IAM → Roles → Create role**, trusted entity **AWS service → EC2**. Attach a
-policy scoped to those two buckets rather than `AmazonS3FullAccess`:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
-      "Resource": [
-        "arn:aws:s3:::oolix-creatives-UNIQUE/*",
-        "arn:aws:s3:::oolix-backups-UNIQUE/*"
-      ]
-    },
-    { "Effect": "Allow", "Action": ["s3:ListBucket"],
-      "Resource": ["arn:aws:s3:::oolix-creatives-UNIQUE",
-                   "arn:aws:s3:::oolix-backups-UNIQUE"] }
-  ]
-}
-```
-
-Name it `oolix-app-role`.
-
-**Why a role rather than keys.** `oolix/apps/api-gateway/src/modules/creative/creative.module.ts`
-constructs the S3 client with a region and no explicit credentials, so the SDK
-uses its default provider chain and finds the instance role by itself. Leaving
-`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` **unset** in `.env.prod` is
-therefore both simpler and safer than pasting long-lived keys into a file.
-
-### F. The instance
-
-**EC2 → Launch instances**
+**EC2 → Instances → Launch instances**
 
 | Section | Setting |
 | --- | --- |
 | Name | `oolix` |
-| AMI | **Ubuntu Server 24.04 LTS**, 64-bit x86 |
-| Instance type | **`t3.large`** — 2 vCPU / 8 GB |
-| Key pair | Create one, download the `.pem` |
-| Security group | **existing** → `oolix-app` |
-| Storage | **40 GiB gp3** |
-| Advanced → IAM instance profile | `oolix-app-role` |
-| Advanced → Metadata response hop limit | **2** |
+| Application and OS Images | **Ubuntu Server 24.04 LTS**, 64-bit (x86) |
+| Instance type | **`t3.large`** — 2 vCPU, 8 GB |
+| Key pair | **Create new key pair** → name `oolix-key`, RSA, `.pem`. It downloads; keep it safe |
+| Network settings → **Edit** | **Select existing security group → `oolix-app`** if you made one. Otherwise tick **Allow SSH traffic from → My IP**, **Allow HTTPS traffic from the internet** and **Allow HTTP traffic from the internet** |
+| Configure storage | **40 GiB**, gp3 |
+| Advanced details → IAM instance profile | **`oolix-app-role`** |
+| Advanced details → Metadata version | **V2 only (token required)** |
+| Advanced details → Metadata response hop limit | **2** |
 
-**That hop limit is the AWS-specific trap.** It defaults to 1. Docker's bridge
-network puts every container one hop further from the metadata service, so at
-the default the SDK inside the API container finds no credentials and creative
-uploads fail with an authentication error naming no cause. It can also be set
-afterwards:
+**Launch instance.** Wait until it shows **Running** and **2/2 checks passed**.
 
-```sh
-aws ec2 modify-instance-metadata-options \
-  --instance-id i-xxxxxxxx --http-put-response-hop-limit 2 --http-tokens required
+- **Why `t3.large`:** the portal and API images are built on the instance, and that needs the
+  memory. Anything smaller dies part-way through the build with no useful error.
+- **SSH from My IP, never Anywhere** — `0.0.0.0/0` invites a constant stream of break-in
+  attempts. If your internet provider changes your IP and SSH stops connecting, edit that rule
+  back to My IP.
+- **Forgot the hop limit?** Creative uploads will fail later. Fix it without relaunching:
+  **Instances → select → Actions → Instance settings → Modify instance metadata options** → hop
+  limit **2**.
+
+### E. Attach the Elastic IP
+
+**EC2 → Elastic IPs → select yours → Actions → Associate Elastic IP address.** Resource type
+**Instance**, pick `oolix`, **Associate**.
+
+### F. DNS — three names
+
+Oolix needs three names — `api.`, `app.` and `auth.` — all pointing at the Elastic IP.
+
+**No domain? Use sslip.io.** It turns any name containing an IP address into that address, with
+nothing to register. Write your Elastic IP with dashes:
+
+```text
+api.13-233-10-20.sslip.io
+app.13-233-10-20.sslip.io
+auth.13-233-10-20.sslip.io
 ```
 
-Then **Elastic IPs → select yours → Actions → Associate** with this instance.
+**Own a domain?** Create three **A** records — `api`, `app` and `auth` — pointing at the Elastic
+IP, and use those names wherever this guide shows `sslip.io` ones.
 
-### G. DNS — three names
-
-You need `api.`, `app.` and `auth.` on one domain, all pointing at the Elastic
-IP.
-
-**With a domain:** Route 53 → Hosted zones → your domain → three **A** records
-to the Elastic IP.
-
-**Without one, for a demo:** `sslip.io` resolves any name containing an IP
-back to that IP, so `api.203-0-113-45.sslip.io` needs no registration at all.
-Substitute your address with dashes. Verify before continuing, because Let's
-Encrypt will fail if these do not resolve:
+Check from your laptop before going on — certificates cannot be issued until these resolve:
 
 ```sh
-dig +short api.203-0-113-45.sslip.io
+nslookup api.13-233-10-20.sslip.io        # must answer with your Elastic IP
 ```
 
-A real domain is better for anything a Partner will see, but sslip.io is
-genuinely fine for a demo and removes registrar delay from the critical path.
+### G. The database — Neon
 
-### H. Backups off the instance
+**console.neon.tech → sign up → New project**
 
-`BACKUP_DEST` must not be the instance's own disk — a backup beside the
-database survives only the failures that do not matter, and `pnpm preflight`
-refuses a local path. Mount the backups bucket:
+| Field | Value |
+| --- | --- |
+| Project name | `oolix` |
+| Postgres version | **16**. Change it if the default is newer — the nightly backup uses `pg_dump` 16, which refuses to back up a newer server |
+| Cloud provider and region | **AWS**, **Asia Pacific (Singapore)** — the closest Neon offers to Mumbai |
+
+Then open **Connect** on the project dashboard, switch **Connection pooling off**, and copy the
+connection string. It has three parts you will use later:
+
+```text
+postgresql://neondb_owner:npg_AbC123xYz@ep-cool-name-a1b2c3d4.ap-southeast-1.aws.neon.tech/neondb?sslmode=require
+             └── ROLE ──┘ └── PASS ───┘ └────────────────────── HOST ──────────────────────┘
+```
+
+Write down **ROLE**, **PASS** and **HOST**. If HOST contains `-pooler`, pooling is still on —
+switch it off and copy again: the pooled address cannot run the database migrations.
+
+Oolix does not use Postgres row-level security — each organisation's data is kept apart by the
+API — so the role Neon created for you is the right one to use.
+
+<details>
+<summary><strong>When a client pays — RDS in Mumbai instead of Neon</strong></summary>
+
+Puts the data in India and removes Neon's monthly limit, for roughly **$25/month** more.
+
+> **Solve one thing before relying on this.** The API checks the database's certificate, and RDS
+> certificates are signed by Amazon's own authority, which Node does not trust by default. Until
+> the RDS certificate bundle is made available to the `api` and `worker` containers
+> (`NODE_EXTRA_CA_CERTS`), they cannot connect. Neon's certificate is publicly trusted, which is
+> why the main path needs nothing.
+
+1. **EC2 → Security Groups → Create security group** `oolix-data`: inbound **PostgreSQL (5432)**
+   from **Custom → the instance's security group** — the group, not an IP address.
+2. **RDS → Create database → Standard create → PostgreSQL 16**: template **Dev/Test**,
+   `db.t4g.small`, 20 GiB gp3, **Public access: No**, security group `oolix-data`, initial
+   database name `oolix`, backups 7 days. About 10 minutes; copy the **Endpoint**.
+3. In §4, create only `keycloak`, connecting to `oolix`:
+   `psql "postgresql://USER:PASS@ENDPOINT:5432/oolix?sslmode=require" -c 'CREATE DATABASE keycloak;'`
+4. In §6, use `ENDPOINT:5432` wherever this guide says `HOST`.
+
+To move an existing Neon deployment across, dump and restore both databases, then update
+`.env.prod`:
 
 ```sh
-sudo apt install -y s3fs
-sudo mkdir -p /mnt/oolix-backups
-# The instance role provides credentials; -o iam_role=auto uses it.
-sudo s3fs oolix-backups-UNIQUE /mnt/oolix-backups \
-  -o iam_role=auto -o url=https://s3.ap-south-1.amazonaws.com \
-  -o endpoint=ap-south-1 -o allow_other -o uid=$(id -u ubuntu) -o gid=$(id -g ubuntu)
-
-echo 'oolix-backups-UNIQUE /mnt/oolix-backups fuse.s3fs _netdev,allow_other,iam_role=auto,url=https://s3.ap-south-1.amazonaws.com,endpoint=ap-south-1 0 0' \
-  | sudo tee -a /etc/fstab
+pg_dump "NEON_URL" -Fc -f oolix.dump && pg_restore --no-owner -d "RDS_URL" oolix.dump
 ```
 
-RDS takes its own automated backups — keep both. RDS protects the database;
-the stack's scheduled backup also captures the **manifest signing keys**, which
-no database backup contains and without which every manifest a Partner Agent
-has cached is rejected, with nothing anywhere reporting the cause.
+**Redis stays in the stack either way** — it holds only rate-limit counters. ElastiCache is
+optional: add `-f oolix/infra/docker/compose.managed-redis.yml` after the Postgres file in §8 and
+set `REDIS_URL=rediss://…`, with encryption in transit enabled when the cluster is created.
+
+</details>
+
+### H. Somewhere for alerts to go — 2 minutes
+
+The safety check in §7 refuses to continue until alerts have a real destination — otherwise every
+alert would fire into nothing while the dashboard stayed green. For a demo, **ntfy** is free and
+needs no account:
+
+1. Install the **ntfy** app on your phone.
+2. Make up a long random topic name, such as `oolix-alerts-7f3k9q2m`. Anyone who knows the name can
+   read it, so make it unguessable.
+3. In the app: **+ → Subscribe to topic** → that name.
+
+Your alert address is `https://ntfy.sh/oolix-alerts-7f3k9q2m`. Slack's plain incoming webhook does
+**not** work: Alertmanager sends its own format, which Slack rejects.
+
+### I. Open a terminal on the instance
+
+**Session Manager — recommended.** A terminal in the browser that needs no inbound port at all,
+so SSH can eventually be closed entirely.
+
+1. The role needs `AmazonSSMManagedInstanceCore` (§C). If you add it to a running instance, the
+   agent notices within a few minutes — or at once after `sudo snap restart amazon-ssm-agent` in
+   any other terminal. The agent comes preinstalled on Ubuntu.
+2. **EC2 → Instances →** select `oolix` → **Connect → Session Manager → Connect.**
+3. A session starts as `ssm-user` in a bare shell. Switch to the user this guide expects:
+
+   ```sh
+   sudo su - ubuntu
+   ```
+
+4. A session closes after **20 idle minutes**, and §8's build can take longer. Raise it once:
+   **Systems Manager → Session Manager → Preferences → Edit → Idle session timeout: 60**.
+
+**Or EC2 Instance Connect in the browser.** It needs one more inbound rule first: the browser
+terminal reaches the instance from AWS's addresses, not yours, so a My IP rule alone blocks it.
+
+1. **EC2 → Instances →** select `oolix` → **Security** tab → click the security group's name.
+2. **Edit inbound rules → Add rule.** Type **SSH**, Source **Custom**, then type
+   `ec2-instance-connect` in the box and pick **`com.amazonaws.ap-south-1.ec2-instance-connect`**.
+   If it does not appear, enter `13.233.177.0/29` — the same addresses written out. **Save
+   rules.** Keep the My IP rule too.
+3. **Instances →** select `oolix` → **Connect → EC2 Instance Connect**, username **`ubuntu`** →
+   **Connect**.
+
+The rule admits only AWS's connection service, and using it still takes your AWS sign-in.
+
+**Or from Windows PowerShell,** in the folder where `oolix-key.pem` downloaded:
+
+```powershell
+icacls oolix-key.pem /inheritance:r
+icacls oolix-key.pem /grant:r "$($env:USERNAME):(R)"
+ssh -i .\oolix-key.pem ubuntu@13.233.10.20
+```
+
+The two `icacls` lines are needed once: Windows makes the downloaded key readable by everyone,
+and `ssh` refuses such a key. Answer `yes` to the fingerprint question.
+
+Whichever you use, you are now `ubuntu@ip-…`. **Everything from §1 onwards runs in this
+terminal.**
 
 ---
 
 ## 1. Base packages
 
 ```sh
-ssh -i your-key.pem ubuntu@<elastic-ip>
-
 sudo apt update && sudo apt upgrade -y
 curl -fsSL https://get.docker.com | sh
+sudo apt install -y s3fs postgresql-client
 sudo usermod -aG docker ubuntu && newgrp docker
-docker compose version          # expect v2.x
+docker compose version            # v2.24.4 or newer; v5.x is fine
 ```
 
-Ubuntu AMIs enable no host firewall — the **security group** is what enforces
-the restriction, so there is no `ufw` step.
+If a purple **"Daemons using outdated libraries"** screen appears during the upgrade, press
+**Enter**. There is no firewall step: the security group is the firewall.
 
-**Swap.** An 8 GB instance building three Node images will otherwise be OOM-killed
-mid-build, and the error points at the compiler rather than at memory:
+## 2. Swap
+
+Building the images briefly needs more memory than the instance has. Swap is the difference
+between slow and killed:
 
 ```sh
 sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile
 sudo mkswap /swapfile && sudo swapon /swapfile
 echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+free -h                           # Swap: 4.0Gi
 ```
 
-## 2. Code
+## 3. Mount the backup bucket
+
+Backups must leave the instance — one kept next to what it protects survives only the failures
+that do not matter. This makes the backups bucket appear as a folder:
+
+```sh
+BUCKET=oolix-backups-YOURCOMPANY
+sudo mkdir -p /mnt/oolix-backups
+sudo s3fs $BUCKET /mnt/oolix-backups -o iam_role=auto \
+  -o url=https://s3.ap-south-1.amazonaws.com -o endpoint=ap-south-1 \
+  -o allow_other -o uid=$(id -u) -o gid=$(id -g)
+echo "$BUCKET /mnt/oolix-backups fuse.s3fs _netdev,allow_other,iam_role=auto,url=https://s3.ap-south-1.amazonaws.com,endpoint=ap-south-1 0 0" \
+  | sudo tee -a /etc/fstab
+```
+
+**Prove it is really the bucket:**
+
+```sh
+df -h /mnt/oolix-backups          # the Filesystem column must say s3fs
+```
+
+If it says `/dev/root`, the mount failed and backups would quietly land on the instance's own
+disk. The usual cause is the role from §C not being attached to the instance.
+
+## 4. Create the databases
+
+Neon starts you with a database called `neondb`, which Oolix does not use. Create the two it does
+— one for Oolix, one for sign-in — with **ROLE**, **PASS** and **HOST** from §G:
+
+```sh
+psql "postgresql://ROLE:PASS@HOST/neondb?sslmode=require" \
+  -c 'CREATE DATABASE oolix;' -c 'CREATE DATABASE keycloak;'
+psql "postgresql://ROLE:PASS@HOST/oolix?sslmode=require" -c 'SHOW server_version;'
+```
+
+Expect `CREATE DATABASE` twice, then a version starting with **16**. If it is 17 or 18, create a
+new Neon project on 16 now — §G says why.
+
+## 5. Get the code
 
 ```sh
 sudo mkdir -p /srv && sudo chown ubuntu /srv && cd /srv
-git clone https://github.com/VijayDahiya01/data.git oolix && cd oolix
-git checkout <commit-sha>       # pin it; the same SHA goes in IMAGE_TAG
-git rev-parse --short HEAD
+git clone https://github.com/VijayDahiya01/data.git oolix
+cd oolix
 ```
 
-No Node or pnpm on the instance — the Dockerfiles build inside Docker.
+The repository is public, so no credentials are needed.
 
-## 3. Configuration
+## 6. Configuration
 
 ```sh
 cp .env.prod.example .env.prod
 chmod 600 .env.prod
-for i in 1 2 3 4; do openssl rand -base64 32; done   # one per secret, never reused
+sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$(git rev-parse --short HEAD)/" .env.prod
+for i in 1 2 3; do openssl rand -base64 32; done
 nano .env.prod
 ```
 
-The template defaults to a real deployment and marks every REQUIRED value.
-AWS-specific values:
+The `sed` line stamps the version you cloned. The `for` line prints three random strings — your
+three secrets. In `nano`, move with the arrow keys; **Ctrl+O** then **Enter** saves; **Ctrl+X**
+exits.
+
+Find each of these lines in the file and fill it in. Leave every other line as it is:
 
 ```ini
-APP_ENV=production
-IMAGE_TAG=<the SHA you checked out>
-
-DATABASE_URL=postgresql://USER:PASS@RDS_ENDPOINT:5432/oolix?sslmode=require
-KEYCLOAK_JDBC_URL=jdbc:postgresql://RDS_ENDPOINT:5432/keycloak?sslmode=require
-KEYCLOAK_DB_USER=<RDS master username>
-KEYCLOAK_DB_PASSWORD=<RDS master password>
-REDIS_URL=rediss://ELASTICACHE_ENDPOINT:6379
-
-POSTGRES_USER=<RDS master username>
-POSTGRES_PASSWORD=<RDS master password>
-# The backup runs pg_dump, which needs the host and port on their own, and
-# dumps POSTGRES_DB -- which must be the database named in DATABASE_URL.
-POSTGRES_HOST=RDS_ENDPOINT
-POSTGRES_PORT=5432
+# The database -- ROLE, PASS and HOST from §G
+DATABASE_URL=postgresql://ROLE:PASS@HOST/oolix?sslmode=require
+KEYCLOAK_JDBC_URL=jdbc:postgresql://HOST/keycloak?sslmode=require
+KEYCLOAK_DB_USER=ROLE
+KEYCLOAK_DB_PASSWORD=PASS
+POSTGRES_USER=ROLE
+POSTGRES_PASSWORD=PASS
+POSTGRES_HOST=HOST
 POSTGRES_DB=oolix
 
-TLS_MODE=ops@yourdomain.com
-API_HOST=api.yourdomain.com
-APP_HOST=app.yourdomain.com
-AUTH_HOST=auth.yourdomain.com
-API_PUBLIC_URL=https://api.yourdomain.com
-WEB_PUBLIC_URL=https://app.yourdomain.com
-KEYCLOAK_PUBLIC_URL=https://auth.yourdomain.com
+# The three random strings
+KEYCLOAK_ADMIN_PASSWORD=<first>
+OIDC_CLIENT_SECRET=<second>
+PORTAL_SESSION_SECRET=<third>
 
+# Addresses -- §F, with your Elastic IP
+TLS_MODE=you@yourcompany.com
+API_HOST=api.13-233-10-20.sslip.io
+APP_HOST=app.13-233-10-20.sslip.io
+AUTH_HOST=auth.13-233-10-20.sslip.io
+API_PUBLIC_URL=https://api.13-233-10-20.sslip.io
+WEB_PUBLIC_URL=https://app.13-233-10-20.sslip.io
+KEYCLOAK_PUBLIC_URL=https://auth.13-233-10-20.sslip.io
+
+# Storage -- §B and §3
 AWS_REGION=ap-south-1
-# LEAVE EMPTY on real AWS. This exists for LocalStack and S3-compatible
-# providers; setting it points the SDK away from AWS and uploads fail.
-AWS_ENDPOINT_URL=
-# LEAVE EMPTY. The instance role supplies credentials.
-AWS_ACCESS_KEY_ID=
-AWS_SECRET_ACCESS_KEY=
-S3_CREATIVE_BUCKET=oolix-creatives-UNIQUE
-CDN_PUBLIC_BASE_URL=https://api.yourdomain.com/creatives
-
+S3_CREATIVE_BUCKET=oolix-creatives-YOURCOMPANY
+CDN_PUBLIC_BASE_URL=https://api.13-233-10-20.sslip.io/creatives
 BACKUP_DEST=/mnt/oolix-backups
+
+# Alerts -- §H
+ALERT_WEBHOOK_DEFAULT=https://ntfy.sh/oolix-alerts-7f3k9q2m
+ALERT_WEBHOOK_ONCALL=https://ntfy.sh/oolix-alerts-7f3k9q2m
 ```
 
-**The three public URLs must match DNS exactly.** An OIDC issuer is compared as
-a string: if the browser reaches Keycloak by one name and the portal's server
-side by another, every token is rejected as invalid while everything looks
-correct.
+- **Leave empty:** `REDIS_URL` (Redis runs in the stack), and `AWS_ENDPOINT_URL`,
+  `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (the role from §C provides access).
+- **The same ROLE and PASS three times is correct.** Keycloak and the backup job log in as the same
+  database user.
+- **`TLS_MODE` is an email address,** for Let's Encrypt's certificate notices.
+- **The three URLs must match §F exactly.** Sign-in compares them as text, and a mismatch makes
+  every request fail as an invalid token while everything looks fine.
+- **Never put a comment after a value on the same line** — it becomes part of the value.
 
-## 4. The gate
+## 7. The safety check
 
 ```sh
 docker run --rm -v "$PWD:/w" -w /w node:24-alpine node scripts/preflight.mjs --env-file .env.prod
 ```
 
-Run it from a container so the instance needs no Node. It refuses placeholder
-or reused secrets, seeded development identities, the password grant, an
-`APP_ENV` that is not `production`, non-HTTPS or localhost URLs,
-`TLS_MODE=internal`, a moving `IMAGE_TAG`, placeholder alert webhooks and a
-`BACKUP_DEST` that never leaves the host.
+It refuses placeholder or reused secrets, the development accounts, anything but
+`APP_ENV=production`, non-HTTPS addresses, a moving version tag, placeholder alert addresses and
+backups that stay on this disk. **Fix every `FAIL` line and run it again** — each names the
+setting, and each exists because that mistake is silent in production. `WARN` lines are advice;
+the one about rehearsing a restore stays until you have done one.
 
-**Fix everything it reports.** Each check exists because that mistake is silent
-in production.
-
-## 5. Deploy
+## 8. Build and start
 
 ```sh
-cd /srv/oolix
-COMPOSE="-f oolix/infra/docker/compose.prod.yml -f oolix/infra/docker/compose.managed-postgres.yml -f oolix/infra/docker/compose.managed-redis.yml --env-file .env.prod"
+COMPOSE="-f oolix/infra/docker/compose.prod.yml -f oolix/infra/docker/compose.managed-postgres.yml --env-file .env.prod"
 
-docker compose $COMPOSE build                       # ~10 minutes first time
-docker compose $COMPOSE --profile init run --rm keys   # ONCE. Back these up.
+docker compose $COMPOSE build                              # 10-15 minutes the first time
+docker compose $COMPOSE --profile init run --rm keys       # ONCE, first deployment only
 docker compose $COMPOSE --profile monitoring up -d
+docker compose $COMPOSE --profile monitoring ps
 ```
 
-The two managed overlays remove the bundled Postgres and Redis, and the Redis
-one has to come second. Six long-running containers result — `caddy`, `api`,
-`portal`, `worker`, `keycloak`, `backup` — plus `prometheus` and
-`alertmanager` with the monitoring profile. Only Caddy
-publishes host ports; the applications publish none at all, so the security
-group is not the only thing standing between them and the internet.
+The `keys` step creates the signing keys and prints `manifest key ready: …` and
+`agent-token key ready: …`. Run again later, it reports the existing keys and changes nothing.
 
-Certificates take 30–60 seconds on first start. Then:
+`ps` should list `caddy`, `api`, `portal`, `worker`, `keycloak`, `redis`, `backup`, `prometheus`
+and `alertmanager`, all **Up**; `api` and `portal` add **(healthy)** after a minute. The database
+migrations run by themselves before the API starts.
+
+> `COMPOSE=…` lasts only as long as this terminal. After reconnecting, paste that line again
+> before any `docker compose $COMPOSE` command.
+
+## 9. Check it works
+
+Certificates take 30–60 seconds after the first start. Then:
 
 ```sh
-curl -s https://api.yourdomain.com/healthz
-curl -s https://api.yourdomain.com/readyz      # touches the database
-curl -sI https://app.yourdomain.com/login
-curl -s https://auth.yourdomain.com/realms/oolix/.well-known/openid-configuration | head -c 120
+H=13-233-10-20.sslip.io            # or your own domain
+curl -s https://api.$H/healthz; echo
+curl -s https://api.$H/readyz; echo
+curl -sI https://app.$H/login | head -1
+curl -s https://auth.$H/realms/oolix/.well-known/openid-configuration | head -c 80; echo
 ```
 
-`/readyz` returning `{"status":"ready","checks":{"database":true},...,"environment":"production"}`
-proves both the database connection and that the production protections are on.
+```text
+{"status":"ok","contract_version":"…"}
+{"status":"ready","checks":{"database":true},"contract_version":"…","environment":"production"}
+HTTP/2 200
+{"issuer":"https://auth.13-233-10-20.sslip.io/realms/oolix",…
+```
 
-## 6. Immediately after
+`"environment":"production"` confirms the production protections are on. The API's log also shows
+`SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for
+'verify-full'` once at start — harmless: it means the database certificate **is** verified.
 
-**Back up the signing keys.** Whoever holds the manifest key can forge an
-activation a Partner Agent accepts as genuine; losing it makes every cached
-manifest invalid, and no database restore fixes that.
+## 10. Back up the signing keys — now
+
+The API signs every instruction it sends a Partner Agent with a key that lives on this instance's
+disk. Lose it and every Agent rejects everything until each Partner registers again; leak it and
+someone can forge instructions an Agent trusts. A database backup does not contain it.
 
 ```sh
-docker run --rm -v oolix_api-keys:/k -v /mnt/oolix-backups:/b \
-  alpine tar czf /b/signing-keys-$(date +%F).tar.gz -C /k .
+docker run --rm -v oolix-prod_api-keys:/k -v /mnt/oolix-backups:/b alpine \
+  tar czf /b/signing-keys-$(date +%F).tar.gz -C /k .
+ls -l /mnt/oolix-backups
 ```
 
-**Create the first account.** The realm ships with **no users** — deliberately;
-it used to ship thirteen with the password `password`. Keycloak admin console
-at `https://auth.yourdomain.com/admin`, realm **oolix** (not master), using
-`KEYCLOAK_ADMIN` / `KEYCLOAK_ADMIN_PASSWORD`. Set a **temporary** password so
-the person chooses their own and you never know it.
+The `backup` container repeats this every 24 hours, together with both databases.
 
-**Every account enrols an authenticator at first sign-in.** The realm requires
-a second factor (§4.2, §82) and Keycloak cannot know which Oolix role an
-account will hold, so it is realm-wide. Budget a minute per person and have the
-phone in the room.
+## 11. Demo accounts
 
-**Prove a privileged role can actually use it**, from your laptop — it drives a
-real browser:
+### Load the demo organisations
+
+This fills the empty database with the synthetic demo world — the same organisations the test
+suite uses, already business-verified. The seeding tools run in a throwaway Node container, about
+5 minutes:
 
 ```sh
-pnpm verify:mfa \
-  --api https://api.yourdomain.com \
-  --keycloak https://auth.yourdomain.com \
-  --portal https://app.yourdomain.com \
-  --user first.admin@yourdomain.com --password '<temporary password>' \
-  --client-secret "$OIDC_CLIENT_SECRET"
+docker run --rm -v "$PWD:/w" -w /w \
+  -e DATABASE_URL="$(grep '^DATABASE_URL=' .env.prod | cut -d= -f2-)" \
+  node:24.19.0-alpine sh -c 'corepack enable && pnpm install --frozen-lockfile && pnpm db:seed --env=staging'
 ```
 
-It signs in twice, once asking for MFA and once not; the first must reach the
-API and the second must be refused. Worth the two minutes because the failure
-it catches is invisible from outside — sign-in succeeds, health is green, and
-every API call the person makes answers `AUTH_001`.
+| Organisation              | Type            | Accounts, all `@example.test`                                                    |
+| ------------------------- | --------------- | -------------------------------------------------------------------------------- |
+| ABC Insurance             | Buyer           | `buyer.admin`, `buyer.operator`, `finance`, `analyst`                            |
+| Travel A                  | Data Partner    | `partner.admin`, `partner.approver`, `partner.security`, `partner.finance`       |
+| Rewards B                 | Data Partner    | `partnerb.admin`, `partnerb.approver`                                            |
+| Meridian Ventures         | Network sponsor | `network.admin`                                                                  |
+| Oolix Platform Operations | Oolix           | `oolix.admin`                                                                    |
 
-**Rehearse one restore**, before a Partner's data exists. See
-`docs/BACKUP-AND-ROLLBACK.md`.
+Plus **`demo@example.test`**: one login holding every persona across four organisations, switched
+from the sidebar.
 
----
+The install leaves a `node_modules` folder in `/srv/oolix`; nothing else uses it, and
+`sudo find /srv/oolix -name node_modules -type d -prune -exec rm -rf {} +` removes it.
 
-## Updating later
+> **Demo only.** These organisations are fake and now live in your real database. Before a real
+> pilot, start again from a new Neon project.
+
+### Create sign-ins for the accounts you will use
+
+The seed created the Oolix side of each account; Keycloak holds the passwords. For each person you
+will sign in as — at least `demo@example.test`:
+
+1. Open `https://auth.13-233-10-20.sslip.io/admin` and sign in as `admin` with your
+   `KEYCLOAK_ADMIN_PASSWORD`.
+2. Top-left realm menu → choose **oolix** (not _master_).
+3. **Users → Create new user.** Username and Email both `demo@example.test`, **Email verified:
+   On**, a first name → **Create**.
+4. **Credentials → Set password.** At least 12 characters with an upper-case letter, a lower-case
+   letter and a digit; **Temporary: On** → **Save**.
+
+**Email verified must be On.** Oolix connects a new sign-in to its account by verified email; with
+it Off, sign-in succeeds and then everything answers `AUTH_001` — which looks like a bug and is
+not.
+
+**To show an approval, create a second person.** Nobody may approve a request they created, even
+holding both roles — so use, for example, `buyer.admin@example.test` to request and
+`partner.approver@example.test` to approve.
+
+### First sign-in
+
+Open `https://app.13-233-10-20.sslip.io`, **Continue to sign in**, and use the email and temporary
+password. Keycloak asks for a new password, then shows a QR code: scan it with an authenticator
+app (Google Authenticator or Microsoft Authenticator) and type the 6-digit code.
+
+Every account does this once; after that each sign-in asks for a code from the app, so **bring the
+phone to the demo**. When the portal shows the organisation's data, sign-in, the second factor and
+the database are all working end to end.
+
+## 12. On the day of the demo
+
+- `curl -s https://api.$H/readyz` answers `"status":"ready"`.
+- Sign in once as each demo account.
+- No warm-up is needed. Unlike most apps on Neon, Oolix never lets the database sleep — which is
+  also why the free allowance runs out.
+- Showing an ad being served needs a Partner Agent running — `docs/DEPLOY-PARTNER-AGENT.md`.
+
+## 13. Updating to a newer version
 
 ```sh
-git fetch && git checkout <new-sha>
-sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=<new-sha>/" .env.prod
-docker compose $COMPOSE build && docker compose $COMPOSE up -d
+cd /srv/oolix && git pull
+sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$(git rev-parse --short HEAD)/" .env.prod
+COMPOSE="-f oolix/infra/docker/compose.prod.yml -f oolix/infra/docker/compose.managed-postgres.yml --env-file .env.prod"
+docker compose $COMPOSE build && docker compose $COMPOSE --profile monitoring up -d
 ```
 
-Migrations run as their own step and must exit 0 before the apps start.
-**Rolling back is a tag change, and only safe if the release did not migrate
-the schema** — Prisma's `migrate deploy` is forward-only. If the bad release
-migrated, the route back is a restore, which is why a backup is taken
-immediately before every deployment rather than nightly only.
+Migrations run by themselves and must succeed before the apps restart. **Going back** is
+`git checkout <previous-commit>` and the same last three lines — but only if the newer version did
+not change the database. If it did, the way back is a restore: `docs/BACKUP-AND-ROLLBACK.md`.
+Run `git checkout main` before the next `git pull`.
 
----
+## 14. Costs
 
-## When it goes wrong
+| Item                                      | Approx / month |
+| ----------------------------------------- | -------------: |
+| `t3.large` in Mumbai, running all the time |           ~$65 |
+| 40 GiB gp3 disk                           |         ~$3.70 |
+| Elastic IP                                |         ~$3.60 |
+| S3, a few GB                              |            ~$1 |
+| Neon free plan                            |             $0 |
+| **Total**                                 |       **~$73** |
+
+Verify against current AWS pricing — these move.
+
+**Between demos, Stop the instance — do not Terminate it.** Stopping ends the compute charge; the
+disk and the Elastic IP continue at about $7/month, and everything survives a restart.
+
+**Terminating loses more than it seems.** The databases are safe on Neon, but the **signing keys
+and certificates live on the instance's disk**. Without the §10 backup, every Partner Agent would
+have to be registered again.
+
+## If something is wrong
 
 | Symptom | Cause |
 | --- | --- |
-| Creative upload fails, credentials error, nothing else broken | IMDSv2 hop limit is 1. Containers cannot reach the instance role — §F |
-| S3 calls fail against a nonexistent endpoint | `AWS_ENDPOINT_URL` is set. Leave it empty on real AWS |
-| Keycloak crash-loops with a driver error | `KEYCLOAK_JDBC_URL` was given the `postgresql://` form |
-| Keycloak crash-loops on a missing database | The `keycloak` database was never created — §C |
-| Redis connect times out | ElastiCache has encryption in transit but the URL says `redis://`, or the reverse |
-| Database connection refused | `oolix-data` does not allow the `oolix-app` security group |
-| Every API call 401, everything looks fine | The three public URLs disagree with DNS. An OIDC issuer is a string |
-| Sign-in succeeds, then every call 401 `AUTH_001` | MFA evidence missing. Run `pnpm verify:mfa` |
-| CSP and HSTS headers absent, MFA not enforced | `APP_ENV` is not exactly `production` |
-| Certificates never issue | DNS not resolving yet, or port 80 closed |
-| Build killed with no error | Out of memory — the swap file in §1 |
-| Alerts never arrive | Placeholder webhooks. The renderer refuses these, so the stack would not have started |
-| `migrate` fails although the API connects | (Neon) `DATABASE_URL` names the `-pooler` host. Migrations need the direct one |
-| Backup logs `server version mismatch` | (Neon) The project runs Postgres 17 or 18; the backup's `pg_dump` is 16 and refuses a newer server. Create the project on 16 |
-| Keycloak: `Endpoint ID is not specified` | (Neon) The JDBC driver sent no SNI. Append `&options=endpoint%3D<endpoint-id>`, the `ep-…` label at the start of the host, to `KEYCLOAK_JDBC_URL` |
-| Fine for about two weeks, then every database call fails | (Neon Free) The month's 100 compute-hours are used up, and the database is suspended until the next month |
-| `service "api" depends on undefined service "redis"` | The overlays are in the wrong order. `compose.managed-redis.yml` goes after `compose.managed-postgres.yml` |
+| `ssh` hangs | The security group's SSH rule no longer matches your IP — set it to My IP again |
+| `ssh` says `UNPROTECTED PRIVATE KEY FILE` | Run the two `icacls` lines in §I |
+| Browser Instance Connect fails | It needs its own SSH rule — §I |
+| SSM Agent: `unable to acquire credentials … Default Host Management …` | The instance has no role attached, or its role lacks `AmazonSSMManagedInstanceCore` (§C). The "Default Host Management" half is a fallback you are not using. Fix the role, then `sudo snap restart amazon-ssm-agent` |
+| `df` shows `/dev/root` for the backups folder | The bucket did not mount — the role from §C is not attached (§D) |
+| `psql` in §4 fails | ROLE, PASS or HOST copied wrongly — copy the string again from Neon's **Connect** |
+| A `FAIL` line in §7 | Fix what it names; each line says which setting |
+| Build stops with `Killed`, or no error at all | Out of memory — the swap in §2, and `t3.large` |
+| `migrate` exits with an error though the database is reachable | HOST contains `-pooler` — §G |
+| Keycloak restarts again and again | `KEYCLOAK_JDBC_URL` must start with `jdbc:postgresql://`, or the `keycloak` database from §4 is missing |
+| Keycloak log: `Endpoint ID is not specified` | Append `&options=endpoint%3D<endpoint-id>` — the `ep-…` part of HOST — to `KEYCLOAK_JDBC_URL` |
+| The browser warns about the certificate, or it never issues | DNS does not point at the Elastic IP yet (§F), or port 80 is closed |
+| `/readyz` says `not_ready` | The API cannot reach the database — check `DATABASE_URL`, then `docker compose $COMPOSE logs api` |
+| Signed in, then `AUTH_001` everywhere | **Email verified** was Off, or the email is not a seeded account — §11 |
+| Every request fails as an invalid token, nothing obvious | The three URLs in `.env.prod` do not match the DNS names exactly |
+| Creative upload fails with a credentials error | The metadata hop limit is 1 — §D |
+| Backup log says `server version mismatch` | The Neon project is not on Postgres 16 — §G |
+| Everything worked for about two weeks, then stopped | Neon's free compute for the month is used up — see the top |
 
-Logs: `docker compose $COMPOSE logs -f <service>`
-
----
-
-## AWS features worth adopting later
-
-- **Secrets Manager or SSM Parameter Store** instead of `.env.prod` on disk.
-  Every variable already accepts a `_FILE` form pointing at a path, which is
-  how a secrets sidecar would deliver them — no code change needed.
-- **ECR** so images are built once and pulled, rather than rebuilt per
-  instance. CI already pushes to a registry by SHA.
-- **RDS Multi-AZ** when a pilot becomes a product. Dev/Test above is a single
-  instance.
-- **Data Lifecycle Manager** snapshots of the EBS volume, so the signing-key
-  volume is captured without a manual step.
-
-## What this does not cover
-
-- **More than one instance.** The measured baseline says a pilot does not need
-  it. Revisit with real traffic rather than in advance.
-- **Meta and Google activation.** Flag-gated off and not needed for owned
-  media. See `docs/EXTERNAL-DEPENDENCIES.md`.
-- **The Data Partner's side.** That is theirs to deploy — see
-  `docs/DEPLOY-PARTNER-AGENT.md`.
+Logs for any container: `docker compose $COMPOSE logs -f api` (or `portal`, `keycloak`, `worker`,
+`caddy`).
