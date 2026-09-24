@@ -297,23 +297,27 @@ mistake is silent in production.
 ```sh
 # Build the three images (~10 minutes on first run)
 docker compose -f oolix/infra/docker/compose.prod.yml \
-               -f oolix/infra/docker/compose.managed.yml \
+               -f oolix/infra/docker/compose.managed-postgres.yml \
+               -f oolix/infra/docker/compose.managed-redis.yml \
                --env-file .env.prod build
 
 # Signing keys — ONCE. Back these up immediately (step 11).
 docker compose -f oolix/infra/docker/compose.prod.yml \
-               -f oolix/infra/docker/compose.managed.yml \
+               -f oolix/infra/docker/compose.managed-postgres.yml \
+               -f oolix/infra/docker/compose.managed-redis.yml \
                --env-file .env.prod --profile init run --rm keys
 
 # Up
 docker compose -f oolix/infra/docker/compose.prod.yml \
-               -f oolix/infra/docker/compose.managed.yml \
+               -f oolix/infra/docker/compose.managed-postgres.yml \
+               -f oolix/infra/docker/compose.managed-redis.yml \
                --env-file .env.prod --profile monitoring up -d
 ```
 
-The managed overlay removes the bundled Postgres and Redis. Without it you run
-databases on the droplet, which works but gives up the backups, failover and
-patching you are paying DigitalOcean for.
+The two managed overlays remove the bundled Postgres and Redis, and the Redis
+one has to come second. Without them you run both on the droplet, which works
+but gives up the backups, failover and patching you are paying DigitalOcean
+for.
 
 Certificates take 30–60 seconds on first start. Then:
 
@@ -391,10 +395,10 @@ restored is a hypothesis. See `docs/BACKUP-AND-ROLLBACK.md`.
 ```sh
 git fetch && git checkout <new-sha>
 sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=<new-sha>/" .env.prod
-docker compose -f oolix/infra/docker/compose.prod.yml -f oolix/infra/docker/compose.managed.yml \
-  --env-file .env.prod build
-docker compose -f oolix/infra/docker/compose.prod.yml -f oolix/infra/docker/compose.managed.yml \
-  --env-file .env.prod up -d
+docker compose -f oolix/infra/docker/compose.prod.yml -f oolix/infra/docker/compose.managed-postgres.yml \
+  -f oolix/infra/docker/compose.managed-redis.yml --env-file .env.prod build
+docker compose -f oolix/infra/docker/compose.prod.yml -f oolix/infra/docker/compose.managed-postgres.yml \
+  -f oolix/infra/docker/compose.managed-redis.yml --env-file .env.prod up -d
 ```
 
 Migrations run as their own step and must exit 0 before the apps start.
@@ -422,7 +426,7 @@ only.
 | Build killed with no error | Out of memory — the swap file in step 1 |
 | Alerts never arrive | Placeholder webhooks. The renderer refuses these, so the stack would not have started |
 
-Logs: `docker compose -f oolix/infra/docker/compose.prod.yml -f oolix/infra/docker/compose.managed.yml --env-file .env.prod logs -f <service>`
+Logs: `docker compose -f oolix/infra/docker/compose.prod.yml -f oolix/infra/docker/compose.managed-postgres.yml -f oolix/infra/docker/compose.managed-redis.yml --env-file .env.prod logs -f <service>`
 
 ---
 

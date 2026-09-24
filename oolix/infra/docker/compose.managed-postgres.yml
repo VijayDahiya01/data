@@ -1,21 +1,32 @@
-# Run against managed PostgreSQL, Redis and object storage.
+# Run against a managed PostgreSQL: RDS, DigitalOcean, Neon or any other.
 #
 # An overlay on compose.prod.yml. The base file runs its own Postgres and Redis
-# so the stack can be proven end to end on one machine; on a real host those
-# should be managed services, for the reason that matters most in a pilot:
-# somebody else does the backups, the failover and the patching, and a pilot
-# team has no capacity to do any of the three well.
+# so the stack can be proven end to end on one machine; on a real host the
+# database should be a managed service, for the reason that matters most in a
+# pilot: somebody else does the backups, the failover and the patching, and a
+# pilot team has no capacity to do any of the three well.
 #
 #   docker compose -f oolix/infra/docker/compose.prod.yml \
-#                  -f oolix/infra/docker/compose.managed.yml \
+#                  -f oolix/infra/docker/compose.managed-postgres.yml \
 #                  --env-file .env.prod up -d
 #
-# `!reset []` removes the base file's dependency edges. Without it Compose
-# still waits for a `postgres` service that is no longer part of the stack, and
-# the deployment hangs with no explanation.
+# Redis is a separate decision, made by adding compose.managed-redis.yml after
+# this file. Oolix keeps nothing in Redis but the API's rate-limit windows, so
+# the bundled container is a sound choice even on a real host -- it is what the
+# Neon path in docs/DEPLOY-AWS.md runs. The two were one file,
+# compose.managed.yml, which removed both. It was renamed rather than edited so
+# that a command still naming it fails loudly instead of quietly deploying
+# something else.
+#
+# Dependencies are restated with `!override`, not cleared with `!reset []`.
+# Clearing them, as this file did until 2026-09-24, removed every edge along
+# with the one to Postgres. The API and worker stopped waiting for migrations,
+# so a failed migration no longer stopped a deployment -- the API came up
+# serving against whatever half-migrated schema it left -- and Keycloak stopped
+# waiting for its realm to be rendered. What follows is the base file's edges
+# minus Postgres.
 services:
   postgres: !reset null
-  redis: !reset null
 
   migrate:
     depends_on: !reset []
@@ -23,19 +34,25 @@ services:
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL to the managed instance}
 
   api:
-    depends_on: !reset []
+    depends_on: !override
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL to the managed instance}
-      REDIS_URL: ${REDIS_URL:?set REDIS_URL to the managed instance}
 
   worker:
-    depends_on: !reset []
+    depends_on: !override
+      migrate:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL to the managed instance}
-      REDIS_URL: ${REDIS_URL:?set REDIS_URL to the managed instance}
 
   keycloak:
-    depends_on: !reset []
+    depends_on: !override
+      realm-render:
+        condition: service_completed_successfully
     environment:
       # Keycloak wants a JDBC URL, which is not the same string as
       # DATABASE_URL. Giving it the postgres:// form fails at start-up with a

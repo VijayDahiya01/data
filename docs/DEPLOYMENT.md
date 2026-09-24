@@ -21,14 +21,19 @@ none of the three well.
 
 ```sh
 docker compose -f oolix/infra/docker/compose.prod.yml \
-               -f oolix/infra/docker/compose.managed.yml \
+               -f oolix/infra/docker/compose.managed-postgres.yml \
+               -f oolix/infra/docker/compose.managed-redis.yml \
                --env-file .env.prod up -d
 ```
 
-The overlay removes the bundled Postgres and Redis and requires `DATABASE_URL`,
-`REDIS_URL` and — separately — `KEYCLOAK_JDBC_URL`. Keycloak needs a JDBC
+`compose.managed-postgres.yml` removes the bundled Postgres and requires
+`DATABASE_URL` and — separately — `KEYCLOAK_JDBC_URL`. Keycloak needs a JDBC
 string, which is not the same as `DATABASE_URL`; giving it the `postgres://`
 form fails at start-up with a driver error that never mentions the format.
+`compose.managed-redis.yml` removes the bundled Redis, requires `REDIS_URL`,
+and must come second. It is optional: Redis holds only the API's rate-limit
+windows, and the bundled container serves them fine — the Neon path in
+`docs/DEPLOY-AWS.md` keeps it.
 
 ## Network rules
 

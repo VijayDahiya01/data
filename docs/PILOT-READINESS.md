@@ -362,11 +362,15 @@ their own gated step, Keycloak in production mode with its realm rendered per
 deployment, signing keys on a persistent volume provisioned by an explicit
 one-time step, and an opt-in monitoring profile.
 
-`oolix/infra/docker/compose.managed.yml` is the overlay for a real host: it removes
-the bundled Postgres and Redis and requires managed `DATABASE_URL`, `REDIS_URL`
-and a separate `KEYCLOAK_JDBC_URL` — separate because Keycloak needs a JDBC
-string, and handing it the `postgres://` form fails with a driver error that
-never mentions the format. Validated.
+`oolix/infra/docker/compose.managed-postgres.yml` is the overlay for a real host:
+it removes the bundled Postgres and requires a managed `DATABASE_URL` and a
+separate `KEYCLOAK_JDBC_URL` — separate because Keycloak needs a JDBC string,
+and handing it the `postgres://` form fails with a driver error that never
+mentions the format. `compose.managed-redis.yml`, applied after it, does the
+same for Redis and is optional. Both validated on 2026-09-24 with
+`docker compose config`, alone, together and in the wrong order (refused).
+Until then there was one overlay, and it made the API, worker and Keycloak
+wait for nothing: a failed migration no longer stopped a deployment.
 
 `docs/DEPLOYMENT.md` carries the sizing (derived from the load baseline, not
 guessed), the network rules, the first-deployment order and the checklist that

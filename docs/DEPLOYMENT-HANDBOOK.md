@@ -98,20 +98,23 @@ docker compose -f oolix/infra/docker/compose.prod.yml --env-file .env.prod \
 docker compose -f oolix/infra/docker/compose.prod.yml --env-file .env.prod up -d
 ```
 
-Use the managed overlay if the database and Redis are managed, which they
-should be:
+Use the managed overlays for whatever is managed. The database should be;
+Redis may be:
 
 ```sh
 docker compose -f oolix/infra/docker/compose.prod.yml \
-               -f oolix/infra/docker/compose.managed.yml \
+               -f oolix/infra/docker/compose.managed-postgres.yml \
+               -f oolix/infra/docker/compose.managed-redis.yml \
                --env-file .env.prod up -d
 ```
 
-That overlay removes the bundled Postgres and Redis and requires `DATABASE_URL`,
-`REDIS_URL` and — separately — `KEYCLOAK_JDBC_URL`. **Keycloak needs a JDBC
+`compose.managed-postgres.yml` removes the bundled Postgres and requires
+`DATABASE_URL` and — separately — `KEYCLOAK_JDBC_URL`. **Keycloak needs a JDBC
 string, which is not the same as `DATABASE_URL`.** Give it the `postgres://`
 form and it fails at start-up with a driver error that never mentions the
-format.
+format. `compose.managed-redis.yml` removes the bundled Redis and requires
+`REDIS_URL`; leave it out to keep Redis on the host, and when it is used it
+must come second.
 
 ## 1.5 The three that will bite you
 

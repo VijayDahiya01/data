@@ -1,0 +1,37 @@
+# Run against a managed Redis: ElastiCache, DigitalOcean Valkey or any other.
+#
+# An overlay on compose.prod.yml, normally together with
+# compose.managed-postgres.yml and always AFTER it:
+#
+#   docker compose -f oolix/infra/docker/compose.prod.yml \
+#                  -f oolix/infra/docker/compose.managed-postgres.yml \
+#                  -f oolix/infra/docker/compose.managed-redis.yml \
+#                  --env-file .env.prod up -d
+#
+# Order matters because both files restate the API's dependencies and the last
+# one wins. The other way round, the API is left depending on the `redis`
+# service this file removes, and Compose refuses the project -- loudly, at
+# least.
+#
+# Worth knowing before paying for one: Redis holds only the API's rolling
+# rate-limit windows and the per-organization limit overrides ops can set
+# (oolix/apps/api-gateway/src/common/ratelimit). The windows expire within a
+# minute. The bundled container, with its append-only file on a volume, does
+# the same job; a managed instance adds failover.
+services:
+  redis: !reset null
+
+  # The base file's edges minus Redis. Postgres needs no edge of its own:
+  # `migrate` already waits for it, and the API waits for `migrate`.
+  api:
+    depends_on: !override
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      REDIS_URL: ${REDIS_URL:?set REDIS_URL to the managed instance; with TLS it is rediss://}
+
+  # The worker does not use Redis today. Set anyway, so its environment never
+  # names a service that is not there.
+  worker:
+    environment:
+      REDIS_URL: ${REDIS_URL:?set REDIS_URL to the managed instance; with TLS it is rediss://}

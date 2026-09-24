@@ -25,6 +25,10 @@ governs where the data physically sits. `ap-south-2` (Hyderabad) also exists.
 Decide **before** provisioning — moving an RDS instance between regions later
 is a migration, not a setting.
 
+**Using Neon's free database instead of RDS?** Neon has no region in India.
+Read [Neon instead of RDS and ElastiCache](#neon-instead-of-rds-and-elasticache)
+before choosing one.
+
 ---
 
 ## What you will create
@@ -44,6 +48,101 @@ is a migration, not a setting.
 The measured load baseline (`docs/LOAD-BASELINE.md`) puts a pilot far below
 what this handles; the sizing is driven by RAM during image builds, not by
 traffic.
+
+---
+
+## Neon instead of RDS and ElastiCache
+
+Neon's free Postgres replaces RDS, and the Redis container that already ships
+in the stack replaces ElastiCache. Redis holds only the API's rate-limit
+windows, so it gains little from a managed service; the database is the part
+worth handing to someone else.
+
+### Know the free plan's limits first
+
+Taken from Neon's pricing and documentation pages on 2026-09-24. Check them
+again before relying on them.
+
+| Limit | What it means for Oolix |
+| --- | --- |
+| **100 compute-hours a month**; when they run out, the database is suspended until the next month | Oolix never lets the database idle: the worker checks Agent health every 60 seconds and live Agents report in, so Neon's 5-minute auto-suspend never triggers. Always on at the smallest size, 0.25 CU, is about 6 compute-hours a day — **the allowance runs out after roughly 16 days, and Oolix goes down with it.** Fine for a demo. For a pilot, take a paid Neon plan or run Postgres on the instance |
+| **No region in India** | The nearest is Singapore. Put the instance there too, in `ap-southeast-1`; otherwise every query crosses about 60 ms, and one portal page runs many. Oolix's database holds your users' accounts and campaigns — a Partner's customer records never reach it — but if even that must stay in India, Neon is not an option: run Postgres on the instance in Mumbai |
+| **Reachable from the internet** | IP allow-lists are a Scale-plan feature, so on Free the password is the only lock. Never reuse it, and keep `.env.prod` at `chmod 600` |
+| **0.5 GB of storage**; writes are blocked beyond it | Ample for a pilot's control-plane data. Watch it in the Neon console |
+| **A 6-hour restore window** | Keep the stack's nightly backup (§H). It is the only copy older than six hours |
+
+### What changes in the walk below
+
+| Step | With Neon |
+| --- | --- |
+| Region | **`ap-southeast-1` (Singapore)** wherever the steps say `ap-south-1`: the Elastic IP, the instance, both buckets, and the backup mount in §H |
+| B. Security groups | Create only `oolix-app`. Neon is reached over TLS across the internet, so there is no `oolix-data` group |
+| C. RDS | **Skip.** Create the Neon project below instead |
+| D. ElastiCache | **Skip.** Redis runs in the stack |
+| 3. Configuration | The Neon values below |
+| 5. Deploy | One overlay instead of two, below |
+
+| | What | Approx / month |
+| --- | --- | ---: |
+| EC2 | `t3.large`, Singapore | ~$77 |
+| EBS | 40 GiB gp3 | ~$3.80 |
+| Neon | Free plan | $0 |
+| S3, Elastic IP, Route 53 | as above | ~$5 |
+| **Total** | | **~$86** |
+
+### Create the Neon project
+
+**console.neon.tech → New project**
+
+| Field | Value |
+| --- | --- |
+| Region | **AWS Asia Pacific (Singapore)** |
+| Postgres version | **16**. The stack's backup runs `pg_dump` 16, which refuses to dump a newer server — on 17 or 18 the nightly backup fails, every night |
+| Name | `oolix` |
+
+Open **Connect**, turn **connection pooling off**, and copy the host
+(`ep-….ap-southeast-1.aws.neon.tech`), the role and the password. The pooled
+host, with `-pooler` in its name, is a transaction pooler, and Prisma's
+migrations need a real session. Oolix opens few enough connections that the
+direct host is right for everything.
+
+Then create the two databases the stack uses — Neon starts you with `neondb`,
+which nothing here uses. From the instance once it exists:
+
+```sh
+sudo apt install -y postgresql-client
+psql "postgresql://ROLE:PASS@HOST/neondb?sslmode=require" \
+     -c 'CREATE DATABASE oolix;' -c 'CREATE DATABASE keycloak;'
+```
+
+### Configuration and deploy
+
+In step 3, these replace the database and Redis lines:
+
+```ini
+DATABASE_URL=postgresql://ROLE:PASS@HOST/oolix?sslmode=require
+KEYCLOAK_JDBC_URL=jdbc:postgresql://HOST/keycloak?sslmode=require
+KEYCLOAK_DB_USER=ROLE
+KEYCLOAK_DB_PASSWORD=PASS
+# Empty: Redis runs in the stack.
+REDIS_URL=
+
+POSTGRES_USER=ROLE
+POSTGRES_PASSWORD=PASS
+POSTGRES_HOST=HOST
+POSTGRES_PORT=5432
+POSTGRES_DB=oolix
+
+AWS_REGION=ap-southeast-1
+```
+
+In step 5, one overlay rather than two:
+
+```sh
+COMPOSE="-f oolix/infra/docker/compose.prod.yml -f oolix/infra/docker/compose.managed-postgres.yml --env-file .env.prod"
+```
+
+Everything else is the same, and `redis` joins the long-running containers.
 
 ---
 
@@ -350,16 +449,17 @@ in production.
 
 ```sh
 cd /srv/oolix
-COMPOSE="-f oolix/infra/docker/compose.prod.yml -f oolix/infra/docker/compose.managed.yml --env-file .env.prod"
+COMPOSE="-f oolix/infra/docker/compose.prod.yml -f oolix/infra/docker/compose.managed-postgres.yml -f oolix/infra/docker/compose.managed-redis.yml --env-file .env.prod"
 
 docker compose $COMPOSE build                       # ~10 minutes first time
 docker compose $COMPOSE --profile init run --rm keys   # ONCE. Back these up.
 docker compose $COMPOSE --profile monitoring up -d
 ```
 
-The managed overlay removes the bundled Postgres and Redis. Six long-running
-containers result — `caddy`, `api`, `portal`, `worker`, `keycloak`, `backup` —
-plus `prometheus` and `alertmanager` with the monitoring profile. Only Caddy
+The two managed overlays remove the bundled Postgres and Redis, and the Redis
+one has to come second. Six long-running containers result — `caddy`, `api`,
+`portal`, `worker`, `keycloak`, `backup` — plus `prometheus` and
+`alertmanager` with the monitoring profile. Only Caddy
 publishes host ports; the applications publish none at all, so the security
 group is not the only thing standing between them and the internet.
 
@@ -367,13 +467,13 @@ Certificates take 30–60 seconds on first start. Then:
 
 ```sh
 curl -s https://api.yourdomain.com/healthz
-curl -s https://api.yourdomain.com/readyz      # touches RDS
+curl -s https://api.yourdomain.com/readyz      # touches the database
 curl -sI https://app.yourdomain.com/login
 curl -s https://auth.yourdomain.com/realms/oolix/.well-known/openid-configuration | head -c 120
 ```
 
 `/readyz` returning `{"status":"ready","checks":{"database":true},...,"environment":"production"}`
-proves both the RDS connection and that the production protections are on.
+proves both the database connection and that the production protections are on.
 
 ## 6. Immediately after
 
@@ -451,6 +551,11 @@ immediately before every deployment rather than nightly only.
 | Certificates never issue | DNS not resolving yet, or port 80 closed |
 | Build killed with no error | Out of memory — the swap file in §1 |
 | Alerts never arrive | Placeholder webhooks. The renderer refuses these, so the stack would not have started |
+| `migrate` fails although the API connects | (Neon) `DATABASE_URL` names the `-pooler` host. Migrations need the direct one |
+| Backup logs `server version mismatch` | (Neon) The project runs Postgres 17 or 18; the backup's `pg_dump` is 16 and refuses a newer server. Create the project on 16 |
+| Keycloak: `Endpoint ID is not specified` | (Neon) The JDBC driver sent no SNI. Append `&options=endpoint%3D<endpoint-id>`, the `ep-…` label at the start of the host, to `KEYCLOAK_JDBC_URL` |
+| Fine for about two weeks, then every database call fails | (Neon Free) The month's 100 compute-hours are used up, and the database is suspended until the next month |
+| `service "api" depends on undefined service "redis"` | The overlays are in the wrong order. `compose.managed-redis.yml` goes after `compose.managed-postgres.yml` |
 
 Logs: `docker compose $COMPOSE logs -f <service>`
 
