@@ -141,10 +141,11 @@ software from source, unscanned, to run next to your customer database.
 
 The path is `ghcr.io/<owner>/<repository>/partner-agent`, all lowercase —
 registries reject capitals, which is why it does not match the repository's
-own spelling. A pull refused with `denied` means the package is still
-private: GitHub makes every new package private, and **Oolix** has to switch
-`partner-agent` to public once, in the package's settings on GitHub. The Oolix
-service images can stay private; the Oolix deployment builds its own.
+own spelling. The package takes the repository's visibility: while the
+repository is public, anyone can pull it without logging in. If the repository
+is ever made private, a pull fails with `denied` until **Oolix** either makes
+`partner-agent` public in its package settings on GitHub or issues you a
+read-only token for `docker login ghcr.io`.
 
 ### 2. Register an identity
 
