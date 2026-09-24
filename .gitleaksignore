@@ -1,0 +1,13 @@
+# Findings gitleaks reports that are not secrets, pinned by fingerprint
+# (commit:file:rule:line) so that each entry silences exactly one match and
+# nothing else. A new occurrence of either pattern is still reported.
+#
+# CI scans only the pushed commits on a push, but a manual run scans the whole
+# history -- which is where both of these live.
+
+# An unsigned alg:none token, {"alg":"none"}.{"sub":"admin"}. -- the adversarial
+# probe sends it deliberately to prove the API rejects a forged bearer token.
+534e1120602a5e7069005358bb67ec1e51685338:scripts/pen-probe.mjs:jwt:128
+
+# The `<Spaces secret>` placeholder in the example environment file.
+42bc328c69e339937d9a121e98a87b3f82385298:docs/DEPLOY-DIGITALOCEAN.md:generic-api-key:212
