@@ -45,6 +45,17 @@ jobs:
       # through their published `types` entry, not their source.
       - name: Build shared packages
         run: pnpm build:libs
+        env:
+          # @oolix/db's build runs `prisma generate`, and prisma.config.ts
+          # resolves DATABASE_URL eagerly -- it throws without one, even though
+          # generation never connects. Without this line this step failed on
+          # every CI run the repository ever had, with
+          #   PrismaConfigEnvError: Cannot resolve environment variable
+          # and took every job that depends on this one down with it: no image
+          # was ever built or scanned. "Build applications" below already sets
+          # the same placeholder; this is the earlier step that needed it too.
+          # Nothing is listening at this address and nothing tries to reach it.
+          DATABASE_URL: postgresql://build:build@127.0.0.1:5432/build?schema=public
 
       - run: pnpm format:check
       - run: pnpm lint
@@ -344,7 +355,7 @@ jobs:
       # The filesystem scan elsewhere in this pipeline cannot see the base
       # image, which is where most of an image's vulnerability surface lives.
       - name: Scan the image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           scan-type: image
           image-ref: oolix/${{ matrix.service }}:${{ github.sha }}
@@ -398,7 +409,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Filesystem vulnerability scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           scan-type: fs
           scanners: vuln,secret,misconfig
