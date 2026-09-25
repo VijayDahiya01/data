@@ -11,3 +11,10 @@
 
 # The `<Spaces secret>` placeholder in the example environment file.
 42bc328c69e339937d9a121e98a87b3f82385298:docs/DEPLOY-DIGITALOCEAN.md:generic-api-key:212
+
+# Two entries of the common-password list -- 'linkedin2012' and 'linkedinpass'
+# -- each followed by a 16-character password, which is the shape of the
+# linkedin-client-secret rule. The list is public breach data that sign-up
+# refuses (oolix/packages/auth-rbac/src/common-passwords.ts), not a credential.
+665a28befaa33693b6929223d9c9de8938949959:oolix/packages/auth-rbac/src/common-passwords.ts:linkedin-client-secret:631
+665a28befaa33693b6929223d9c9de8938949959:oolix/packages/auth-rbac/src/common-passwords.ts:linkedin-client-secret:633
