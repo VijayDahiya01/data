@@ -461,10 +461,11 @@
       <div class="item zone-shared">
         <div class="who">
           <span class="name">oolix/packages/auth-rbac</span>
-          <span class="ver mono">jose 6.2.10 · OIDC</span>
+          <span class="ver mono">jose 6.2.10 · scrypt</span>
         </div>
         <div class="what">
-          Principals, permission checks, and the Agent’s workload identity. The Agent
+          Principals, permission checks, password hashing and sign-in tokens, and the
+          Agent’s workload identity. The Agent
           mints a P-256 keypair inside the Partner and registers only the public half
           — Oolix cannot forge its signature.
         </div>
@@ -536,7 +537,7 @@
           <tr><td>pnpm</td><td class="num">10.20</td><td>Workspace manager across four apps and six packages</td></tr>
           <tr><td>TypeScript</td><td class="num">5.9.3</td><td>Every JavaScript surface, strict throughout</td></tr>
           <tr><td>Go</td><td class="num">1.25</td><td>The Partner Agent only — pinned so local builds match CI semantics</td></tr>
-          <tr><td>Keycloak</td><td class="num">26.5</td><td>Identity. Oolix stores only the subject claim, never a password</td></tr>
+          <tr><td>Brevo</td><td>—</td><td>Email for sign-up confirmation, invitations and password reset. Oolix checks passwords itself, stored as scrypt hashes</td></tr>
           <tr><td>Redis</td><td class="num">7.4</td><td>Queues and caching, on both sides of the boundary</td></tr>
           <tr><td>LocalStack</td><td class="num">4.9</td><td>S3 and SQS locally, so creative upload and events run without cloud access</td></tr>
           <tr><td>Playwright</td><td>—</td><td>Browser tests driving the real portal through real sign-in</td></tr>

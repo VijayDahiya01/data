@@ -1,7 +1,7 @@
 /**
  * Portal session -- an encrypted, httpOnly cookie (§82).
  *
- * The session holds the user's OIDC access token. It is deliberately NOT
+ * The session holds the user's access and refresh tokens. It is deliberately NOT
  * exposed to the browser as a readable value: every call to the Oolix API is
  * made by this Next server, so a cross-site script on the portal cannot read a
  * token and replay it. That is also why the cookie is `httpOnly` and sealed
@@ -20,14 +20,31 @@ export const SESSION_COOKIE = 'oolix_session';
 
 export interface Session {
   accessToken: string;
-  refreshToken?: string;
+  /** Single use: every refresh returns a new one (see proxy.ts). */
+  refreshToken: string;
   /** Unix ms. Refreshed slightly early so a call never races expiry. */
   expiresAt: number;
-  /** OIDC subject. Used only for logging. */
-  subject: string;
   email?: string;
   /** The organization the user is currently acting within (§34). */
   activeOrgId?: string;
+}
+
+/**
+ * One definition, because three places write this cookie: sign-in (a server
+ * action), the org switcher (a route handler) and the refresh in proxy.ts.
+ *
+ * `lax` rather than `strict` so following a link from an email or another
+ * site still arrives signed in. `secure` follows the deployment scheme.
+ */
+export function sessionCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    secure: env().WEB_PUBLIC_URL.startsWith('https://'),
+    path: '/',
+    // Matches the API's sign-in lifetime (USER_SESSION_TTL_HOURS).
+    maxAge: 60 * 60 * 8,
+  };
 }
 
 /**
@@ -36,9 +53,8 @@ export interface Session {
  *
  * That is exactly what happened when the session also carried the ID token:
  * access + refresh + id together crossed the limit, the cookie vanished, and
- * every page redirected back to login. The ID token is gone (RP-initiated
- * logout works with `client_id` instead), and this guard makes a future
- * regression fail loudly rather than mysteriously.
+ * every page redirected back to login. The ID token is gone, and this guard
+ * makes a future regression fail loudly rather than mysteriously.
  */
 const MAX_COOKIE_BYTES = 3900;
 
@@ -96,16 +112,13 @@ export async function readSession(): Promise<Session | null> {
   return raw ? unseal(raw) : null;
 }
 
+/**
+ * Only from a server action or a route handler: Next.js refuses to set a
+ * cookie while rendering a page. That is why token refresh lives in proxy.ts,
+ * which runs before rendering, instead of in the API client.
+ */
 export async function writeSession(session: Session): Promise<void> {
-  (await cookies()).set(SESSION_COOKIE, seal(session), {
-    httpOnly: true,
-    sameSite: 'lax',
-    // `lax` rather than `strict` so the OIDC redirect back from Keycloak still
-    // carries the cookie. `secure` follows the deployment scheme.
-    secure: env().WEB_PUBLIC_URL.startsWith('https://'),
-    path: '/',
-    maxAge: 60 * 60 * 8,
-  });
+  (await cookies()).set(SESSION_COOKIE, seal(session), sessionCookieOptions());
 }
 
 export async function clearSession(): Promise<void> {

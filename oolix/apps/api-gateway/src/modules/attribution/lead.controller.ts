@@ -1,10 +1,10 @@
 /**
  * Attribution and lead endpoints -- spec v5 §52.5, §71.
  *
- * The lead endpoints are authenticated by the Buyer's CRM API KEY, not an OIDC
- * user token: the caller is a machine in the Buyer's own stack (§71). They are
- * marked @Public so the global OIDC guard steps aside, and the key is verified
- * inside the handler instead.
+ * The lead endpoints are authenticated by the Buyer's CRM API KEY, not a
+ * user's sign-in token: the caller is a machine in the Buyer's own stack (§71).
+ * They are marked @Public so the global auth guard steps aside, and the key is
+ * verified inside the handler instead.
  */
 import { Body, Controller, Headers, HttpCode, Inject, Param, Post } from '@nestjs/common';
 import { OolixError } from '@oolix/contracts';

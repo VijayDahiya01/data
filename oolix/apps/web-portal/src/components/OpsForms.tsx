@@ -44,7 +44,17 @@ export function InviteMemberForm() {
     <ActionForm action={inviteMember}>
       {(state: ActionState) => (
         <>
+          {state.ok ? (
+            <div className="notice" role="status">
+              Invitation emailed. The link inside lasts 7 days.
+            </div>
+          ) : null}
           <div className="field-row">
+            <div className="field">
+              <label htmlFor="invite_name">Their name</label>
+              <input id="invite_name" name="name" required minLength={2} maxLength={200} />
+              <FieldError state={state} name="name" />
+            </div>
             <div className="field">
               <label htmlFor="invite_email">Work email</label>
               <input id="invite_email" name="email" type="email" required />

@@ -1,11 +1,12 @@
 /**
  * Identity, organizations and membership -- spec v5 §35, §36, §66.
  *
- * Authentication is the IdP's job; this module owns AUTHORIZATION FACTS: which
- * organizations exist, who belongs to them, in what role, and how far through
- * verification they are. §4.2 requires those facts to live here rather than in
- * a token claim, so an IdP misconfiguration cannot grant Oolix permissions.
+ * Authentication is the auth module's job; this module owns AUTHORIZATION
+ * FACTS: which organizations exist, who belongs to them, in what role, and how
+ * far through verification they are. §4.2 requires those facts to live here
+ * rather than in a token claim, so no signing mistake can grant permissions.
  */
+import { randomUUID } from 'node:crypto';
 import { Injectable, Inject } from '@nestjs/common';
 import { z } from 'zod';
 import {
@@ -19,6 +20,7 @@ import {
 } from '@oolix/contracts';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { AuditService } from '../../common/audit/audit.service.js';
+import { AuthService } from '../auth/auth.service.js';
 
 export const CreateOrganizationSchema = z.object({
   name: z.string().min(2).max(200),
@@ -69,6 +71,7 @@ export class IdentityOrgService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(AuthService) private readonly auth: AuthService,
   ) {}
 
   /**
@@ -145,28 +148,41 @@ export class IdentityOrgService {
   }
 
   /**
-   * Invite a member.
+   * Invite a member (§35.3).
    *
-   * The user row is created in advance keyed by email, with a placeholder
-   * auth_subject. The real subject is bound on first login, which keeps
-   * identity ownership with the IdP while letting a Partner set up its team
-   * before those people have ever signed in.
+   * The user row is created in advance, keyed by email and with no password,
+   * so a Partner can set up its team before those people have ever signed in.
+   * The invitation email carries a one-time link: someone new chooses a
+   * password there, and someone who already has an account simply joins.
+   *
+   * Re-inviting someone who is already an ACTIVE member changes nothing. It
+   * used to reset them to INVITED, which locked them out of the organization
+   * until they accepted all over again.
    */
   async inviteMember(orgId: string, actorUserId: string, input: InviteMemberInput) {
     const org = await this.prisma.organization.findUnique({ where: { id: orgId } });
     if (!org) throw new OolixError('PART_001', 'Organization not found.');
 
+    const address = input.email.toLowerCase();
+    const id = randomUUID();
     const user = await this.prisma.user.upsert({
-      where: { email: input.email.toLowerCase() },
+      where: { email: address },
       create: {
-        email: input.email.toLowerCase(),
+        id,
+        email: address,
         name: input.name,
-        // Replaced with the real OIDC subject at first login.
-        authSubject: `pending:${input.email.toLowerCase()}`,
+        authSubject: `local:${id}`,
         status: 'PENDING_EMAIL_VERIFICATION',
       },
       update: {},
     });
+
+    const current = await this.prisma.organizationMember.findUnique({
+      where: { orgId_userId_role: { orgId, userId: user.id, role: input.role as never } },
+    });
+    if (current?.status === 'ACTIVE') {
+      return { user_id: user.id, role: current.role, status: current.status };
+    }
 
     const membership = await this.prisma.organizationMember.upsert({
       where: {
@@ -190,6 +206,14 @@ export class IdentityOrgService {
       // §78.1: the invited address is PII and is not written to the audit log.
       metadata: { role: input.role },
     });
+
+    // The membership is saved either way, so sending again simply retries.
+    if (!(await this.auth.sendInvitation(user.id, org.name))) {
+      throw new OolixError(
+        'SYS_002',
+        'The invitation was saved but could not be emailed. Try sending it again in a moment.',
+      );
+    }
 
     return {
       user_id: user.id,
@@ -249,8 +273,12 @@ export class IdentityOrgService {
    * Everything the portal needs to render role-aware navigation (§34) in one
    * call: organizations, roles, resolved permissions, network memberships and
    * what the verification state currently permits.
+   *
+   * `activeOrgId` is null for someone who belongs to no organization yet;
+   * they get `active_organization: null` and no permissions, which is the
+   * portal's cue to send them to organization setup (§35.2).
    */
-  async meContext(userId: string, activeOrgId: string) {
+  async meContext(userId: string, activeOrgId: string | null) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -278,6 +306,17 @@ export class IdentityOrgService {
       orgs.set(m.orgId, entry);
     }
 
+    const who = { id: user.id, email: user.email, name: user.name, status: user.status };
+    if (activeOrgId === null) {
+      return {
+        user: who,
+        active_organization: null,
+        organizations: [],
+        permissions: [],
+        networks: [],
+      };
+    }
+
     const active = orgs.get(activeOrgId);
     if (!active) throw new OolixError('PERM_002', 'Not a member of the active organization.');
 
@@ -292,7 +331,7 @@ export class IdentityOrgService {
     });
 
     return {
-      user: { id: user.id, email: user.email, name: user.name, status: user.status },
+      user: who,
       active_organization: {
         ...active,
         // §66.3: what this organization may do right now.
@@ -308,37 +347,6 @@ export class IdentityOrgService {
         mode: n.network.mode,
       })),
     };
-  }
-
-  /**
-   * Bind an OIDC subject to a pre-created invited user on first login.
-   *
-   * Matching on the verified email is what turns an invitation into a real
-   * account without Oolix ever handling a credential.
-   */
-  async linkAuthSubject(email: string, authSubject: string, name?: string) {
-    const user = await this.prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-    if (!user) return null;
-    if (user.authSubject === authSubject) return user;
-    if (!user.authSubject.startsWith('pending:')) {
-      throw new OolixError('AUTH_001', 'This email is already bound to a different identity.');
-    }
-
-    const updated = await this.prisma.user.update({
-      where: { id: user.id },
-      data: {
-        authSubject,
-        status: 'ACTIVE',
-        ...(name ? { name } : {}),
-      },
-    });
-
-    await this.prisma.organizationMember.updateMany({
-      where: { userId: user.id, status: 'INVITED' },
-      data: { status: 'ACTIVE' },
-    });
-
-    return updated;
   }
 
   // --- platform administration (§35.2, §66, §98.1) --------------------------

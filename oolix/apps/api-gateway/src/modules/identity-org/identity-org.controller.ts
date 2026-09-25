@@ -2,8 +2,8 @@
  * Identity and organization endpoints -- spec v5 §52.1, §67.
  */
 import { Body, Controller, Delete, Get, Inject, Param, Post } from '@nestjs/common';
-import type { UserPrincipal } from '@oolix/auth-rbac';
-import { RequirePermissions } from '../../common/auth/auth.guard.js';
+import type { OnboardingPrincipal, UserPrincipal } from '@oolix/auth-rbac';
+import { AllowWithoutOrganization, RequirePermissions } from '../../common/auth/auth.guard.js';
 import { Principal } from '../../common/auth/principal.decorator.js';
 import { ZodValidationPipe } from '../../common/validation/zod.pipe.js';
 import {
@@ -21,10 +21,15 @@ export class IdentityOrgController {
   /**
    * Everything the portal needs to render role-aware navigation (§34) in one
    * call, so the frontend never infers permissions from a role name.
+   *
+   * Also answers someone who belongs to no organization yet, with
+   * `active_organization: null`, which is how the portal knows to send them to
+   * organization setup.
    */
   @Get('me/context')
-  async meContext(@Principal() p: UserPrincipal) {
-    return this.identity.meContext(p.userId, p.orgId);
+  @AllowWithoutOrganization()
+  async meContext(@Principal() p: UserPrincipal | OnboardingPrincipal) {
+    return this.identity.meContext(p.userId, p.kind === 'user' ? p.orgId : null);
   }
 
   /**
@@ -32,10 +37,13 @@ export class IdentityOrgController {
    *
    * Requires no permission: an authenticated user with no organization yet is
    * exactly who calls this (§35.2). Authorization begins once they have one.
+   * Until 2026-09-24 the guard refused anyone without an organization, so
+   * this route could not be reached by the very person it was written for.
    */
   @Post('organizations')
+  @AllowWithoutOrganization()
   async createOrganization(
-    @Principal() p: UserPrincipal,
+    @Principal() p: UserPrincipal | OnboardingPrincipal,
     @Body(new ZodValidationPipe(CreateOrganizationSchema)) body: CreateOrganizationInput,
   ) {
     return this.identity.createOrganization(p.userId, body);

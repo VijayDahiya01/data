@@ -89,8 +89,9 @@ brands:
 # split deliberately: PARTNER_SECURITY_ADMIN mints Agent bootstrap tokens while
 # PARTNER_ADMIN handles commercial terms, and neither can do the other's job.
 #
-# `auth_subject` starts as `pending:<email>` and binds to the real OIDC subject
-# on first login, so recreating the local Keycloak realm does not orphan a row.
+# Every seeded account signs in with the password `password` -- local and CI
+# databases only; the seed refuses production and demands its own password for
+# staging.
 # -----------------------------------------------------------------------------
 users:
   - id: aaaaaaaa-0001-4001-8001-000000000001

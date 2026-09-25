@@ -7,23 +7,24 @@ One EC2 instance in **Mumbai** runs everything Oolix operates, and the database 
 free plan. Your laptop needs nothing installed beyond a browser and `ssh`, which Windows already
 has.
 
-This is **Oolix's side** of the Data Partner boundary only: the portal, the API, the worker and
-sign-in. Each Data Partner runs its own Agent inside its own infrastructure — that is
+This is **Oolix's side** of the Data Partner boundary only: the portal, the API and the worker.
+Each Data Partner runs its own Agent inside its own infrastructure — that is
 `docs/DEPLOY-PARTNER-AGENT.md`, and it comes after this.
 
 For a paying client, the box at the end of §G swaps Neon for RDS in Mumbai.
 
 ## What you will have at the end
 
-| Address                    | What it is                                    |
-| -------------------------- | --------------------------------------------- |
-| `https://app.<your-host>`  | The portal. Every persona signs in here       |
-| `https://api.<your-host>`  | The API. Partner Agents call it               |
-| `https://auth.<your-host>` | Sign-in, including the authenticator-app step |
+| Address                   | What it is                                                   |
+| ------------------------- | ------------------------------------------------------------ |
+| `https://app.<your-host>` | The portal. Every persona signs up and signs in here         |
+| `https://api.<your-host>` | The API. Partner Agents call it                              |
 
-The instance runs these as Docker containers: `caddy` (HTTPS), `portal`, `api`, `worker`,
-`keycloak` (sign-in), `redis`, `backup`, and `prometheus` and `alertmanager` for alerts. Only
-Caddy can be reached from outside.
+The instance runs these as Docker containers: `caddy` (HTTPS), `portal`, `api`, `worker`, `redis`,
+`backup`, and `prometheus` and `alertmanager` for alerts. Only Caddy can be reached from outside.
+
+Oolix handles sign-up and sign-in itself: passwords are checked by the API, and confirmation,
+invitation and password-reset emails go out through **Brevo** (§I).
 
 ## Four things worth knowing first
 
@@ -34,15 +35,15 @@ Caddy can be reached from outside.
 | **Containers cannot reach the instance's AWS role by default** | EC2's metadata service allows one network hop and Docker adds a second, so creative uploads to S3 fail with a credentials error that names no cause. §D sets the hop limit to 2 |
 | **Public IPv4 is billed** | About **$3.60/month** per address, even while attached to a running instance |
 
-Two things you do **not** need. **An email service:** Oolix sends no email — an admin creates each
-account with a temporary password, and the second factor is an authenticator app. **Certificate
-tooling:** Caddy gets and renews Let's Encrypt certificates by itself.
+**You need an email-sending account** — Brevo's free plan (300 emails a day) is plenty; §I sets it
+up. Without it nobody can confirm an address, accept an invitation or reset a password, so the API
+refuses to start. **You do not need certificate tooling:** Caddy gets and renews Let's Encrypt
+certificates by itself.
 
-> **Demo or pilot? Read this first.** Oolix cannot yet create the _first_ administrator in an
-> empty database: signing in needs an existing Oolix account, and accounts are created by
-> inviting from an existing organisation. For a **demo**, §11 loads the synthetic demo
-> organisations — the ones the test suite uses — and the question never comes up. A **real
-> pilot** with real companies needs a first-administrator step that does not exist yet.
+> **Demo or pilot?** For a **demo**, §11 loads synthetic demo organisations — the ones the test
+> suite uses — with accounts ready to sign in. For a **real pilot**, §12 creates the first Oolix
+> administrator, who is emailed an invitation; everyone else then signs up at
+> `https://app.<your-host>/signup`, or is invited by their organisation's admin.
 
 ---
 
@@ -102,7 +103,7 @@ The instance reaches S3 with a role instead of access keys pasted into a file.
 
 2. **IAM → Roles → Create role.** Trusted entity **AWS service**, use case **EC2**, **Next**.
    Tick `oolix-s3` **and** `AmazonSSMManagedInstanceCore` — the second lets you open a terminal
-   through Session Manager (§I) with no SSH port at all. **Next**, name it `oolix-app-role`,
+   through Session Manager (§J) with no SSH port at all. **Next**, name it `oolix-app-role`,
    **Create role**.
 
 ### D. Launch the instance
@@ -137,9 +138,9 @@ The instance reaches S3 with a role instead of access keys pasted into a file.
 **EC2 → Elastic IPs → select yours → Actions → Associate Elastic IP address.** Resource type
 **Instance**, pick `oolix`, **Associate**.
 
-### F. DNS — three names
+### F. DNS — two names
 
-Oolix needs three names — `api.`, `app.` and `auth.` — all pointing at the Elastic IP.
+Oolix needs two names — `api.` and `app.` — both pointing at the Elastic IP.
 
 **No domain? Use sslip.io.** It turns any name containing an IP address into that address, with
 nothing to register. Write your Elastic IP with dashes:
@@ -147,11 +148,10 @@ nothing to register. Write your Elastic IP with dashes:
 ```text
 api.13-233-10-20.sslip.io
 app.13-233-10-20.sslip.io
-auth.13-233-10-20.sslip.io
 ```
 
-**Own a domain?** Create three **A** records — `api`, `app` and `auth` — pointing at the Elastic
-IP, and use those names wherever this guide shows `sslip.io` ones.
+**Own a domain?** Create two **A** records — `api` and `app` — pointing at the Elastic IP, and use
+those names wherever this guide shows `sslip.io` ones.
 
 Check from your laptop before going on — certificates cannot be issued until these resolve:
 
@@ -199,11 +199,10 @@ Puts the data in India and removes Neon's monthly limit, for roughly **$25/month
 2. **RDS → Create database → Standard create → PostgreSQL 16**: template **Dev/Test**,
    `db.t4g.small`, 20 GiB gp3, **Public access: No**, security group `oolix-data`, initial
    database name `oolix`, backups 7 days. About 10 minutes; copy the **Endpoint**.
-3. In §4, create only `keycloak`, connecting to `oolix`:
-   `psql "postgresql://USER:PASS@ENDPOINT:5432/oolix?sslmode=require" -c 'CREATE DATABASE keycloak;'`
-4. In §6, use `ENDPOINT:5432` wherever this guide says `HOST`.
+3. Skip §4 — RDS already created the `oolix` database. In §6, use `ENDPOINT:5432` wherever this
+   guide says `HOST`.
 
-To move an existing Neon deployment across, dump and restore both databases, then update
+To move an existing Neon deployment across, dump and restore the database, then update
 `.env.prod`:
 
 ```sh
@@ -230,7 +229,26 @@ needs no account:
 Your alert address is `https://ntfy.sh/oolix-alerts-7f3k9q2m`. Slack's plain incoming webhook does
 **not** work: Alertmanager sends its own format, which Slack rejects.
 
-### I. Open a terminal on the instance
+### I. Email — Brevo
+
+Sign-up confirmations, invitations and password resets are emailed. Oolix sends them through
+Brevo's API over HTTPS, so there is no mail port to open. **Do this early:** Brevo sometimes
+reviews a new account before it may send.
+
+1. **brevo.com → Sign up free.** Complete the profile it asks for.
+2. **The sender.** Account menu (top right) → **Senders, Domains & Dedicated IPs → Senders → Add a
+   sender**: a name such as `Oolix` and an address you can read. Brevo emails that address a code
+   — enter it to verify.
+3. **The API key.** Account menu → **SMTP & API → API Keys → Generate a new API key**, name it
+   `oolix`, and copy it. It starts with **`xkeysib-`** and is shown once. The **SMTP** tab offers a
+   key starting `xsmtpsib-` — that one does **not** work here.
+
+**Own a domain?** Also verify it under **Domains → Add a domain**, add the DNS records Brevo shows
+you (its code, DKIM and DMARC), and send from an address on it. Mail "from" a Gmail or Yahoo
+address that Brevo delivers fails those providers' checks and tends to land in spam — acceptable
+for a demo if you warn people to look there, not for a pilot.
+
+### J. Open a terminal on the instance
 
 **Session Manager — recommended.** A terminal in the browser that needs no inbound port at all,
 so SSH can eventually be closed entirely.
@@ -326,19 +344,18 @@ df -h /mnt/oolix-backups          # the Filesystem column must say s3fs
 If it says `/dev/root`, the mount failed and backups would quietly land on the instance's own
 disk. The usual cause is the role from §C not being attached to the instance.
 
-## 4. Create the databases
+## 4. Create the database
 
-Neon starts you with a database called `neondb`, which Oolix does not use. Create the two it does
-— one for Oolix, one for sign-in — with **ROLE**, **PASS** and **HOST** from §G:
+Neon starts you with a database called `neondb`. Create the one Oolix uses, with **ROLE**,
+**PASS** and **HOST** from §G:
 
 ```sh
-psql "postgresql://ROLE:PASS@HOST/neondb?sslmode=require" \
-  -c 'CREATE DATABASE oolix;' -c 'CREATE DATABASE keycloak;'
+psql "postgresql://ROLE:PASS@HOST/neondb?sslmode=require" -c 'CREATE DATABASE oolix;'
 psql "postgresql://ROLE:PASS@HOST/oolix?sslmode=require" -c 'SHOW server_version;'
 ```
 
-Expect `CREATE DATABASE` twice, then a version starting with **16**. If it is 17 or 18, create a
-new Neon project on 16 now — §G says why.
+Expect `CREATE DATABASE`, then a version starting with **16**. If it is 17 or 18, create a new
+Neon project on 16 now — §G says why.
 
 ## 5. Get the code
 
@@ -356,12 +373,12 @@ The repository is public, so no credentials are needed.
 cp .env.prod.example .env.prod
 chmod 600 .env.prod
 sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$(git rev-parse --short HEAD)/" .env.prod
-for i in 1 2 3; do openssl rand -base64 32; done
+openssl rand -base64 32
 nano .env.prod
 ```
 
-The `sed` line stamps the version you cloned. The `for` line prints three random strings — your
-three secrets. In `nano`, move with the arrow keys; **Ctrl+O** then **Enter** saves; **Ctrl+X**
+The `sed` line stamps the version you cloned. `openssl` prints a random string — the portal's
+session secret. In `nano`, move with the arrow keys; **Ctrl+O** then **Enter** saves; **Ctrl+X**
 exits.
 
 Find each of these lines in the file and fill it in. Leave every other line as it is:
@@ -369,27 +386,24 @@ Find each of these lines in the file and fill it in. Leave every other line as i
 ```ini
 # The database -- ROLE, PASS and HOST from §G
 DATABASE_URL=postgresql://ROLE:PASS@HOST/oolix?sslmode=require
-KEYCLOAK_JDBC_URL=jdbc:postgresql://HOST/keycloak?sslmode=require
-KEYCLOAK_DB_USER=ROLE
-KEYCLOAK_DB_PASSWORD=PASS
 POSTGRES_USER=ROLE
 POSTGRES_PASSWORD=PASS
 POSTGRES_HOST=HOST
 POSTGRES_DB=oolix
 
-# The three random strings
-KEYCLOAK_ADMIN_PASSWORD=<first>
-OIDC_CLIENT_SECRET=<second>
-PORTAL_SESSION_SECRET=<third>
+# Email -- §I
+BREVO_API_KEY=xkeysib-...
+EMAIL_FROM=Oolix <the-address-you-verified@example.com>
+
+# The random string
+PORTAL_SESSION_SECRET=<the openssl output>
 
 # Addresses -- §F, with your Elastic IP
 TLS_MODE=you@yourcompany.com
 API_HOST=api.13-233-10-20.sslip.io
 APP_HOST=app.13-233-10-20.sslip.io
-AUTH_HOST=auth.13-233-10-20.sslip.io
 API_PUBLIC_URL=https://api.13-233-10-20.sslip.io
 WEB_PUBLIC_URL=https://app.13-233-10-20.sslip.io
-KEYCLOAK_PUBLIC_URL=https://auth.13-233-10-20.sslip.io
 
 # Storage -- §B and §3
 AWS_REGION=ap-south-1
@@ -404,11 +418,12 @@ ALERT_WEBHOOK_ONCALL=https://ntfy.sh/oolix-alerts-7f3k9q2m
 
 - **Leave empty:** `REDIS_URL` (Redis runs in the stack), and `AWS_ENDPOINT_URL`,
   `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (the role from §C provides access).
-- **The same ROLE and PASS three times is correct.** Keycloak and the backup job log in as the same
-  database user.
+- **ROLE and PASS appear twice, and that is correct:** once for the API and once for the backup job.
+- **`EMAIL_FROM` must be the sender Brevo verified in §I,** written as `Name <address>`. Any other
+  address is refused by Brevo, and sign-up then looks fine while no email ever arrives.
 - **`TLS_MODE` is an email address,** for Let's Encrypt's certificate notices.
-- **The three URLs must match §F exactly.** Sign-in compares them as text, and a mismatch makes
-  every request fail as an invalid token while everything looks fine.
+- **The hosts and URLs must match §F exactly.** Email links are built from `WEB_PUBLIC_URL`, so a
+  typo there sends every confirmation link somewhere that does not exist.
 - **Never put a comment after a value on the same line** — it becomes part of the value.
 
 ## 7. The safety check
@@ -417,11 +432,13 @@ ALERT_WEBHOOK_ONCALL=https://ntfy.sh/oolix-alerts-7f3k9q2m
 docker run --rm -v "$PWD:/w" -w /w node:24-alpine node scripts/preflight.mjs --env-file .env.prod
 ```
 
-It refuses placeholder or reused secrets, the development accounts, anything but
-`APP_ENV=production`, non-HTTPS addresses, a moving version tag, placeholder alert addresses and
-backups that stay on this disk. **Fix every `FAIL` line and run it again** — each names the
-setting, and each exists because that mistake is silent in production. `WARN` lines are advice;
-the one about rehearsing a restore stays until you have done one.
+It refuses placeholder or reused secrets, anything but `APP_ENV=production`, an email setup that
+cannot deliver (including an SMTP key where the API key belongs), non-HTTPS or mismatched
+addresses, a moving version tag, placeholder alert addresses and backups that stay on this disk.
+**Fix every `FAIL` line and run it again** — each names the setting, and each exists because that
+mistake is silent in production. `WARN` lines are advice: the one about rehearsing a restore stays
+until you have done one, and a Gmail sender earns one too (§I). Once you have read them, add
+`--warnings-ok`.
 
 ## 8. Build and start
 
@@ -429,16 +446,17 @@ the one about rehearsing a restore stays until you have done one.
 COMPOSE="-f oolix/infra/docker/compose.prod.yml -f oolix/infra/docker/compose.managed-postgres.yml --env-file .env.prod"
 
 docker compose $COMPOSE build                              # 10-15 minutes the first time
-docker compose $COMPOSE --profile init run --rm keys       # ONCE, first deployment only
+docker compose $COMPOSE --profile init run --rm keys       # first deployment, and see §13
 docker compose $COMPOSE --profile monitoring up -d
 docker compose $COMPOSE --profile monitoring ps
 ```
 
-The `keys` step creates the signing keys and prints `manifest key ready: …` and
-`agent-token key ready: …`. Run again later, it reports the existing keys and changes nothing.
+The `keys` step creates the signing keys and prints `manifest key ready: …`, `agent-token key
+ready: …` and `user-session key ready: …` — the last one signs everybody's sign-ins. Run again
+later, it reports the existing keys and changes nothing.
 
-`ps` should list `caddy`, `api`, `portal`, `worker`, `keycloak`, `redis`, `backup`, `prometheus`
-and `alertmanager`, all **Up**; `api` and `portal` add **(healthy)** after a minute. The database
+`ps` should list `caddy`, `api`, `portal`, `worker`, `redis`, `backup`, `prometheus` and
+`alertmanager`, all **Up**; `api` and `portal` add **(healthy)** after a minute. The database
 migrations run by themselves before the API starts.
 
 > `COMPOSE=…` lasts only as long as this terminal. After reconnecting, paste that line again
@@ -453,25 +471,28 @@ H=13-233-10-20.sslip.io            # or your own domain
 curl -s https://api.$H/healthz; echo
 curl -s https://api.$H/readyz; echo
 curl -sI https://app.$H/login | head -1
-curl -s https://auth.$H/realms/oolix/.well-known/openid-configuration | head -c 80; echo
 ```
 
 ```text
 {"status":"ok","contract_version":"…"}
 {"status":"ready","checks":{"database":true},"contract_version":"…","environment":"production"}
 HTTP/2 200
-{"issuer":"https://auth.13-233-10-20.sslip.io/realms/oolix",…
 ```
 
 `"environment":"production"` confirms the production protections are on. The API's log also shows
 `SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for
 'verify-full'` once at start — harmless: it means the database certificate **is** verified.
 
+**Prove email works:** sign up at `https://app.13-233-10-20.sslip.io/signup` with an address you
+can read. The confirmation email should arrive within a minute — check spam. If it does not, see
+_No email arrives_ at the end.
+
 ## 10. Back up the signing keys — now
 
 The API signs every instruction it sends a Partner Agent with a key that lives on this instance's
 disk. Lose it and every Agent rejects everything until each Partner registers again; leak it and
-someone can forge instructions an Agent trusts. A database backup does not contain it.
+someone can forge instructions an Agent trusts, or sign themselves in as anyone. A database backup
+does not contain it.
 
 ```sh
 docker run --rm -v oolix-prod_api-keys:/k -v /mnt/oolix-backups:/b alpine \
@@ -479,21 +500,25 @@ docker run --rm -v oolix-prod_api-keys:/k -v /mnt/oolix-backups:/b alpine \
 ls -l /mnt/oolix-backups
 ```
 
-The `backup` container repeats this every 24 hours, together with both databases.
+The `backup` container repeats this every 24 hours, together with the database.
 
 ## 11. Demo accounts
 
-### Load the demo organisations
-
 This fills the empty database with the synthetic demo world — the same organisations the test
-suite uses, already business-verified. The seeding tools run in a throwaway Node container, about
-5 minutes:
+suite uses, already business-verified — and gives every account one password you choose. The
+seeding tools run in a throwaway Node container, about 5 minutes:
 
 ```sh
+read -rsp 'Password for the demo accounts: ' SEED_PW; echo
 docker run --rm -v "$PWD:/w" -w /w \
   -e DATABASE_URL="$(grep '^DATABASE_URL=' .env.prod | cut -d= -f2-)" \
-  node:24.19.0-alpine sh -c 'corepack enable && pnpm install --frozen-lockfile && pnpm db:seed --env=staging'
+  -e SEED_USER_PASSWORD="$SEED_PW" \
+  node:24.19.0-alpine sh -c 'corepack enable && pnpm install --frozen-lockfile && pnpm --filter "@oolix/auth-rbac..." build && pnpm db:seed --env=staging'
 ```
+
+The password is typed invisibly. It must pass the same rules as anyone's: at least 12 characters,
+not a common or leaked one — three or four unrelated words work well. Anyone who has it can sign in
+as every demo account, so share it only with the people presenting.
 
 | Organisation              | Type            | Accounts, all `@example.test`                                                    |
 | ------------------------- | --------------- | -------------------------------------------------------------------------------- |
@@ -504,7 +529,16 @@ docker run --rm -v "$PWD:/w" -w /w \
 | Oolix Platform Operations | Oolix           | `oolix.admin`                                                                    |
 
 Plus **`demo@example.test`**: one login holding every persona across four organisations, switched
-from the sidebar.
+from the sidebar. Sign in at `https://app.13-233-10-20.sslip.io` with any of them and that
+password.
+
+**To show an approval, use two people.** Nobody may approve a request they created, even holding
+both roles — so use, for example, `buyer.admin@example.test` to request and
+`partner.approver@example.test` to approve.
+
+**To show sign-up,** sign up at `/signup` with a real address, confirm it from the email, sign in
+and create an organisation. It waits for business verification, which `demo@example.test` grants
+from **Admin → Organisations**.
 
 The install leaves a `node_modules` folder in `/srv/oolix`; nothing else uses it, and
 `sudo find /srv/oolix -name node_modules -type d -prune -exec rm -rf {} +` removes it.
@@ -512,60 +546,58 @@ The install leaves a `node_modules` folder in `/srv/oolix`; nothing else uses it
 > **Demo only.** These organisations are fake and now live in your real database. Before a real
 > pilot, start again from a new Neon project.
 
-### Create sign-ins for the accounts you will use
+## 12. The first administrator (a real pilot)
 
-The seed created the Oolix side of each account; Keycloak holds the passwords. For each person you
-will sign in as — at least `demo@example.test`:
+A real database starts with nobody in it, and new organisations wait for an Oolix administrator to
+verify them. Create that administrator once:
 
-1. Open `https://auth.13-233-10-20.sslip.io/admin` and sign in as `admin` with your
-   `KEYCLOAK_ADMIN_PASSWORD`.
-2. Top-left realm menu → choose **oolix** (not _master_).
-3. **Users → Create new user.** Username and Email both `demo@example.test`, **Email verified:
-   On**, a first name → **Create**.
-4. **Credentials → Set password.** At least 12 characters with an upper-case letter, a lower-case
-   letter and a digit; **Temporary: On** → **Save**.
+```sh
+docker compose $COMPOSE run --rm api node dist/cli/create-admin.js \
+  --email you@yourcompany.com --name "Your Name"
+```
 
-**Email verified must be On.** Oolix connects a new sign-in to its account by verified email; with
-it Off, sign-in succeeds and then everything answers `AUTH_001` — which looks like a bug and is
-not.
+It creates the _Oolix Platform Operations_ organisation, makes that person its administrator and
+emails them an invitation. Opening the link sets their password and signs them in. The command
+refuses once an administrator exists — the next ones are invited from the portal's **Team** page.
+If the email went astray, running it again for the same address sends a fresh link.
 
-**To show an approval, create a second person.** Nobody may approve a request they created, even
-holding both roles — so use, for example, `buyer.admin@example.test` to request and
-`partner.approver@example.test` to approve.
-
-### First sign-in
-
-Open `https://app.13-233-10-20.sslip.io`, **Continue to sign in**, and use the email and temporary
-password. Keycloak asks for a new password, then shows a QR code: scan it with an authenticator
-app (Google Authenticator or Microsoft Authenticator) and type the 6-digit code.
-
-Every account does this once; after that each sign-in asks for a code from the app, so **bring the
-phone to the demo**. When the portal shows the organisation's data, sign-in, the second factor and
-the database are all working end to end.
-
-## 12. On the day of the demo
+## 13. On the day of the demo
 
 - `curl -s https://api.$H/readyz` answers `"status":"ready"`.
-- Sign in once as each demo account.
+- Sign in once as each demo account you will use.
+- If you will show sign-up, do one the day before, to a real inbox, and note whether it lands in
+  spam.
 - No warm-up is needed. Unlike most apps on Neon, Oolix never lets the database sleep — which is
   also why the free allowance runs out.
 - Showing an ad being served needs a Partner Agent running — `docs/DEPLOY-PARTNER-AGENT.md`.
 
-## 13. Updating to a newer version
+## 14. Updating to a newer version
 
 ```sh
 cd /srv/oolix && git pull
 sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$(git rev-parse --short HEAD)/" .env.prod
 COMPOSE="-f oolix/infra/docker/compose.prod.yml -f oolix/infra/docker/compose.managed-postgres.yml --env-file .env.prod"
-docker compose $COMPOSE build && docker compose $COMPOSE --profile monitoring up -d
+docker compose $COMPOSE build
+docker compose $COMPOSE --profile init run --rm keys
+docker compose $COMPOSE --profile monitoring up -d
 ```
 
-Migrations run by themselves and must succeed before the apps restart. **Going back** is
-`git checkout <previous-commit>` and the same last three lines — but only if the newer version did
-not change the database. If it did, the way back is a restore: `docs/BACKUP-AND-ROLLBACK.md`.
-Run `git checkout main` before the next `git pull`.
+The `keys` line adds any signing key a newer version needs and leaves existing ones alone; without
+it, a version that introduces one refuses to start rather than invent a key. Migrations run by
+themselves and must succeed before the apps restart.
 
-## 14. Costs
+**Going back** is `git checkout <previous-commit>` and the same build and `up` lines — but only if
+the newer version did not change the database. If it did, the way back is a restore:
+`docs/BACKUP-AND-ROLLBACK.md`. Run `git checkout main` before the next `git pull`.
+
+**Deployed before sign-in moved into Oolix (24 September 2026)?** After updating: run preflight
+(§7) — it names the Keycloak settings to delete from `.env.prod` and the email settings to add
+(§I) — then the `keys` line, which creates the sign-in key. The old Keycloak containers keep
+running until `docker compose $COMPOSE up -d --remove-orphans`, and its `keycloak` database can be
+dropped once you no longer need a way back. Accounts carry over, but nobody has an Oolix password
+yet: each person uses **Forgot your password?** on the sign-in page once.
+
+## 15. Costs
 
 | Item                                      | Approx / month |
 | ----------------------------------------- | -------------: |
@@ -574,6 +606,7 @@ Run `git checkout main` before the next `git pull`.
 | Elastic IP                                |         ~$3.60 |
 | S3, a few GB                              |            ~$1 |
 | Neon free plan                            |             $0 |
+| Brevo free plan (300 emails a day)        |             $0 |
 | **Total**                                 |       **~$73** |
 
 Verify against current AWS pricing — these move.
@@ -581,32 +614,32 @@ Verify against current AWS pricing — these move.
 **Between demos, Stop the instance — do not Terminate it.** Stopping ends the compute charge; the
 disk and the Elastic IP continue at about $7/month, and everything survives a restart.
 
-**Terminating loses more than it seems.** The databases are safe on Neon, but the **signing keys
-and certificates live on the instance's disk**. Without the §10 backup, every Partner Agent would
-have to be registered again.
+**Terminating loses more than it seems.** The database is safe on Neon, but the **signing keys and
+certificates live on the instance's disk**. Without the §10 backup, every Partner Agent would have
+to be registered again, and everybody would be signed out.
 
 ## If something is wrong
 
 | Symptom | Cause |
 | --- | --- |
 | `ssh` hangs | The security group's SSH rule no longer matches your IP — set it to My IP again |
-| `ssh` says `UNPROTECTED PRIVATE KEY FILE` | Run the two `icacls` lines in §I |
-| Browser Instance Connect fails | It needs its own SSH rule — §I |
+| `ssh` says `UNPROTECTED PRIVATE KEY FILE` | Run the two `icacls` lines in §J |
+| Browser Instance Connect fails | It needs its own SSH rule — §J |
 | SSM Agent: `unable to acquire credentials … Default Host Management …` | The instance has no role attached, or its role lacks `AmazonSSMManagedInstanceCore` (§C). The "Default Host Management" half is a fallback you are not using. Fix the role, then `sudo snap restart amazon-ssm-agent` |
 | `df` shows `/dev/root` for the backups folder | The bucket did not mount — the role from §C is not attached (§D) |
 | `psql` in §4 fails | ROLE, PASS or HOST copied wrongly — copy the string again from Neon's **Connect** |
 | A `FAIL` line in §7 | Fix what it names; each line says which setting |
 | Build stops with `Killed`, or no error at all | Out of memory — the swap in §2, and `t3.large` |
 | `migrate` exits with an error though the database is reachable | HOST contains `-pooler` — §G |
-| Keycloak restarts again and again | `KEYCLOAK_JDBC_URL` must start with `jdbc:postgresql://`, or the `keycloak` database from §4 is missing |
-| Keycloak log: `Endpoint ID is not specified` | Append `&options=endpoint%3D<endpoint-id>` — the `ep-…` part of HOST — to `KEYCLOAK_JDBC_URL` |
+| `api` restarts again and again | `docker compose $COMPOSE logs api` names the cause. `No user-session signing key`: run the `keys` step (§8). `EMAIL_FROM` or `BREVO_API_KEY`: §I and §6 |
 | The browser warns about the certificate, or it never issues | DNS does not point at the Elastic IP yet (§F), or port 80 is closed |
 | `/readyz` says `not_ready` | The API cannot reach the database — check `DATABASE_URL`, then `docker compose $COMPOSE logs api` |
-| Signed in, then `AUTH_001` everywhere | **Email verified** was Off, or the email is not a seeded account — §11 |
-| Every request fails as an invalid token, nothing obvious | The three URLs in `.env.prod` do not match the DNS names exactly |
+| No email arrives | Check spam first. Then `docker compose $COMPOSE logs api \| grep email_send_failed` — status 401 is a wrong key or an SMTP key (§I), 400 usually a sender Brevo has not verified. Nothing logged for a password reset: no account uses that address — the page answers the same either way, on purpose |
+| "The email or password is incorrect" for a demo account | The password is the one typed in §11. Ten wrong tries lock an account for 15 minutes |
+| "Confirm your email address first" | That account signed up but never opened the confirmation link — the page offers to send a new one |
+| Signed out right after changing `API_PUBLIC_URL` | Expected: sign-ins are tied to the API's address. Sign in again |
 | Creative upload fails with a credentials error | The metadata hop limit is 1 — §D |
 | Backup log says `server version mismatch` | The Neon project is not on Postgres 16 — §G |
 | Everything worked for about two weeks, then stopped | Neon's free compute for the month is used up — see the top |
 
-Logs for any container: `docker compose $COMPOSE logs -f api` (or `portal`, `keycloak`, `worker`,
-`caddy`).
+Logs for any container: `docker compose $COMPOSE logs -f api` (or `portal`, `worker`, `caddy`).

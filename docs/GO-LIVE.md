@@ -41,8 +41,8 @@ hosting decision is made, and it is a prerequisite for most of the rest of this
 section.
 
 What is ready for it: `docker-compose.yml` defines the full dependency set
-(PostgreSQL 16, Redis 7, LocalStack for S3/SQS, Keycloak 26.5, and a separate
-Partner-side PostgreSQL), and `.env.example` enumerates every variable the
+(PostgreSQL 16, Redis 7, LocalStack for S3/SQS, and a separate Partner-side
+PostgreSQL), and `.env.example` enumerates every variable the
 services validate at boot (§65.1). `loadConfig()` fails closed on a missing or
 malformed value rather than starting half-configured.
 
@@ -60,7 +60,11 @@ Done:
   will accept as genuine, so this is the single most sensitive artifact in the
   repository.
 - `pnpm db:seed --env=production` refuses, verified by a test that runs the real
-  command (`oolix/packages/db/prisma/seed/seed-guard.spec.ts`).
+  command (`oolix/packages/db/prisma/seed/seed-guard.spec.ts`). Since
+  2026-09-24 seeded accounts live in the Oolix database itself, and the same
+  test proves `--env=staging` refuses to run without a `SEED_USER_PASSWORD`
+  that passes the sign-up password policy — the development `password` never
+  leaves local and CI databases.
 - No credential appears in the implementation pack; `pnpm verify:pack` scans for
   private keys and AWS key ids on every CI run.
 - The Kubernetes starter uses `REPLACE_ME` placeholders and reads the connector
@@ -73,8 +77,9 @@ Open:
   (AWS Secrets Manager, Vault) has not been wired in, because which one depends
   on the hosting decision above.
 
-**Corrected 2026-09-09.** This item previously read as though "no dev IdP users
-in production" was handled. It was not. `oolix/infra/keycloak/oolix-realm.json` is
+**Corrected 2026-09-09** (history: the realm, its renderer and its tests were
+removed with Keycloak on 2026-09-24). This item previously read as though "no
+dev IdP users in production" was handled. It was not. `oolix/infra/keycloak/oolix-realm.json` is
 imported into production unchanged and shipped **thirteen development
 identities with the password `password`**, one of which (`demo@example.test`)
 holds OOLIX_ADMIN plus every Partner role — alongside a literal OIDC client
@@ -93,19 +98,32 @@ Key **rotation** is done and exercised: `pnpm keys:list`, `keys:rotate`,
 `keys:retire`.
 
 `pnpm preflight --env-file .env.prod` refuses a deployment carrying placeholder
-or reused secrets, seeded identities, or the password grant.
+or reused secrets, or an email setup that cannot deliver.
 
 ### 🟡 OIDC/MFA/RBAC and organization isolation penetration-tested at least at application level
+
+**Changed 2026-09-24: there is no OIDC provider and no MFA any more.** Sign-in
+moved from Keycloak into Oolix, with no second factor, before the first demo.
+That is a knowing deviation from §4.2, §64 and §82, recorded with its
+compensating controls in `docs/SECURITY-REVIEW.md`. The MFA bullet and the
+2026-09-22 correction below describe the Keycloak era; before a pilot carries a
+real Partner's approvals, a second factor has to come back and the in-house
+sign-in has to be tested by someone independent.
 
 Done, and continuously re-verified:
 
 - Authentication is a **global** guard with `@Public()` opt-out, so a forgotten
   decorator fails closed rather than open.
 - Roles are read from the database for the active organization, never from a
-  token claim (§4.2). An IdP misconfiguration therefore cannot become a
-  privilege escalation inside Oolix.
-- MFA is required for the roles §66 names, checked on the request path — and,
-  since 2026-09-22, actually satisfiable. See the correction below.
+  token claim (§4.2). A token carries identity only; nothing in it can grant a
+  role.
+- Sign-in is Oolix's own: scrypt password hashes, a lockout after ten
+  failures, per-address limits on every sign-in, sign-up and recovery route,
+  10-minute ES256 access tokens and rotating refresh tokens whose reuse ends
+  the session. Each forged-token case (`alg:none`, HS256 key confusion, a
+  foreign key, wrong issuer or audience, expired, tampered) is a test in
+  `oolix/packages/auth-rbac/src/user-auth.test.ts`.
+- ~~MFA is required for the roles §66 names~~ — not since 2026-09-24; see above.
 - Organization scoping is enforced server-side on every endpoint. `pnpm verify`
   asserts the negative cases directly: a Partner cannot mint a Buyer's CRM key,
   a Buyer cannot see another Buyer's campaign, and a Partner's report never
@@ -138,8 +156,9 @@ Open:
   stuffing would otherwise hit. **Confirm the edge strips it, or narrow
   `trustProxy` to the balancer's CIDR, before exposing anything publicly.**
 
-**Corrected 2026-09-22. The MFA requirement could never be met, and that
-locked six of the nine roles out of any production deployment.**
+**Corrected 2026-09-22** (history: superseded on 2026-09-24, when Keycloak and
+the MFA check were removed together). **The MFA requirement could never be met,
+and that locked six of the nine roles out of any production deployment.**
 
 `auth.guard.ts` refuses `PARTNER_ADMIN`, `PARTNER_SECURITY_ADMIN`,
 `PARTNER_CAMPAIGN_APPROVER`, `FINANCE`, `BUYER_ADMIN` and `OOLIX_ADMIN` unless

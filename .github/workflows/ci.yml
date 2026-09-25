@@ -72,9 +72,6 @@ jobs:
           # §65.1 validation runs at build time for the portal's config module.
           # Placeholders only -- nothing here is a real credential, and the
           # build makes no outbound calls.
-          OIDC_ISSUER_URL: http://localhost:8081/realms/oolix
-          OIDC_CLIENT_ID: oolix-web
-          OIDC_CLIENT_SECRET: build-time-placeholder
           PORTAL_SESSION_SECRET: build-time-placeholder-not-a-secret
           DATABASE_URL: postgresql://oolix:oolix@localhost:5432/oolix?schema=public
           REDIS_URL: redis://localhost:6379
@@ -159,11 +156,6 @@ jobs:
       AWS_ENDPOINT_URL: http://localhost:4566
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test
-      # §65.1 requires these; boot fails validation without them. No identity
-      # provider runs in CI, and none is needed: the suite asserts the
-      # REJECTION path, which never reaches the issuer.
-      OIDC_ISSUER_URL: http://localhost:8080/realms/oolix-local
-      OIDC_CLIENT_ID: oolix-web
 
     steps:
       - uses: actions/checkout@v5

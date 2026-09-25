@@ -28,6 +28,7 @@
     "pg": "8.23.0"
   },
   "devDependencies": {
+    "@oolix/auth-rbac": "workspace:*",
     "@types/node": "24.10.1",
     "@types/pg": "8.23.1",
     "dotenv": "17.4.2",

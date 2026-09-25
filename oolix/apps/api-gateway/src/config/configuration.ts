@@ -19,69 +19,115 @@ const int = (def?: number) =>
     .pipe(z.number().int())
     .default(def as number);
 
-export const ConfigSchema = z.object({
-  APP_ENV: z.enum(['local', 'test', 'dev', 'staging', 'production']).default('local'),
-  LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error', 'fatal']).default('info'),
-  LOG_FORMAT: z.enum(['json', 'pretty']).default('json'),
+export const ConfigSchema = z
+  .object({
+    APP_ENV: z.enum(['local', 'test', 'dev', 'staging', 'production']).default('local'),
+    LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error', 'fatal']).default('info'),
+    LOG_FORMAT: z.enum(['json', 'pretty']).default('json'),
 
-  API_PORT: int(4000),
-  API_PUBLIC_URL: z.string().url().default('http://localhost:4000'),
-  WEB_PUBLIC_URL: z.string().url().default('http://localhost:3000'),
+    API_PORT: int(4000),
+    API_PUBLIC_URL: z.string().url().default('http://localhost:4000'),
+    WEB_PUBLIC_URL: z.string().url().default('http://localhost:3000'),
 
-  DATABASE_URL: z.string().min(1),
-  DATABASE_POOL_SIZE: int(10),
-  REDIS_URL: z.string().min(1),
+    DATABASE_URL: z.string().min(1),
+    DATABASE_POOL_SIZE: int(10),
+    REDIS_URL: z.string().min(1),
 
-  // OIDC (§64). Identity is delegated; Oolix stores only the subject claim.
-  OIDC_ISSUER_URL: z.string().url(),
-  OIDC_CLIENT_ID: z.string().min(1),
-  OIDC_AUDIENCE: z.string().min(1).default('oolix-api'),
+    // User sign-in. Oolix checks passwords and issues its own tokens; see
+    // docs/SECURITY-REVIEW.md for the decision and what compensates for it.
+    USER_ACCESS_TOKEN_TTL_SEC: int(600),
+    /** A sign-in's absolute lifetime; refreshing never extends it. */
+    USER_SESSION_TTL_HOURS: int(8),
+    /**
+     * Refuse new passwords found in known breaches (Have I Been Pwned, by
+     * k-anonymity: only 5 hex characters of a SHA-1 ever leave the server).
+     * Fails open if the service is unreachable, and off in tests.
+     */
+    PASSWORD_BREACH_CHECK: bool.default(true),
 
-  AWS_REGION: z.string().default('ap-south-1'),
-  AWS_ENDPOINT_URL: z.string().url().optional(),
-  S3_CREATIVE_BUCKET: z.string().default('oolix-creatives-local'),
-  CDN_PUBLIC_BASE_URL: z.string().default('http://localhost:4566/oolix-creatives-local'),
-  SQS_DOMAIN_EVENTS_URL: z.string().optional(),
-  SQS_REPORTING_URL: z.string().optional(),
+    // Email: verification links, invitations and password resets.
+    //   brevo    real delivery over Brevo's HTTPS API (required outside local/test)
+    //   log      local development: the whole message, link included, is printed
+    //   capture  automated tests: kept in memory for the test to read
+    EMAIL_PROVIDER: z.enum(['brevo', 'log', 'capture']).default('log'),
+    BREVO_API_KEY: z.string().optional(),
+    EMAIL_FROM: z.string().default('Oolix <no-reply@oolix.localhost>'),
 
-  // Manifest signing (§75).
-  MANIFEST_SIGNING_KEY_ID: z.string().default('local-es256-key-1'),
-  MANIFEST_SIGNING_PRIVATE_KEY_PATH: z.string().default('./.keys/manifest-signing-local.pem'),
-  MANIFEST_JWKS_PATH: z.string().default('./.keys/manifest-jwks-local.json'),
-  MANIFEST_ISSUER: z.string().url().default('http://localhost:4000'),
-  MANIFEST_AUDIENCE: z.string().default('oolix-partner-agent'),
-  MANIFEST_CONFIG_TTL_SEC: int(900),
+    AWS_REGION: z.string().default('ap-south-1'),
+    AWS_ENDPOINT_URL: z.string().url().optional(),
+    S3_CREATIVE_BUCKET: z.string().default('oolix-creatives-local'),
+    CDN_PUBLIC_BASE_URL: z.string().default('http://localhost:4566/oolix-creatives-local'),
+    SQS_DOMAIN_EVENTS_URL: z.string().optional(),
+    SQS_REPORTING_URL: z.string().optional(),
 
-  // Agent workload auth (§92).
-  AGENT_TOKEN_ISSUER: z.string().url().default('http://localhost:4000'),
-  AGENT_TOKEN_AUDIENCE: z.string().default('oolix-agent-api'),
-  AGENT_ACCESS_TOKEN_TTL_SEC: int(900),
-  AGENT_BOOTSTRAP_TOKEN_TTL_SEC: int(900),
+    // Manifest signing (§75).
+    MANIFEST_SIGNING_KEY_ID: z.string().default('local-es256-key-1'),
+    MANIFEST_SIGNING_PRIVATE_KEY_PATH: z.string().default('./.keys/manifest-signing-local.pem'),
+    MANIFEST_JWKS_PATH: z.string().default('./.keys/manifest-jwks-local.json'),
+    MANIFEST_ISSUER: z.string().url().default('http://localhost:4000'),
+    MANIFEST_AUDIENCE: z.string().default('oolix-partner-agent'),
+    MANIFEST_CONFIG_TTL_SEC: int(900),
 
-  CLICK_TOKEN_TTL_DAYS: int(7),
+    // Agent workload auth (§92).
+    AGENT_TOKEN_ISSUER: z.string().url().default('http://localhost:4000'),
+    AGENT_TOKEN_AUDIENCE: z.string().default('oolix-agent-api'),
+    AGENT_ACCESS_TOKEN_TTL_SEC: int(900),
+    AGENT_BOOTSTRAP_TOKEN_TTL_SEC: int(900),
 
-  // Catalogue anti-differencing (§72).
-  CATALOG_MIN_REACH: int(1000),
-  CATALOG_BUCKET_PUBLICATION_INTERVAL_HOURS: int(24),
+    CLICK_TOKEN_TTL_DAYS: int(7),
 
-  CONTROL_SYNC_INTERVAL_SEC: int(30),
-  CONTROL_STALE_GRACE_SEC: int(900),
+    // Catalogue anti-differencing (§72).
+    CATALOG_MIN_REACH: int(1000),
+    CATALOG_BUCKET_PUBLICATION_INTERVAL_HOURS: int(24),
 
-  // Approval SLA (§101).
-  PARTNER_REQUEST_EXPIRY_DAYS: int(7),
-  PARTNER_REQUEST_EXTENSION_MAX_DAYS: int(7),
+    CONTROL_SYNC_INTERVAL_SEC: int(30),
+    CONTROL_STALE_GRACE_SEC: int(900),
 
-  // Reconciliation tolerance (§77.3).
-  RECONCILIATION_MIN_EVENTS: int(10),
-  RECONCILIATION_PERCENT: z
-    .union([z.number(), z.string()])
-    .transform((v) => Number(v))
-    .default(0.5),
+    // Approval SLA (§101).
+    PARTNER_REQUEST_EXPIRY_DAYS: int(7),
+    PARTNER_REQUEST_EXTENSION_MAX_DAYS: int(7),
 
-  // §15, §16, §84: external channels stay off until eligibility is proven.
-  FEATURE_META_ENABLED: bool.default(false),
-  FEATURE_GOOGLE_ENABLED: bool.default(false),
-});
+    // Reconciliation tolerance (§77.3).
+    RECONCILIATION_MIN_EVENTS: int(10),
+    RECONCILIATION_PERCENT: z
+      .union([z.number(), z.string()])
+      .transform((v) => Number(v))
+      .default(0.5),
+
+    // §15, §16, §84: external channels stay off until eligibility is proven.
+    FEATURE_META_ENABLED: bool.default(false),
+    FEATURE_GOOGLE_ENABLED: bool.default(false),
+  })
+  .superRefine((c, ctx) => {
+    // A deployment that cannot send email cannot let anyone sign up, verify an
+    // address or reset a password -- and would look healthy while doing it. So
+    // anywhere real people sign in, a real provider is required at boot.
+    const real = c.APP_ENV === 'production' || c.APP_ENV === 'staging' || c.APP_ENV === 'dev';
+    if (real && c.EMAIL_PROVIDER !== 'brevo') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['EMAIL_PROVIDER'],
+        message: `must be "brevo" when APP_ENV=${c.APP_ENV}; "log" and "capture" never deliver anything`,
+      });
+    }
+    if (c.EMAIL_PROVIDER === 'brevo' && !c.BREVO_API_KEY) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['BREVO_API_KEY'],
+        message: 'required when EMAIL_PROVIDER=brevo',
+      });
+    }
+    // The default sender is a placeholder. Brevo rejects mail from an address
+    // it has not verified, so leaving it would fail every send -- quietly,
+    // because sign-up answers the same whether or not the email went out.
+    if (real && /\.localhost\s*>?\s*$/i.test(c.EMAIL_FROM)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['EMAIL_FROM'],
+        message: 'set a sender Brevo has verified, e.g. "Oolix <no-reply@yourdomain.com>"',
+      });
+    }
+  });
 
 export type OolixConfig = z.infer<typeof ConfigSchema>;
 

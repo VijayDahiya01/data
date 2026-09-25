@@ -15,9 +15,14 @@ export async function requireContext(returnTo?: string): Promise<MeContext> {
   try {
     return await meContext();
   } catch (err) {
-    if (err instanceof NotAuthenticatedError || (err instanceof ApiError && err.isAuthFailure)) {
-      const target = returnTo ? `/login?return_to=${encodeURIComponent(returnTo)}` : '/login';
-      redirect(target);
+    const back = returnTo ? `return_to=${encodeURIComponent(returnTo)}` : '';
+    if (err instanceof NotAuthenticatedError) redirect(back ? `/login?${back}` : '/login');
+    if (err instanceof ApiError && err.isAuthFailure) {
+      // The cookie still looks current but the API has ended the sign-in:
+      // signed out on another device, password changed, account disabled.
+      // `error=session` both says so and stops the login page sending a
+      // current-looking session straight back here -- a redirect loop.
+      redirect(`/login?error=session${back ? `&${back}` : ''}`);
     }
     throw err;
   }

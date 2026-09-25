@@ -30,8 +30,11 @@ onlyBuiltDependencies:
 # @nestjs/platform-fastify and our direct `fastify` dependency resolved to two
 # different 5.x releases, which makes FastifyRequest/FastifyReply structurally
 # incompatible across the boundary. Pin one version for the whole workspace.
+# 5.12.1 rather than the 5.11.3 Nest 11.2.1 asks for: it is the first release
+# past GHSA-3m5p-2c4r-xxw2 (X-Forwarded-* spoofing -- the header the per-address
+# sign-in limits rely on) and GHSA-w2qp-rph6-63g4.
 overrides:
-  fastify: '5.11.3'
+  fastify: '5.12.1'
 
   # Security floors for transitive dependencies, raised to the first patched
   # release. Each arrives through something we do not control directly, so an

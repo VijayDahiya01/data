@@ -76,7 +76,7 @@ the shape of it faster than the spec does:
 
 ```bash
 pnpm install
-pnpm infra:up            # Postgres, Redis, LocalStack, Keycloak, Partner-side Postgres
+pnpm infra:up            # Postgres, Redis, LocalStack, Partner-side Postgres
 pnpm db:migrate
 pnpm db:seed             # §95 fixtures -- see seed-data.yaml
 pnpm dev:api             # http://localhost:4000

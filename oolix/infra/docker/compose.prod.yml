@@ -22,23 +22,16 @@
 # built by hand first. `migrate` and `keys` reuse the api image and carry no
 # build block of their own, so it is built once rather than three times.
 #
-# ── ONE THING TO SET UP FIRST ────────────────────────────────────────────────
+# ── ONE THING TO SET UP FIRST (a local drill only) ───────────────────────────
 #
 # Add this line to your hosts file (Windows:
 # C:\Windows\System32\drivers\etc\hosts, needs administrator):
 #
-#     127.0.0.1  api.oolix.localhost app.oolix.localhost auth.oolix.localhost
+#     127.0.0.1  api.oolix.localhost app.oolix.localhost
 #
-# Why: an OIDC issuer is a string, and it has to be the SAME string for the
-# browser and for the portal's server side. The browser is redirected to
-# Keycloak to sign in; the portal then exchanges the code server-side. If the
-# browser uses one name and the container another, the issuer in the token will
-# not match what the API validates against, and every request is rejected as an
-# invalid token — while everything looks correct.
-#
-# Using names that resolve in both places avoids the whole class of problem. In
-# a real deployment these are simply the public DNS names and this note stops
-# applying.
+# Browsers resolve *.localhost on their own; curl, scripts and the Partner
+# Agent do not. In a real deployment these are simply the public DNS names and
+# this note stops applying.
 #
 # Everything is served over HTTPS. With TLS_MODE=internal, Caddy issues from a
 # local certificate authority, so a browser will warn once until that CA is
@@ -64,14 +57,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-oolix}
-      KEYCLOAK_DB: ${KEYCLOAK_DB:-keycloak}
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      # Creates Keycloak's database on first initialisation. Without it
-      # Keycloak crash-loops on a missing database after everything else has
-      # come up healthy, which reads as an identity problem rather than a
-      # missing CREATE DATABASE.
-      - ./postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
       interval: 5s
@@ -89,102 +76,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
-
-  # Renders the realm import for THIS deployment's hostnames.
-  #
-  # Keycloak does not substitute environment variables inside a realm import,
-  # so a checked-in file can only ever name one environment. It refuses to
-  # start on an unsubstituted placeholder -- "Invalid client oolix-web: A
-  # redirect URI is not a valid URI" -- which at least fails loudly rather than
-  # leaving a realm whose redirect URIs silently do not match the portal.
-  # Renders the realm import for THIS deployment.
-  #
-  # Keycloak does not substitute environment variables inside a realm import,
-  # so a checked-in file can only ever describe one environment. The renderer
-  # fills in the placeholders, validates the result, and -- the part that
-  # matters -- decides whether the development identities are included at all.
-  # See oolix/infra/keycloak/render-realm.mjs.
-  realm-render:
-    image: node:22-alpine
-    restart: 'no'
-    environment:
-      WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:?set WEB_PUBLIC_URL}
-      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:?set KEYCLOAK_PUBLIC_URL}
-      # Required, with no default. The realm file used to carry a literal
-      # secret, which meant a public repository published the production one.
-      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?set OIDC_CLIENT_SECRET}
-      # "external": Keycloak tolerates the TLS terminator's plain HTTP hop but
-      # refuses an external request that is not HTTPS.
-      KC_SSL_REQUIRED: ${KC_SSL_REQUIRED:-external}
-      # §66 hands these accounts to real people at a real Partner.
-      KC_PASSWORD_POLICY: ${KC_PASSWORD_POLICY:-length(12) and notUsername and upperCase(1) and lowerCase(1) and digits(1)}
-      # The password grant bypasses the browser sign-in entirely, and with it
-      # any step-up authentication ever added.
-      KC_DIRECT_GRANTS: ${KC_DIRECT_GRANTS:-false}
-      # NOT SET, deliberately. The development identities carry the password
-      # `password`, and one of them holds OOLIX_ADMIN plus every Partner role.
-      # The renderer refuses to seed them into a realm that requires TLS, so
-      # this is belt and braces rather than the only guard.
-      KC_SEED_USERS: 'false'
-    volumes:
-      - ../keycloak:/src:ro
-      - realm-import:/out
-    command: ['node', '/src/render-realm.mjs']
-
-  keycloak:
-    image: quay.io/keycloak/keycloak:26.5
-    restart: unless-stopped
-    # `start`, not `start-dev`: production mode refuses to run with the insecure
-    # defaults that development mode tolerates, which is the point of using it
-    # here rather than discovering those differences in a pilot.
-    # `--proxy-headers=xforwarded` is what makes Keycloak build its redirect
-    # URLs with the scheme the browser actually used. Without it every login
-    # redirect comes back as http:// from behind a TLS terminator, and the
-    # browser refuses the mixed-content navigation.
-    command: [
-        'start',
-        '--http-port=8081',
-        '--http-enabled=true',
-        '--hostname-strict=false',
-        '--proxy-headers=xforwarded',
-        '--import-realm',
-        # A single instance, so no cluster to join. The default distributed
-        # cache makes Keycloak discover peers over JGroups, and a node whose
-        # record survives a container replacement is retried forever --
-        # thousands of connection-refused errors and a restart loop, with the
-        # real cause buried. Scaling Keycloak past one replica means revisiting
-        # this deliberately.
-        '--cache=local',
-      ]
-    environment:
-      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:?set KEYCLOAK_ADMIN}
-      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD}
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/${KEYCLOAK_DB:-keycloak}
-      KC_DB_USERNAME: ${POSTGRES_USER}
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
-      KC_HEALTH_ENABLED: 'true'
-      # Pins the issuer so it is identical whichever side asks. See the note at
-      # the top of this file.
-      KC_HOSTNAME: ${KEYCLOAK_PUBLIC_URL:?set KEYCLOAK_PUBLIC_URL}
-      # Substituted into the realm import: the portal's redirect URIs have to
-      # be the address the browser actually uses, or sign-in fails at the last
-      # step with "Invalid parameter: redirect_uri".
-      WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:?set WEB_PUBLIC_URL}
-    volumes:
-      # Imported on first start. Without it the realm does not exist, the OIDC
-      # discovery document 404s, and nobody can sign in to a stack that is
-      # otherwise entirely healthy.
-      - realm-import:/opt/keycloak/data/import:ro
-    # No published port: Keycloak is reached through the TLS terminator, which
-    # is the only service that faces anything.
-    expose:
-      - '8081'
-    depends_on:
-      postgres:
-        condition: service_healthy
-      realm-render:
-        condition: service_completed_successfully
 
   # ---------------------------------------------------------------------------
   # Schema migration — runs to completion, then the apps start
@@ -228,23 +119,31 @@ services:
       API_PORT: 4000
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-oolix}?schema=public
       REDIS_URL: redis://redis:6379
-      OIDC_ISSUER_URL: ${KEYCLOAK_PUBLIC_URL:?set KEYCLOAK_PUBLIC_URL}/realms/oolix
-      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-oolix-web}
-      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?set OIDC_CLIENT_SECRET}
+      # Also the issuer of every sign-in token.
       API_PUBLIC_URL: ${API_PUBLIC_URL:?set API_PUBLIC_URL}
+      # The base of the links in verification, invitation and reset emails.
       WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:?set WEB_PUBLIC_URL}
+      # Sign-up, invitations and password resets all arrive by email, so
+      # without a working sender nobody new can get in. Outside local
+      # development the API refuses any provider but Brevo.
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-brevo}
+      BREVO_API_KEY: ${BREVO_API_KEY:?set BREVO_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM:?set EMAIL_FROM}
+      PASSWORD_BREACH_CHECK: ${PASSWORD_BREACH_CHECK:-true}
       # Both stay off until an eligibility model is proven for each platform.
       FEATURE_META_ENABLED: 'false'
       FEATURE_GOOGLE_ENABLED: 'false'
     volumes:
-      # The manifest signing key (§75) and the Agent token key (§92.3).
+      # The manifest signing key (§75), the Agent token key (§92.3) and the
+      # key that signs people's sign-in tokens.
       #
       # This volume outliving the container is the whole point. Every manifest
       # a Partner Agent has cached was signed by the key inside it, so losing
       # it invalidates all of them at once. Outside development the API refuses
       # to start rather than generate a replacement, which turns a lost volume
       # into a loud failure instead of a fleet of Agents quietly rejecting
-      # every manifest they are sent.
+      # every manifest they are sent. (Losing the sign-in key merely signs
+      # everybody out.)
       - api-keys:/app/.keys
     expose:
       - '4000'
@@ -269,9 +168,6 @@ services:
       # the deployment.
       OOLIX_API_INTERNAL_URL: http://api:4000
       WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:?set WEB_PUBLIC_URL}
-      OIDC_ISSUER_URL: ${KEYCLOAK_PUBLIC_URL:?set KEYCLOAK_PUBLIC_URL}/realms/oolix
-      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-oolix-web}
-      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?set OIDC_CLIENT_SECRET}
       PORTAL_SESSION_SECRET: ${PORTAL_SESSION_SECRET:?set PORTAL_SESSION_SECRET}
     expose:
       - '3000'
@@ -305,11 +201,20 @@ services:
   # Deliberately NOT part of `up`. Creating a signing key is a decision, and if
   # it happened automatically then a lost volume would be repaired silently
   # with a new key -- leaving the stack healthy while every Agent rejected
-  # every manifest it was sent. Run it once, on first deployment:
+  # every manifest it was sent. Run it on first deployment, and again after an
+  # upgrade that introduces a new key:
   #
-  #   docker compose -f oolix/infra/docker/compose.prod.yml --env-file .env.prod   #     --profile init run --rm keys
+  #   docker compose -f oolix/infra/docker/compose.prod.yml --env-file .env.prod \
+  #     --profile init run --rm keys
   #
   # It is idempotent: an existing key is reported, never replaced.
+  #
+  # The first administrator comes next, the same way and once:
+  #
+  #   docker compose -f oolix/infra/docker/compose.prod.yml --env-file .env.prod \
+  #     run --rm api node dist/cli/create-admin.js --email you@company.com --name "Your Name"
+  #
+  # See oolix/apps/api-gateway/src/cli/create-admin.ts.
   # ---------------------------------------------------------------------------
   keys:
     image: oolix/api-gateway:${IMAGE_TAG:-dev}
@@ -323,7 +228,7 @@ services:
     entrypoint: ['sh', '-c']
     command:
       [
-        'node dist/keys/rotate-cli.js init manifest && node dist/keys/rotate-cli.js init agent-token',
+        'node dist/keys/rotate-cli.js init manifest && node dist/keys/rotate-cli.js init agent-token && node dist/keys/rotate-cli.js init user-session',
       ]
 
   # ---------------------------------------------------------------------------
@@ -349,7 +254,6 @@ services:
       PGUSER: ${POSTGRES_USER:?set POSTGRES_USER}
       PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
       APP_DB: ${POSTGRES_DB:-oolix}
-      KEYCLOAK_DB: ${KEYCLOAK_DB:-keycloak}
       BACKUP_DIR: /backups
       BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
       BACKUP_KEEP: ${BACKUP_KEEP:-7}
@@ -438,7 +342,6 @@ services:
       TLS_MODE: ${TLS_MODE:?set TLS_MODE — "internal" for a local drill, or an email address for Let's Encrypt}
       API_HOST: ${API_HOST:?set API_HOST}
       APP_HOST: ${APP_HOST:?set APP_HOST}
-      AUTH_HOST: ${AUTH_HOST:?set AUTH_HOST}
     volumes:
       - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       # Certificates and ACME account keys. Losing this volume means
@@ -451,7 +354,6 @@ services:
     depends_on:
       - api
       - portal
-      - keycloak
 
 volumes:
   postgres-data:
@@ -459,7 +361,6 @@ volumes:
   caddy-data:
   caddy-config:
   api-keys:
-  realm-import:
   prometheus-data:
   alertmanager-config:
   alertmanager-data:

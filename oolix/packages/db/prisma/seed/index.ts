@@ -113,16 +113,43 @@ const prisma = new PrismaClient({
 });
 
 /**
- * Keycloak subject for a seeded user.
+ * The password every seeded account signs in with.
  *
- * The local realm authenticates by email, and the Oolix user row is matched to
- * the OIDC subject on first login (see IdentityOrgService.linkAuthSubject).
- * Until then the placeholder marks the row as unbound.
+ *   development/test  the well-known `password`, which every script, e2e test
+ *                     and runbook already types. The policy that would refuse
+ *                     it applies when a PERSON chooses a password; these rows
+ *                     are written directly, and only ever to a local or CI
+ *                     database -- production is refused above.
+ *   staging           SEED_USER_PASSWORD, required and held to the real policy,
+ *                     because a staging deployment is reachable by more people
+ *                     than its testers.
+ *
+ * Imported late, so the production refusal above never depends on a built
+ * auth package.
  */
-const pendingSubject = (email: string) => `pending:${email}`;
+async function seedPassword(): Promise<{ hash: string; shown: string }> {
+  const { hashPassword, passwordProblems } = await import('@oolix/auth-rbac');
+  if (env !== 'staging') return { hash: await hashPassword('password'), shown: '"password"' };
+
+  const chosen = process.env.SEED_USER_PASSWORD ?? '';
+  const problems = chosen ? passwordProblems(chosen, '') : ['It is not set.'];
+  if (problems.length > 0) {
+    console.error(
+      '\n[seed] REFUSED: staging needs SEED_USER_PASSWORD, a password the seeded\n' +
+        `       accounts will share. ${problems.join(' ')}\n`,
+    );
+    process.exit(1);
+  }
+  return { hash: await hashPassword(chosen), shown: 'SEED_USER_PASSWORD' };
+}
 
 async function main(): Promise<void> {
   console.log(`[seed] environment: ${env}`);
+
+  // Settled before anything is written, so a staging run without a usable
+  // password stops here rather than half-way through the fixtures. One hash
+  // serves every account: scrypt is slow on purpose, and they share it anyway.
+  const password = await seedPassword();
 
   // -------------------------------------------------------------------------
   // Attribute taxonomy (v6 §4, Appendix A)
@@ -153,6 +180,8 @@ async function main(): Promise<void> {
     { id: ID.demoAllAccess, email: 'demo@example.test', name: 'Dev Demo' },
   ];
 
+  const now = new Date();
+
   for (const u of users) {
     await prisma.user.upsert({
       where: { id: u.id },
@@ -160,27 +189,34 @@ async function main(): Promise<void> {
         id: u.id,
         email: u.email,
         name: u.name,
-        authSubject: pendingSubject(u.email),
+        authSubject: `local:${u.id}`,
         status: 'ACTIVE',
         country: 'IN',
         termsVersion: 'T-1',
         acceptedAt: new Date('2026-08-01T00:00:00Z'),
+        emailVerifiedAt: now,
+        passwordHash: password.hash,
+        passwordChangedAt: now,
       },
       update: {
         name: u.name,
         status: 'ACTIVE',
-        // Reset the identity binding on every local seed.
-        //
-        // Recreating the local Keycloak container issues NEW subject ids for
-        // the same emails, and the API rightly refuses to rebind an email to a
-        // different identity -- that check is a real defence, not a nuisance.
-        // Unbinding here lets the next login re-establish the link cleanly.
-        // Deliberately development/test only: in staging a tester's binding is
-        // real and must not be silently reset.
+        authSubject: `local:${u.id}`,
+        emailVerifiedAt: now,
+        // Locally, every seed is a clean slate: a developer who changed a
+        // password or tripped the lockout gets the known one back. In staging a
+        // tester may have chosen their own, and it is theirs to keep.
         ...(env === 'development' || env === 'test'
-          ? { authSubject: pendingSubject(u.email) }
+          ? { passwordHash: password.hash, failedLoginCount: 0, lockedUntil: null }
           : {}),
       },
+    });
+  }
+  if (env === 'staging') {
+    // Rows seeded before sign-in moved into Oolix have no password at all.
+    await prisma.user.updateMany({
+      where: { id: { in: users.map((u) => u.id) }, passwordHash: null },
+      data: { passwordHash: password.hash, passwordChangedAt: now },
     });
   }
   console.log(`[seed] ${users.length} users`);
@@ -575,7 +611,7 @@ async function main(): Promise<void> {
   console.log('  Partner A  Travel A           partner.admin@example.test');
   console.log('  Partner B  Rewards B          partnerb.admin@example.test');
   console.log('  Network    Meridian Ventures  network.admin@example.test');
-  console.log('  All local passwords: "password" (Keycloak realm "oolix")');
+  console.log(`  Every seeded account signs in with ${password.shown}.`);
   console.log('\n  Ad-decision fixtures (§91): U123 eligible, U456 ineligible.');
   console.log('  Partner A still needs an Agent registered to reach READY_FOR_CAMPAIGNS.');
 }

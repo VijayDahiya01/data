@@ -1,7 +1,7 @@
 /**
  * Portal end-to-end (§34, §35, §40, §41).
  *
- * This suite drives the real thing: a real Keycloak login, the real API, a
+ * This suite drives the real thing: a real sign-in, the real API, a
  * real Partner Agent's data. It is the proof that "sign in and run a campaign"
  * is actually possible rather than merely wired up.
  *
@@ -135,13 +135,11 @@ test.describe('Portal', () => {
   test('signing out ends the session', async ({ page }) => {
     await signIn(page, 'buyer.admin@example.test');
 
-    // Sign-out is two navigations, not one: the portal clears its own cookie
-    // and then hands off to Keycloak's end-session endpoint, which redirects
-    // back to the portal ROOT. Waiting for the portal origin covers the whole
-    // round trip; navigating before it completes would race the cookie clear.
-    const portalOrigin = new URL(PORTAL).origin;
+    // Sign-out posts to the portal, which revokes the session at the API,
+    // clears its cookie and lands on /login. Waiting for /login covers that
+    // whole round trip; navigating before it completes would race the clear.
     await Promise.all([
-      page.waitForURL((url) => url.origin === portalOrigin, { timeout: 30_000 }),
+      page.waitForURL(/\/login/, { timeout: 30_000 }),
       page.getByRole('button', { name: /sign out/i }).click(),
     ]);
 

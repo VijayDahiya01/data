@@ -24,6 +24,9 @@ export interface ActionState {
 }
 
 function toState(err: unknown): ActionState {
+  // The API ended the sign-in (signed out elsewhere, password changed): the
+  // same dead session as below, reached one step later.
+  if (err instanceof ApiError && err.isAuthFailure) redirect('/login?error=session');
   if (err instanceof ApiError) {
     const fieldErrors: Record<string, string> = {};
     for (const fe of err.fieldErrors) fieldErrors[fe.field] = fe.message;

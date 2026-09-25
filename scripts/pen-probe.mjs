@@ -414,6 +414,85 @@ Connection: close
 }
 
 // ---------------------------------------------------------------------------
+// 12b. Sign-in and account recovery -- Oolix's own since 2026-09-24.
+//
+// Anonymous by nature, so they belong here rather than in the authed suite.
+// Nothing below creates an account or sends an email: every address is random
+// and every token is garbage. It does spend this machine's sign-in budget for
+// a minute, which is the last probe's point.
+// ---------------------------------------------------------------------------
+{
+  const post = (path, body) =>
+    req(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  const nobody = () => `probe-${crypto.randomUUID()}@example.invalid`;
+  const message = (r) => {
+    try {
+      return JSON.parse(r.text)?.error?.message ?? '';
+    } catch {
+      return '';
+    }
+  };
+
+  // One answer for a failed sign-in, worded so it gives away nothing about
+  // which half was wrong -- the answer an existing account also gets.
+  const unknown = await post('/v1/auth/login', {
+    email: nobody(),
+    password: 'probe-not-a-password',
+  });
+  const says = message(unknown);
+  const generic =
+    unknown.status === 401 &&
+    !/not found|no (such )?(user|account)|unknown|does not exist|not registered/i.test(says);
+  record(
+    'sign-in does not say whether an account exists',
+    'high',
+    generic,
+    throttled(unknown) ? 'INCONCLUSIVE: rate limited' : `status ${unknown.status}: "${says}"`,
+  );
+
+  // A forged one-time link or refresh token is refused as input: never
+  // accepted, never a 500 that says more than it should.
+  const garbage = 'A'.repeat(43);
+  for (const [path, body] of [
+    ['/v1/auth/refresh', { refresh_token: garbage }],
+    ['/v1/auth/logout', { refresh_token: garbage }],
+    ['/v1/auth/verify-email', { token: garbage }],
+    ['/v1/auth/reset-password', { token: garbage, password: 'probe-not-a-password-1' }],
+    ['/v1/auth/accept-invite', { token: garbage, password: 'probe-not-a-password-1' }],
+    ['/v1/auth/login', { email: "' OR '1'='1' --", password: "' OR '1'='1" }],
+  ]) {
+    const r = await post(path, body);
+    // Logout is idempotent and deliberately says nothing about the token.
+    const ok = path.endsWith('/logout') ? r.status === 204 : r.status >= 400 && r.status < 500;
+    record(
+      `forged input refused by ${path}`,
+      'high',
+      ok && !throttled(r),
+      throttled(r) ? 'INCONCLUSIVE: rate limited' : `status ${r.status}`,
+    );
+  }
+
+  // Password guessing has to meet the per-address budget (10 a minute).
+  let limited = 0;
+  for (let i = 0; i < 12; i += 1) {
+    const r = await post('/v1/auth/login', { email: nobody(), password: `probe-guess-${i}-xyz` });
+    if (throttled(r)) limited += 1;
+  }
+  record(
+    'sign-in attempts are limited per address',
+    'high',
+    limited > 0,
+    limited > 0
+      ? `${limited} of 12 further attempts refused with 429`
+      : 'no 429 in 12 sign-in attempts: password guessing is unbounded',
+  );
+}
+
+// ---------------------------------------------------------------------------
 // 13. Rate limiting (§94) has to actually bite.
 //
 // LAST, on purpose. It deliberately exhausts the anonymous per-IP budget,

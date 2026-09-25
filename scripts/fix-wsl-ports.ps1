@@ -54,8 +54,7 @@ $ports = @(
   @{ Port = 5433; Name = 'partner-postgres' },
   @{ Port = 6379; Name = 'redis' },
   @{ Port = 6380; Name = 'partner-redis' },
-  @{ Port = 4566; Name = 'localstack' },
-  @{ Port = 8081; Name = 'keycloak' }
+  @{ Port = 4566; Name = 'localstack' }
 )
 
 $listen = if ($Lan) { '0.0.0.0' } else { '127.0.0.1' }
@@ -91,7 +90,7 @@ foreach ($p in $ports) {
 if ($Lan) {
   try { Remove-NetFirewallRule -DisplayName 'Oolix stack' -ErrorAction SilentlyContinue } catch { }
   New-NetFirewallRule -DisplayName 'Oolix stack' -Direction Inbound -Protocol TCP `
-    -LocalPort 3000, 4000, 5432, 5433, 6379, 6380, 4566, 8081 `
+    -LocalPort 3000, 4000, 5432, 5433, 6379, 6380, 4566 `
     -Action Allow -Profile Private | Out-Null
   Write-Host "`n  firewall: inbound allowed on the private profile"
 }

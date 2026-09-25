@@ -10,11 +10,9 @@
  */
 import { createHash } from 'node:crypto';
 import { onboardPartnerAgent } from './lib/onboard-partner.mjs';
+import { seedToken } from './lib/login.mjs';
 
 const API = process.env.API_PUBLIC_URL ?? 'http://localhost:4000';
-const KEYCLOAK = process.env.OIDC_ISSUER_URL ?? 'http://localhost:8081/realms/oolix';
-const CLIENT_ID = process.env.OIDC_CLIENT_ID ?? 'oolix-web';
-const CLIENT_SECRET = process.env.OIDC_CLIENT_SECRET ?? 'local-only-secret';
 
 const BUYER_ORG = '11111111-1111-4111-8111-111111111111';
 const BRAND = '66666666-6666-4666-8666-666666666666';
@@ -26,22 +24,7 @@ const check = (label, ok, detail = '') => {
   return ok;
 };
 
-async function token(username) {
-  const body = new URLSearchParams({
-    grant_type: 'password',
-    client_id: CLIENT_ID,
-    client_secret: CLIENT_SECRET,
-    username,
-    password: 'password',
-  });
-  const res = await fetch(`${KEYCLOAK}/protocol/openid-connect/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  });
-  if (!res.ok) throw new Error(`token for ${username}: ${res.status}`);
-  return (await res.json()).access_token;
-}
+const token = (username) => seedToken(username, { api: API });
 
 async function api(path, { method = 'GET', token: tok, body, orgId = BUYER_ORG } = {}) {
   const res = await fetch(`${API}${path}`, {

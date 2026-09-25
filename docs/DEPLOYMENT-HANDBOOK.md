@@ -22,11 +22,12 @@ is worth saying out loud because it is usually the objection that ends.
 
 | | Spec | Why this |
 | --- | --- | --- |
-| Compute | 1 host, **4 vCPU / 8 GB** | Runs API, portal, worker, Keycloak, TLS terminator. Measured ceiling ~700 req/s; a pilot is far below it |
+| Compute | 1 host, **4 vCPU / 8 GB** | Runs API, portal, worker, TLS terminator. Measured ceiling ~700 req/s; a pilot is far below it |
 | PostgreSQL | Managed, **2 vCPU / 4 GB, 50 GB** | The database is the cost centre — `/readyz` costs 2.7× `/healthz` purely by touching it |
 | Redis | Managed, **1 GB** | Rate limits, idempotency, multi-replica frequency state |
 | Object storage | S3-compatible bucket | Creative assets |
-| DNS | **Three names** | `api.` `app.` `auth.` on one domain |
+| DNS | **Two names** | `api.` `app.` on one domain |
+| Email | Brevo account | Sign-up confirmations, invitations, password resets. The API will not start without it |
 | Backup target | Anything **not** this host | NFS, object storage, another region |
 
 Roughly **$120–160/month** on DigitalOcean or Linode; **$250–350** on AWS or GCP
@@ -46,9 +47,8 @@ Pinned in `docker-compose.yml`, `oolix/infra/docker/compose.prod.yml`, `.nvmrc` 
 | --- | --- | --- |
 | **Node** | **24.19.0** | `engines` enforces `>=24.19.0 <25`. Only needed on the build machine — the containers carry their own |
 | **pnpm** | **10.20.0** | `packageManager` field; use `corepack enable` |
-| **PostgreSQL** | **16.10** | Both the app database and Keycloak's |
+| **PostgreSQL** | **16.10** | One database; accounts live in it too |
 | **Redis** | **7.4** | `--appendonly yes` |
-| **Keycloak** | **26.5** | Runs `start`, not `start-dev` — production mode refuses insecure defaults, which is the point |
 | **Caddy** | **2.10** | TLS terminator, automatic certificates |
 | **Prometheus** | **v3.7.3** | Optional, opt-in profile |
 | **Alertmanager** | **v0.28.1** | Optional, and useless until the webhooks are real |
@@ -66,10 +66,9 @@ Published to the internet: **80 and 443 only.**
 | 443 / 80 | Caddy | Public. 80 redirects and answers ACME |
 | 4000 | API | Internal only |
 | 3000 | Portal | Internal only |
-| 8081 | Keycloak | Internal only |
 | 4100 | Worker metrics | Internal only |
 
-The API, portal and Keycloak publish **no host ports**. They are reachable only
+The API and portal publish **no host ports**. They are reachable only
 through the terminator. This is deliberate: an internal service on a public port
 is the most common way a hardened stack turns out not to be.
 
@@ -109,10 +108,7 @@ docker compose -f oolix/infra/docker/compose.prod.yml \
 ```
 
 `compose.managed-postgres.yml` removes the bundled Postgres and requires
-`DATABASE_URL` and — separately — `KEYCLOAK_JDBC_URL`. **Keycloak needs a JDBC
-string, which is not the same as `DATABASE_URL`.** Give it the `postgres://`
-form and it fails at start-up with a driver error that never mentions the
-format. `compose.managed-redis.yml` removes the bundled Redis and requires
+`DATABASE_URL`. `compose.managed-redis.yml` removes the bundled Redis and requires
 `REDIS_URL`; leave it out to keep Redis on the host, and when it is used it
 must come second.
 
@@ -122,10 +118,11 @@ must come second.
 `latest` or `dev`. A moving tag means "the previous image" no longer exists at
 the moment you need it. `pnpm preflight` refuses the moving ones.
 
-**The three public URLs must agree exactly.** An OIDC issuer is compared as a
-string. If the browser reaches Keycloak by one name and the portal's server side
-by another, every token is rejected as invalid while everything looks correct.
-See `docs/HTTPS-DRILL.md`.
+**The public URLs must match the hostnames exactly.** Every emailed link —
+confirmation, invitation, reset — is built from `WEB_PUBLIC_URL`, and the API
+signs sign-in tokens as `API_PUBLIC_URL`. A typo sends every link somewhere
+that does not exist while the stack looks healthy. `pnpm preflight` compares
+them with `API_HOST` and `APP_HOST`. See `docs/HTTPS-DRILL.md`.
 
 **Back up the signing keys the moment you create them.** Whoever holds the
 manifest key can forge an activation a Partner Agent will accept as genuine —
@@ -253,7 +250,7 @@ revoked upstream.
 
 ## What "it works" looks like
 
-- Portal sign-in redirects to Keycloak and back, once
+- Signing up emails a confirmation link, and the link signs you in after one click
 - A Partner appears in the catalogue with a reach **bucket**, never a number
 - An approved activation produces a signed manifest the Agent accepts
 - The Agent answers `NO_AD` when its config is stale — that is success, not a bug
@@ -264,10 +261,10 @@ revoked upstream.
 
 | Symptom | Cause |
 | --- | --- |
-| Every token rejected as invalid, everything looks fine | The three public URLs disagree. An OIDC issuer is a string |
-| Keycloak fails at start with a driver error | It was given `DATABASE_URL` instead of `KEYCLOAK_JDBC_URL` |
-| Keycloak: "Invalid client oolix-web: A redirect URI is not a valid URI" | A realm placeholder was not substituted. The renderer refuses this — check its logs |
-| Sign-in works, then every API call is 401 | Keycloak was recreated and issued new subject ids. Correct refusal, not a bug |
+| The API will not start: `No user-session signing key` | The `keys` step has not run since the upgrade that added the sign-in key. Run it; it never replaces an existing key |
+| The API will not start: `EMAIL_PROVIDER`, `BREVO_API_KEY` or `EMAIL_FROM` | Outside local development a real sender is required. See `.env.prod.example`, "email" |
+| Sign-up says "check your email" and nothing arrives | The API log's `email_send_failed` line has Brevo's status: 401 is the wrong key (an SMTP key, perhaps), 400 an unverified sender. No line at all: the address already had an account, which is emailed instead |
+| Everybody was signed out at once | Expected after `API_PUBLIC_URL` or the sign-in key changes — tokens name both |
 | Agent serves `NO_AD` for everything | Config stale, kill switch set, or no manifest verified. Check the Agent's `/readyz` |
 | Frequency cap is a multiple of what was agreed | `state.mode: embedded` with more than one replica |
 | Alerts never fire | Alertmanager still on `example.invalid`. `pnpm preflight` blocks this |

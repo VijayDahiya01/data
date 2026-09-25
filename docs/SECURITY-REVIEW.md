@@ -3,6 +3,11 @@
 Run 2026-09-03 against a live instance. `scripts/pen-probe.mjs` — 31 probes,
 all passing after one fix.
 
+**2026-09-24: sign-in moved from Keycloak into Oolix itself, with no second
+factor.** That departs from the specification in three places; the
+[last section](#sign-in-moved-into-oolix--2026-09-24) records where, what
+compensates, and what should happen before a pilot relies on it.
+
 **This is not a penetration test by someone who does it for a living, and it
 does not replace one.** It is the part that can be automated and repeated: the
 checks that must never regress, sent from outside with no credentials and no
@@ -116,3 +121,62 @@ ignore the report.
 workflow as an adversary would use it, session fixation, the portal's client
 side, dependency and supply-chain review, and the deployment itself. A pilot
 carrying a real Partner's approvals should have one before it carries a second.
+
+## Sign-in moved into Oolix — 2026-09-24
+
+Keycloak is gone. The API now handles sign-up, sign-in, sessions, email
+confirmation, invitations and password reset itself, and there is no second
+factor. The product owner decided this before the first demo, to run one
+service instead of two: no identity server, no second database, no admin
+console and no `auth.` hostname to operate. The last Keycloak version is tagged
+`keycloak-final`.
+
+### Where this departs from the specification
+
+| Spec | What it asks | What Oolix does now |
+| --- | --- | --- |
+| §64 | Identity delegated to an OIDC provider, so Oolix never sees a password | The API receives passwords and checks them against its own hashes, and signs its own tokens |
+| §4.2, §82 | A second factor for PARTNER_ADMIN, PARTNER_SECURITY_ADMIN, PARTNER_CAMPAIGN_APPROVER, FINANCE, BUYER_ADMIN and OOLIX_ADMIN | Nobody has one. A stolen password is a stolen account |
+| §87 | Sign-in and MFA penetration tested before real traffic | The in-house sign-in has had the automated review below and nothing more |
+
+These were accepted knowingly, for a demo. **Before a pilot carries a real
+Partner's approvals:** add a second factor (an authenticator app, at least for
+the roles above) and have the sign-in flow independently tested.
+
+### What compensates
+
+| Threat | Control | Where |
+| --- | --- | --- |
+| A stolen password database | scrypt (N=2^15, r=8, p=3, 16-byte salt); parameters stored in each hash, so raising them re-hashes at the next sign-in | `packages/auth-rbac/src/password.ts` |
+| Weak or leaked passwords | 12–128 characters, no composition rules (NIST 800-63B); refused if built from the email address, too repetitive, one of 1,197 common passwords, or found in a breach by Have I Been Pwned's k-anonymity API — only 5 characters of a SHA-1 leave the server. That last check allows the password if the service is unreachable | `password.ts`, `modules/auth/password-breach.service.ts` |
+| Online guessing | 10 consecutive failures lock the account for 15 minutes and email its owner; per address, 10 sign-ins, 5 sign-ups, 5 reset requests and 10 link uses a minute | `modules/auth/auth.service.ts`, `RATE_LIMITS` |
+| Finding out who has an account | Unknown address and wrong password get the same answer after the same scrypt work (a decoy hash); sign-up and "forgot password" answer identically either way and email the owner instead; "confirm your email first" is said only after the correct password | `auth.service.ts` |
+| Forged tokens | ES256 only (algorithm pinned, so `alg:none` and HS256 key confusion fail); issuer and audience checked; a key of its own (`user-session`), rotated with the same tool as the others; a token issued before the last password change is refused | `packages/auth-rbac/src/user-auth.ts`, `common/auth/auth.guard.ts` |
+| Stolen sessions | Access tokens last 10 minutes. Refresh tokens are 256-bit, stored only as SHA-256, and replaced on every use; presenting a spent one more than 30 seconds later ends the whole sign-in for both holders. A sign-in ends after 8 hours whatever happens. Resetting or changing a password ends every sign-in; signing out ends it at the server, and each access token dies with its sign-in on its next use, not when it expires | `modules/auth/sessions.service.ts` |
+| Tokens in the browser | None. The portal keeps them in a sealed, httpOnly, SameSite=Lax cookie; forms are server actions, which check the Origin | `web-portal/src/lib/session.ts`, `proxy.ts` |
+| Emailed links | 256-bit, stored hashed, bound to one purpose, single-use, short-lived (confirm 24 h, reset 30 min, invitation 7 days). Opening a link spends nothing — a button does, so a mail scanner that follows links cannot use them up — and those pages send no Referer | `modules/auth/auth-tokens.service.ts`, portal pages |
+| Logs | No password, token or link is logged; the email transport logs the template and status only | `modules/auth/email/email.service.ts` |
+| The first administrator | `create-admin` refuses once one exists, and emails the invitation rather than printing it | `api-gateway/src/cli/create-admin.ts` |
+
+### Known limits
+
+- **Per-address limits trust Caddy's `X-Forwarded-For`.** Anything placed in
+  front of Caddy must be listed in its `trusted_proxies`, or every visitor
+  shares one address and one budget (`oolix/infra/caddy/Caddyfile`).
+- **The breach check fails open,** by design: an outage at Have I Been Pwned
+  must not stop people signing up.
+
+### How it was checked — 2026-09-24
+
+| What | Result |
+| --- | --- |
+| Unit: passwords and sign-in tokens (`auth-rbac`) | 24 tests: hashing, the policy, and every forgery above refused |
+| Integration, real Postgres 16 and Redis (`test/auth.int-spec.ts`) | 12 scenarios: sign-up to organization, duplicate sign-up, unconfirmed sign-in, lockout, uniform failures, `no-store`, disabled account, refresh rotation and replay, sign-out recalling the access token, reset ending every session, invitations |
+| `pnpm probe` (anonymous, 8 of them new) | 44/44: a failed sign-in names neither half, forged links and refresh tokens are refused as input, the sign-in limit bites |
+| `pnpm probe:authed` (7 new) | 20/20: `alg:none`, HS256 keyed with a published key, an attacker's key under the real `kid`, a key embedded in the header and a swapped subject are all refused, while a control token passes; an access token dies at sign-out |
+| A browser, end to end | Sign up, confirm, sign in, create an organization, sign out, reset the password — and a session ended from another device lands on "your session ended" instead of looping |
+| `pnpm audit --prod` | Clean, after raising fastify to 5.12.1 |
+
+Two defects surfaced on the way and are fixed: a refused-but-unexpired session
+bounced between the page and the sign-in form until the access token expired,
+and responses carrying tokens could be cached (now `Cache-Control: no-store`).

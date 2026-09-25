@@ -43,6 +43,15 @@ export const UserStatus = {
 export type UserStatus = (typeof UserStatus)[keyof typeof UserStatus]
 
 
+export const AuthTokenPurpose = {
+  EMAIL_VERIFICATION: 'EMAIL_VERIFICATION',
+  PASSWORD_RESET: 'PASSWORD_RESET',
+  INVITATION: 'INVITATION'
+} as const
+
+export type AuthTokenPurpose = (typeof AuthTokenPurpose)[keyof typeof AuthTokenPurpose]
+
+
 export const MembershipStatus = {
   INVITED: 'INVITED',
   ACTIVE: 'ACTIVE',

@@ -47,6 +47,7 @@ export function Shell({ ctx, children }: { ctx: MeContext; children: ReactNode }
           <div className="rail-identity">
             <strong>{ctx.user.name}</strong>
             <span>{ctx.user.email}</span>
+            <Link href="/account">Change password</Link>
           </div>
           <form action="/api/auth/logout" method="post">
             <button type="submit">Sign out</button>

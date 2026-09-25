@@ -47,6 +47,14 @@ export const RATE_LIMITS = {
   agentReporting: 60,
   crmLeadEvents: 120,
   signup: 5,
+  // Sign-in and account recovery, all counted per client IP because the
+  // caller has not authenticated yet. Per-account lockout (10 failures) is the
+  // second, independent limit on password guessing.
+  login: 10,
+  passwordReset: 5,
+  emailVerification: 5,
+  /** Consuming an emailed link: verify an address, reset, accept an invitation. */
+  authLink: 10,
   /**
    * A coarse outer bound, per client IP, applied BEFORE authentication.
    *

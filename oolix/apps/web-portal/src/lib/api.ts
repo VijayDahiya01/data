@@ -5,7 +5,7 @@
  * browser never receives an access token, so a script injected into a portal
  * page cannot lift one and call the API as the user.
  *
- * Two rules this file exists to enforce:
+ * Three rules this file exists to enforce:
  *
  *   * `X-Org-Id` always carries the ACTIVE organization (§34: a user who
  *     belongs to several switches without a second account). The API
@@ -14,51 +14,21 @@
  *   * §77.2 errors are surfaced as `ApiError` with the canonical code intact,
  *     so a screen can distinguish "you cannot do this" from "that no longer
  *     exists" instead of showing one generic failure.
+ *   * The visitor's address travels in X-Forwarded-For. The API budgets
+ *     requests per address; without it, every visitor would share the
+ *     portal's own address and one visitor could throttle everybody.
+ *
+ * Tokens are renewed in proxy.ts, before the page renders -- not here. A page
+ * cannot set cookies while rendering, so a renewal attempted here could never
+ * be kept.
  */
 import 'server-only';
 import { env } from './env';
-import { readSession, writeSession, type Session } from './session';
-import { refresh } from './oidc';
+import { readSession, type Session } from './session';
+import { ApiError, readResponse } from './api-error';
+import { visitorAddress } from './auth-api';
 
-export interface FieldError {
-  field: string;
-  message: string;
-}
-
-export class ApiError extends Error {
-  readonly status: number;
-  readonly code: string;
-  readonly retryable: boolean;
-  readonly fieldErrors: FieldError[];
-  readonly correlationId?: string;
-  readonly retryAfterSeconds?: number;
-
-  constructor(
-    status: number,
-    body: {
-      code?: string;
-      message?: string;
-      retryable?: boolean;
-      field_errors?: FieldError[];
-      correlation_id?: string;
-      retry_after_seconds?: number;
-    },
-  ) {
-    super(body.message ?? `Request failed with status ${status}`);
-    this.name = 'ApiError';
-    this.status = status;
-    this.code = body.code ?? 'SYS_002';
-    this.retryable = body.retryable ?? false;
-    this.fieldErrors = body.field_errors ?? [];
-    if (body.correlation_id) this.correlationId = body.correlation_id;
-    if (body.retry_after_seconds !== undefined) this.retryAfterSeconds = body.retry_after_seconds;
-  }
-
-  /** True when the session is the problem rather than the request. */
-  get isAuthFailure(): boolean {
-    return this.status === 401;
-  }
-}
+export { ApiError, type FieldError } from './api-error';
 
 export interface ApiOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -73,32 +43,15 @@ export interface ApiOptions {
 }
 
 /**
- * A session whose access token is still valid, refreshing it if not.
+ * The session, if its access token is still good.
  *
- * Returns null when there is no usable session, which the callers turn into a
- * redirect to login rather than an error page.
+ * Null when there is none, or when proxy.ts could not renew it -- which the
+ * callers turn into a redirect to login rather than an error page.
  */
 async function usableSession(): Promise<Session | null> {
   const session = await readSession();
   if (!session) return null;
-  if (session.expiresAt > Date.now()) return session;
-  if (!session.refreshToken) return null;
-
-  try {
-    const tokens = await refresh(session.refreshToken);
-    const next: Session = {
-      ...session,
-      accessToken: tokens.accessToken,
-      expiresAt: tokens.expiresAt,
-      ...(tokens.refreshToken ? { refreshToken: tokens.refreshToken } : {}),
-    };
-    await writeSession(next);
-    return next;
-  } catch {
-    // The refresh token has been revoked or the Keycloak session ended. Treat
-    // it as logged out; the user signs in again.
-    return null;
-  }
+  return session.expiresAt > Date.now() ? session : null;
 }
 
 export class NotAuthenticatedError extends Error {
@@ -113,12 +66,14 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
   if (!session) throw new NotAuthenticatedError();
 
   const orgId = options.orgId ?? session.activeOrgId;
+  const visitor = await visitorAddress();
 
   const headers: Record<string, string> = {
     Authorization: `Bearer ${session.accessToken}`,
     Accept: 'application/json',
   };
   if (orgId) headers['X-Org-Id'] = orgId;
+  if (visitor) headers['X-Forwarded-For'] = visitor;
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
   if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey;
 
@@ -132,25 +87,7 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
     ...(options.revalidate !== undefined ? { next: { revalidate: options.revalidate } } : {}),
   });
 
-  const text = await res.text();
-  const parsed: unknown = text ? safeJson(text) : null;
-
-  if (!res.ok) {
-    const envelope = (parsed as { error?: Record<string, unknown> } | null)?.error;
-    throw new ApiError(res.status, (envelope ?? {}) as ConstructorParameters<typeof ApiError>[1]);
-  }
-
-  return parsed as T;
-}
-
-function safeJson(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    // The API always returns JSON; anything else means a proxy or gateway
-    // answered instead, and the raw body is more useful than a parse error.
-    return { raw: text };
-  }
+  return readResponse<T>(res);
 }
 
 /**

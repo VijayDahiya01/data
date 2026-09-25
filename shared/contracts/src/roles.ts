@@ -144,16 +144,6 @@ export function roleHasPermission(role: Role, permission: Permission): boolean {
   return (ROLE_PERMISSIONS[role] ?? []).includes(permission);
 }
 
-/** Roles that §4.2 / §82 require MFA for. */
-export const MFA_REQUIRED_ROLES: readonly Role[] = [
-  'PARTNER_ADMIN',
-  'PARTNER_SECURITY_ADMIN',
-  'PARTNER_CAMPAIGN_APPROVER',
-  'FINANCE',
-  'BUYER_ADMIN',
-  'OOLIX_ADMIN',
-];
-
 export const ORGANIZATION_TYPES = [
   'BUYER',
   'DATA_PARTNER',

@@ -21,11 +21,9 @@
  * Usage: node scripts/retire-test-activations.mjs [--dry-run]
  */
 import { randomUUID } from 'node:crypto';
+import { seedToken } from './lib/login.mjs';
 
 const API = process.env.API_URL ?? 'http://localhost:4000';
-const KEYCLOAK =
-  process.env.KEYCLOAK_TOKEN_URL ??
-  'http://localhost:8081/realms/oolix/protocol/openid-connect/token';
 
 const DRY_RUN = process.argv.includes('--dry-run');
 
@@ -37,19 +35,10 @@ const APPROVERS = ['partner.approver@example.test', 'rewards.approver@example.te
 
 async function login(username) {
   try {
-    const res = await fetch(KEYCLOAK, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: process.env.OIDC_CLIENT_ID ?? 'oolix-web',
-        client_secret: process.env.OIDC_CLIENT_SECRET ?? 'local-only-secret',
-        grant_type: 'password',
-        username,
-        password: process.env.SEED_PASSWORD ?? 'password',
-      }),
+    return await seedToken(username, {
+      api: API,
+      password: process.env.SEED_PASSWORD ?? process.env.SEED_USER_PASSWORD,
     });
-    const body = await res.json();
-    return body.access_token ?? null;
   } catch {
     return null;
   }

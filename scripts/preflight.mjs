@@ -3,10 +3,11 @@
  * The check to run before a real Partner's data is involved.
  *
  * Everything here is a mistake that a deployment does not notice. A stack with
- * placeholder alert webhooks is healthy, green, and silent. A stack still
- * seeding development identities lets `demo@example.test` sign in with the
- * password `password`. A stack on `IMAGE_TAG=latest` cannot be rolled back,
- * and nobody discovers that until the moment they need to.
+ * placeholder alert webhooks is healthy, green, and silent. A stack whose
+ * email sender Brevo has not verified accepts every sign-up and never delivers
+ * one confirmation -- sign-up answers the same either way, by design. A stack
+ * on `IMAGE_TAG=latest` cannot be rolled back, and nobody discovers that until
+ * the moment they need to.
  *
  * None of these are caught by tests, because none of them are wrong in
  * development -- they are wrong only once the deployment is real. So they are
@@ -96,9 +97,9 @@ if (!env) {
   }
 
   // Values that betray a copied placeholder rather than a generated secret.
-  // Matched on the trailing SEGMENT, not as a substring. `KEYCLOAK_PUBLIC_URL`
-  // contains "KEY" and is not a secret; treating it as one produced a
-  // confident, wrong failure the first time this ran.
+  // Matched on the trailing SEGMENT, not as a substring. `MANIFEST_SIGNING_KEY_ID`
+  // contains "KEY" and is not a secret; treating names like it as secrets
+  // produced a confident, wrong failure the first time this ran.
   const isSecretName = (k) => /_(SECRET|PASSWORD|TOKEN|KEY|CREDENTIAL)$/.test(k);
 
   const weak = [];
@@ -119,79 +120,108 @@ if (!env) {
 
   // The same value reused across two different secrets means compromising one
   // compromises both.
-  //
-  // Except where the two names hold ONE secret. With a managed database,
-  // Keycloak and the backup job log in as the same user -- the backup dumps
-  // both databases with one login, and every managed runbook sets it up that
-  // way -- so POSTGRES_PASSWORD and KEYCLOAK_DB_PASSWORD are one password
-  // written twice. Treating that as reuse failed every documented managed
-  // deployment. It is only exempt while the users match; any other shared
-  // value is still refused.
-  const oneCredential = (a, b) =>
-    [a, b].sort().join() === 'KEYCLOAK_DB_PASSWORD,POSTGRES_PASSWORD' &&
-    Boolean(env.POSTGRES_USER) &&
-    env.POSTGRES_USER === env.KEYCLOAK_DB_USER;
-
   const seen = new Map();
   const reused = [];
   for (const [k, v] of Object.entries(env)) {
     if (!isSecretName(k) || !v) continue;
     if (!seen.has(v)) seen.set(v, k);
-    else if (!oneCredential(seen.get(v), k)) reused.push(`${seen.get(v)} and ${k}`);
+    else reused.push(`${seen.get(v)} and ${k}`);
   }
   if (reused.length > 0) fail('each secret is distinct', reused.join('; '));
   else pass('each secret is distinct');
 }
 
 // ---------------------------------------------------------------------------
-console.log('\n2. Identity');
+console.log('\n2. Sign-in and email');
 
 if (env) {
-  // APP_ENV is not a label. Three protections are switched on by the exact
-  // string "production" and by nothing else:
-  //
-  //   bootstrap.ts   Content-Security-Policy and HSTS
-  //   auth.guard.ts  the §4.2 MFA requirement for privileged roles
-  //
-  // `staging` therefore serves a public deployment with no CSP, no HSTS, and
-  // MFA not enforced -- while every other check on this page passes. It is the
-  // most expensive way to be wrong here, because nothing about the running
-  // stack looks any different.
+  // APP_ENV is not a label. Content-Security-Policy and HSTS (bootstrap.ts)
+  // are switched on by the exact string "production" and by nothing else.
+  // `staging` therefore serves a public deployment without either while every
+  // other check on this page passes -- the most expensive way to be wrong
+  // here, because nothing about the running stack looks any different.
   if (env.APP_ENV === 'production') {
-    pass('APP_ENV enables the production protections', 'CSP, HSTS and the MFA requirement');
+    pass('APP_ENV enables the production protections', 'CSP and HSTS');
   } else {
     fail(
       'APP_ENV enables the production protections',
-      `APP_ENV=${env.APP_ENV ?? '(unset)'} leaves Content-Security-Policy and HSTS off and does ` +
-        'not enforce MFA for PARTNER_ADMIN, PARTNER_SECURITY_ADMIN, PARTNER_CAMPAIGN_APPROVER, ' +
-        'FINANCE, BUYER_ADMIN or OOLIX_ADMIN. Only the exact string "production" turns them on.',
+      `APP_ENV=${env.APP_ENV ?? '(unset)'} leaves Content-Security-Policy and HSTS off. ` +
+        'Only the exact string "production" turns them on.',
     );
   }
 
-  // The realm renderer refuses this too, but saying so here means an operator
-  // finds out before the deploy rather than during it.
-  if (env.KC_SEED_USERS === 'true') {
+  // Sign-up, invitations and password resets all arrive by email. The API
+  // refuses to start without a real provider, but finding out here is cheaper
+  // than finding out from a crash-looping container.
+  const provider = env.EMAIL_PROVIDER || 'brevo';
+  if (provider === 'brevo') pass('email is really delivered', 'Brevo');
+  else {
     fail(
-      'development identities are NOT seeded',
-      'KC_SEED_USERS=true would create demo@example.test with the password `password`, holding OOLIX_ADMIN.',
+      'email is really delivered',
+      `EMAIL_PROVIDER=${provider} never delivers anything, so nobody could confirm an ` +
+        'address, accept an invitation or reset a password. Use brevo.',
     );
-  } else {
-    pass('development identities are not seeded');
   }
 
-  if (env.KC_DIRECT_GRANTS === 'true') {
+  // Brevo issues two kinds of key from the same page. An SMTP key is refused
+  // by the HTTP API with a 401, and every email fails -- after sign-up has
+  // already told the person to go and check their inbox.
+  const brevoKey = env.BREVO_API_KEY ?? '';
+  if (brevoKey.startsWith('xsmtpsib-')) {
     fail(
-      'the password grant is disabled',
-      'KC_DIRECT_GRANTS=true lets anyone with a username and password bypass the browser sign-in.',
+      'BREVO_API_KEY is an API key',
+      'that is an SMTP key (xsmtpsib-...). In Brevo: SMTP & API -> API Keys -> Generate a new API key.',
     );
-  } else {
-    pass('the password grant is disabled');
+  } else if (brevoKey && !brevoKey.startsWith('xkeysib-')) {
+    warn('BREVO_API_KEY looks like a Brevo API key', 'Brevo API keys start with xkeysib-.');
+  } else if (brevoKey) {
+    pass('BREVO_API_KEY is an API key');
   }
 
-  if (env.KC_SSL_REQUIRED && env.KC_SSL_REQUIRED === 'none') {
-    fail('Keycloak requires TLS', 'KC_SSL_REQUIRED=none accepts plain HTTP.');
+  // Brevo refuses to send from an address it has not verified.
+  const from = env.EMAIL_FROM ?? '';
+  const fromAddress = (/<\s*([^>]+?)\s*>/.exec(from)?.[1] ?? from).trim().toLowerCase();
+  const fromDomain = fromAddress.split('@')[1] ?? '';
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(fromAddress)) {
+    fail(
+      'EMAIL_FROM is a sender address',
+      `"${from}" -- write it as  Oolix <no-reply@yourdomain.com>`,
+    );
+  } else if (/(^|\.)(localhost|example\.(com|org|net|test)|invalid|test)$/.test(fromDomain)) {
+    fail('EMAIL_FROM is a real sender', `${fromAddress} is a placeholder; Brevo will refuse it.`);
+  } else if (
+    /^(gmail|googlemail|yahoo|ymail|outlook|hotmail|live|msn|icloud|aol|proton|protonmail|rediffmail)\./.test(
+      fromDomain,
+    )
+  ) {
+    // Mail "from" a free-mail domain, sent by Brevo's servers, fails that
+    // domain's DMARC check -- so it lands in spam, or is not delivered at all.
+    warn(
+      'EMAIL_FROM is on a domain you control',
+      `${fromDomain} publishes DMARC that Brevo cannot pass, so these emails will land in spam. ` +
+        'Verify your own domain in Brevo and send from an address on it.',
+    );
   } else {
-    pass('Keycloak requires TLS', env.KC_SSL_REQUIRED ?? 'external (default)');
+    pass('EMAIL_FROM is a real sender', fromAddress);
+  }
+
+  if (env.PASSWORD_BREACH_CHECK === 'false') {
+    warn(
+      'new passwords are checked against known breaches',
+      'PASSWORD_BREACH_CHECK=false lets people choose a password that is already on attack lists.',
+    );
+  } else {
+    pass('new passwords are checked against known breaches');
+  }
+
+  // Nothing reads these any more. Left in the file, they suggest a service
+  // that is not there and a secret that still matters.
+  const leftovers = Object.keys(env).filter((k) => /^(KEYCLOAK_|OIDC_|KC_)|^AUTH_HOST$/.test(k));
+  if (leftovers.length > 0) {
+    warn(
+      'no settings are left over from Keycloak',
+      `${leftovers.join(', ')} -- nothing reads them since sign-in moved into Oolix. Delete them.`,
+    );
   }
 }
 
@@ -199,7 +229,7 @@ if (env) {
 console.log('\n3. Public addresses and TLS');
 
 if (env) {
-  const urls = ['API_PUBLIC_URL', 'WEB_PUBLIC_URL', 'KEYCLOAK_PUBLIC_URL'];
+  const urls = ['API_PUBLIC_URL', 'WEB_PUBLIC_URL'];
   const notHttps = urls.filter((k) => env[k] && !env[k].startsWith('https://'));
   if (notHttps.length > 0) fail('every public URL is https', notHttps.join(', '));
   else pass('every public URL is https');
@@ -209,6 +239,29 @@ if (env) {
     fail('no public URL points at localhost', localhost.join(', '));
   } else {
     pass('no public URL points at localhost');
+  }
+
+  // Caddy answers on the *_HOST names; the API signs tokens as, and emails
+  // links to, the *_PUBLIC_URL ones. If they differ, every link in every email
+  // leads somewhere Caddy does not serve.
+  const hostOf = (u) => {
+    try {
+      return new URL(u).host;
+    } catch {
+      return null;
+    }
+  };
+  const mismatched = [
+    ['API_PUBLIC_URL', 'API_HOST'],
+    ['WEB_PUBLIC_URL', 'APP_HOST'],
+  ].filter(([url, host]) => env[url] && env[host] && hostOf(env[url]) !== env[host]);
+  if (mismatched.length > 0) {
+    fail(
+      'each public URL names the host Caddy serves',
+      mismatched.map(([url, host]) => `${url}=${env[url]} but ${host}=${env[host]}`).join('; '),
+    );
+  } else {
+    pass('each public URL names the host Caddy serves');
   }
 
   if (env.TLS_MODE === 'internal') {

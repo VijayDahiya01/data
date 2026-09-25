@@ -28,6 +28,7 @@ import { HealthModule } from './modules/health/health.module.js';
 import { MetricsModule } from './modules/metrics/metrics.module.js';
 import { ChannelModule } from './modules/channel/channel.module.js';
 import { IdentityOrgModule } from './modules/identity-org/identity-org.module.js';
+import { AuthModule } from './modules/auth/auth.module.js';
 import { PartnerSupplyModule } from './modules/partner-supply/partner-supply.module.js';
 import { AgentModule } from './modules/agent/agent.module.js';
 import { CatalogueModule } from './modules/catalogue/catalogue.module.js';
@@ -52,6 +53,7 @@ import { BillingModule } from './modules/billing/billing.module.js';
     HealthModule,
     MetricsModule,
     ChannelModule,
+    AuthModule,
     IdentityOrgModule,
     PartnerSupplyModule,
     AgentModule,

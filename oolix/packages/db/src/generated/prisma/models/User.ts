@@ -20,8 +20,18 @@ export type UserModel = runtime.Types.Result.DefaultSelection<Prisma.$UserPayloa
 
 export type AggregateUser = {
   _count: UserCountAggregateOutputType | null
+  _avg: UserAvgAggregateOutputType | null
+  _sum: UserSumAggregateOutputType | null
   _min: UserMinAggregateOutputType | null
   _max: UserMaxAggregateOutputType | null
+}
+
+export type UserAvgAggregateOutputType = {
+  failedLoginCount: number | null
+}
+
+export type UserSumAggregateOutputType = {
+  failedLoginCount: number | null
 }
 
 export type UserMinAggregateOutputType = {
@@ -36,6 +46,11 @@ export type UserMinAggregateOutputType = {
   mfaEnrolled: boolean | null
   createdAt: Date | null
   updatedAt: Date | null
+  passwordHash: string | null
+  passwordChangedAt: Date | null
+  emailVerifiedAt: Date | null
+  failedLoginCount: number | null
+  lockedUntil: Date | null
 }
 
 export type UserMaxAggregateOutputType = {
@@ -50,6 +65,11 @@ export type UserMaxAggregateOutputType = {
   mfaEnrolled: boolean | null
   createdAt: Date | null
   updatedAt: Date | null
+  passwordHash: string | null
+  passwordChangedAt: Date | null
+  emailVerifiedAt: Date | null
+  failedLoginCount: number | null
+  lockedUntil: Date | null
 }
 
 export type UserCountAggregateOutputType = {
@@ -64,9 +84,22 @@ export type UserCountAggregateOutputType = {
   mfaEnrolled: number
   createdAt: number
   updatedAt: number
+  passwordHash: number
+  passwordChangedAt: number
+  emailVerifiedAt: number
+  failedLoginCount: number
+  lockedUntil: number
   _all: number
 }
 
+
+export type UserAvgAggregateInputType = {
+  failedLoginCount?: true
+}
+
+export type UserSumAggregateInputType = {
+  failedLoginCount?: true
+}
 
 export type UserMinAggregateInputType = {
   id?: true
@@ -80,6 +113,11 @@ export type UserMinAggregateInputType = {
   mfaEnrolled?: true
   createdAt?: true
   updatedAt?: true
+  passwordHash?: true
+  passwordChangedAt?: true
+  emailVerifiedAt?: true
+  failedLoginCount?: true
+  lockedUntil?: true
 }
 
 export type UserMaxAggregateInputType = {
@@ -94,6 +132,11 @@ export type UserMaxAggregateInputType = {
   mfaEnrolled?: true
   createdAt?: true
   updatedAt?: true
+  passwordHash?: true
+  passwordChangedAt?: true
+  emailVerifiedAt?: true
+  failedLoginCount?: true
+  lockedUntil?: true
 }
 
 export type UserCountAggregateInputType = {
@@ -108,6 +151,11 @@ export type UserCountAggregateInputType = {
   mfaEnrolled?: true
   createdAt?: true
   updatedAt?: true
+  passwordHash?: true
+  passwordChangedAt?: true
+  emailVerifiedAt?: true
+  failedLoginCount?: true
+  lockedUntil?: true
   _all?: true
 }
 
@@ -149,6 +197,18 @@ export type UserAggregateArgs<ExtArgs extends runtime.Types.Extensions.InternalA
   /**
    * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
    * 
+   * Select which fields to average
+  **/
+  _avg?: UserAvgAggregateInputType
+  /**
+   * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+   * 
+   * Select which fields to sum
+  **/
+  _sum?: UserSumAggregateInputType
+  /**
+   * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+   * 
    * Select which fields to find the minimum value
   **/
   _min?: UserMinAggregateInputType
@@ -179,6 +239,8 @@ export type UserGroupByArgs<ExtArgs extends runtime.Types.Extensions.InternalArg
   take?: number
   skip?: number
   _count?: UserCountAggregateInputType | true
+  _avg?: UserAvgAggregateInputType
+  _sum?: UserSumAggregateInputType
   _min?: UserMinAggregateInputType
   _max?: UserMaxAggregateInputType
 }
@@ -195,7 +257,14 @@ export type UserGroupByOutputType = {
   mfaEnrolled: boolean
   createdAt: Date
   updatedAt: Date
+  passwordHash: string | null
+  passwordChangedAt: Date | null
+  emailVerifiedAt: Date | null
+  failedLoginCount: number
+  lockedUntil: Date | null
   _count: UserCountAggregateOutputType | null
+  _avg: UserAvgAggregateOutputType | null
+  _sum: UserSumAggregateOutputType | null
   _min: UserMinAggregateOutputType | null
   _max: UserMaxAggregateOutputType | null
 }
@@ -230,10 +299,17 @@ export type UserWhereInput = {
   mfaEnrolled?: Prisma.BoolFilter<"User"> | boolean
   createdAt?: Prisma.DateTimeFilter<"User"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"User"> | Date | string
+  passwordHash?: Prisma.StringNullableFilter<"User"> | string | null
+  passwordChangedAt?: Prisma.DateTimeNullableFilter<"User"> | Date | string | null
+  emailVerifiedAt?: Prisma.DateTimeNullableFilter<"User"> | Date | string | null
+  failedLoginCount?: Prisma.IntFilter<"User"> | number
+  lockedUntil?: Prisma.DateTimeNullableFilter<"User"> | Date | string | null
   memberships?: Prisma.OrganizationMemberListRelationFilter
   approvals?: Prisma.ApprovalListRelationFilter
   createdCampaigns?: Prisma.CampaignListRelationFilter
   bootstrapTokens?: Prisma.AgentBootstrapTokenListRelationFilter
+  authTokens?: Prisma.AuthTokenListRelationFilter
+  authSessions?: Prisma.AuthSessionListRelationFilter
   audienceGroups?: Prisma.AudienceGroupListRelationFilter
 }
 
@@ -249,10 +325,17 @@ export type UserOrderByWithRelationInput = {
   mfaEnrolled?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
+  passwordHash?: Prisma.SortOrderInput | Prisma.SortOrder
+  passwordChangedAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  emailVerifiedAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  failedLoginCount?: Prisma.SortOrder
+  lockedUntil?: Prisma.SortOrderInput | Prisma.SortOrder
   memberships?: Prisma.OrganizationMemberOrderByRelationAggregateInput
   approvals?: Prisma.ApprovalOrderByRelationAggregateInput
   createdCampaigns?: Prisma.CampaignOrderByRelationAggregateInput
   bootstrapTokens?: Prisma.AgentBootstrapTokenOrderByRelationAggregateInput
+  authTokens?: Prisma.AuthTokenOrderByRelationAggregateInput
+  authSessions?: Prisma.AuthSessionOrderByRelationAggregateInput
   audienceGroups?: Prisma.AudienceGroupOrderByRelationAggregateInput
 }
 
@@ -271,10 +354,17 @@ export type UserWhereUniqueInput = Prisma.AtLeast<{
   mfaEnrolled?: Prisma.BoolFilter<"User"> | boolean
   createdAt?: Prisma.DateTimeFilter<"User"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"User"> | Date | string
+  passwordHash?: Prisma.StringNullableFilter<"User"> | string | null
+  passwordChangedAt?: Prisma.DateTimeNullableFilter<"User"> | Date | string | null
+  emailVerifiedAt?: Prisma.DateTimeNullableFilter<"User"> | Date | string | null
+  failedLoginCount?: Prisma.IntFilter<"User"> | number
+  lockedUntil?: Prisma.DateTimeNullableFilter<"User"> | Date | string | null
   memberships?: Prisma.OrganizationMemberListRelationFilter
   approvals?: Prisma.ApprovalListRelationFilter
   createdCampaigns?: Prisma.CampaignListRelationFilter
   bootstrapTokens?: Prisma.AgentBootstrapTokenListRelationFilter
+  authTokens?: Prisma.AuthTokenListRelationFilter
+  authSessions?: Prisma.AuthSessionListRelationFilter
   audienceGroups?: Prisma.AudienceGroupListRelationFilter
 }, "id" | "authSubject" | "email">
 
@@ -290,9 +380,16 @@ export type UserOrderByWithAggregationInput = {
   mfaEnrolled?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
+  passwordHash?: Prisma.SortOrderInput | Prisma.SortOrder
+  passwordChangedAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  emailVerifiedAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  failedLoginCount?: Prisma.SortOrder
+  lockedUntil?: Prisma.SortOrderInput | Prisma.SortOrder
   _count?: Prisma.UserCountOrderByAggregateInput
+  _avg?: Prisma.UserAvgOrderByAggregateInput
   _max?: Prisma.UserMaxOrderByAggregateInput
   _min?: Prisma.UserMinOrderByAggregateInput
+  _sum?: Prisma.UserSumOrderByAggregateInput
 }
 
 export type UserScalarWhereWithAggregatesInput = {
@@ -310,6 +407,11 @@ export type UserScalarWhereWithAggregatesInput = {
   mfaEnrolled?: Prisma.BoolWithAggregatesFilter<"User"> | boolean
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"User"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"User"> | Date | string
+  passwordHash?: Prisma.StringNullableWithAggregatesFilter<"User"> | string | null
+  passwordChangedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"User"> | Date | string | null
+  emailVerifiedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"User"> | Date | string | null
+  failedLoginCount?: Prisma.IntWithAggregatesFilter<"User"> | number
+  lockedUntil?: Prisma.DateTimeNullableWithAggregatesFilter<"User"> | Date | string | null
 }
 
 export type UserCreateInput = {
@@ -324,10 +426,17 @@ export type UserCreateInput = {
   mfaEnrolled?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
+  passwordHash?: string | null
+  passwordChangedAt?: Date | string | null
+  emailVerifiedAt?: Date | string | null
+  failedLoginCount?: number
+  lockedUntil?: Date | string | null
   memberships?: Prisma.OrganizationMemberCreateNestedManyWithoutUserInput
   approvals?: Prisma.ApprovalCreateNestedManyWithoutActorInput
   createdCampaigns?: Prisma.CampaignCreateNestedManyWithoutCreatorInput
   bootstrapTokens?: Prisma.AgentBootstrapTokenCreateNestedManyWithoutGeneratorInput
+  authTokens?: Prisma.AuthTokenCreateNestedManyWithoutUserInput
+  authSessions?: Prisma.AuthSessionCreateNestedManyWithoutUserInput
   audienceGroups?: Prisma.AudienceGroupCreateNestedManyWithoutCreatorInput
 }
 
@@ -343,10 +452,17 @@ export type UserUncheckedCreateInput = {
   mfaEnrolled?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
+  passwordHash?: string | null
+  passwordChangedAt?: Date | string | null
+  emailVerifiedAt?: Date | string | null
+  failedLoginCount?: number
+  lockedUntil?: Date | string | null
   memberships?: Prisma.OrganizationMemberUncheckedCreateNestedManyWithoutUserInput
   approvals?: Prisma.ApprovalUncheckedCreateNestedManyWithoutActorInput
   createdCampaigns?: Prisma.CampaignUncheckedCreateNestedManyWithoutCreatorInput
   bootstrapTokens?: Prisma.AgentBootstrapTokenUncheckedCreateNestedManyWithoutGeneratorInput
+  authTokens?: Prisma.AuthTokenUncheckedCreateNestedManyWithoutUserInput
+  authSessions?: Prisma.AuthSessionUncheckedCreateNestedManyWithoutUserInput
   audienceGroups?: Prisma.AudienceGroupUncheckedCreateNestedManyWithoutCreatorInput
 }
 
@@ -362,10 +478,17 @@ export type UserUpdateInput = {
   mfaEnrolled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  passwordHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  passwordChangedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  emailVerifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  failedLoginCount?: Prisma.IntFieldUpdateOperationsInput | number
+  lockedUntil?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   memberships?: Prisma.OrganizationMemberUpdateManyWithoutUserNestedInput
   approvals?: Prisma.ApprovalUpdateManyWithoutActorNestedInput
   createdCampaigns?: Prisma.CampaignUpdateManyWithoutCreatorNestedInput
   bootstrapTokens?: Prisma.AgentBootstrapTokenUpdateManyWithoutGeneratorNestedInput
+  authTokens?: Prisma.AuthTokenUpdateManyWithoutUserNestedInput
+  authSessions?: Prisma.AuthSessionUpdateManyWithoutUserNestedInput
   audienceGroups?: Prisma.AudienceGroupUpdateManyWithoutCreatorNestedInput
 }
 
@@ -381,10 +504,17 @@ export type UserUncheckedUpdateInput = {
   mfaEnrolled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  passwordHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  passwordChangedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  emailVerifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  failedLoginCount?: Prisma.IntFieldUpdateOperationsInput | number
+  lockedUntil?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   memberships?: Prisma.OrganizationMemberUncheckedUpdateManyWithoutUserNestedInput
   approvals?: Prisma.ApprovalUncheckedUpdateManyWithoutActorNestedInput
   createdCampaigns?: Prisma.CampaignUncheckedUpdateManyWithoutCreatorNestedInput
   bootstrapTokens?: Prisma.AgentBootstrapTokenUncheckedUpdateManyWithoutGeneratorNestedInput
+  authTokens?: Prisma.AuthTokenUncheckedUpdateManyWithoutUserNestedInput
+  authSessions?: Prisma.AuthSessionUncheckedUpdateManyWithoutUserNestedInput
   audienceGroups?: Prisma.AudienceGroupUncheckedUpdateManyWithoutCreatorNestedInput
 }
 
@@ -400,6 +530,11 @@ export type UserCreateManyInput = {
   mfaEnrolled?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
+  passwordHash?: string | null
+  passwordChangedAt?: Date | string | null
+  emailVerifiedAt?: Date | string | null
+  failedLoginCount?: number
+  lockedUntil?: Date | string | null
 }
 
 export type UserUpdateManyMutationInput = {
@@ -414,6 +549,11 @@ export type UserUpdateManyMutationInput = {
   mfaEnrolled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  passwordHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  passwordChangedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  emailVerifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  failedLoginCount?: Prisma.IntFieldUpdateOperationsInput | number
+  lockedUntil?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
 }
 
 export type UserUncheckedUpdateManyInput = {
@@ -428,6 +568,11 @@ export type UserUncheckedUpdateManyInput = {
   mfaEnrolled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  passwordHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  passwordChangedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  emailVerifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  failedLoginCount?: Prisma.IntFieldUpdateOperationsInput | number
+  lockedUntil?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
 }
 
 export type UserCountOrderByAggregateInput = {
@@ -442,6 +587,15 @@ export type UserCountOrderByAggregateInput = {
   mfaEnrolled?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
+  passwordHash?: Prisma.SortOrder
+  passwordChangedAt?: Prisma.SortOrder
+  emailVerifiedAt?: Prisma.SortOrder
+  failedLoginCount?: Prisma.SortOrder
+  lockedUntil?: Prisma.SortOrder
+}
+
+export type UserAvgOrderByAggregateInput = {
+  failedLoginCount?: Prisma.SortOrder
 }
 
 export type UserMaxOrderByAggregateInput = {
@@ -456,6 +610,11 @@ export type UserMaxOrderByAggregateInput = {
   mfaEnrolled?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
+  passwordHash?: Prisma.SortOrder
+  passwordChangedAt?: Prisma.SortOrder
+  emailVerifiedAt?: Prisma.SortOrder
+  failedLoginCount?: Prisma.SortOrder
+  lockedUntil?: Prisma.SortOrder
 }
 
 export type UserMinOrderByAggregateInput = {
@@ -470,6 +629,15 @@ export type UserMinOrderByAggregateInput = {
   mfaEnrolled?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
+  passwordHash?: Prisma.SortOrder
+  passwordChangedAt?: Prisma.SortOrder
+  emailVerifiedAt?: Prisma.SortOrder
+  failedLoginCount?: Prisma.SortOrder
+  lockedUntil?: Prisma.SortOrder
+}
+
+export type UserSumOrderByAggregateInput = {
+  failedLoginCount?: Prisma.SortOrder
 }
 
 export type UserScalarRelationFilter = {
@@ -499,6 +667,42 @@ export type BoolFieldUpdateOperationsInput = {
 
 export type DateTimeFieldUpdateOperationsInput = {
   set?: Date | string
+}
+
+export type IntFieldUpdateOperationsInput = {
+  set?: number
+  increment?: number
+  decrement?: number
+  multiply?: number
+  divide?: number
+}
+
+export type UserCreateNestedOneWithoutAuthTokensInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutAuthTokensInput, Prisma.UserUncheckedCreateWithoutAuthTokensInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutAuthTokensInput
+  connect?: Prisma.UserWhereUniqueInput
+}
+
+export type UserUpdateOneRequiredWithoutAuthTokensNestedInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutAuthTokensInput, Prisma.UserUncheckedCreateWithoutAuthTokensInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutAuthTokensInput
+  upsert?: Prisma.UserUpsertWithoutAuthTokensInput
+  connect?: Prisma.UserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutAuthTokensInput, Prisma.UserUpdateWithoutAuthTokensInput>, Prisma.UserUncheckedUpdateWithoutAuthTokensInput>
+}
+
+export type UserCreateNestedOneWithoutAuthSessionsInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutAuthSessionsInput, Prisma.UserUncheckedCreateWithoutAuthSessionsInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutAuthSessionsInput
+  connect?: Prisma.UserWhereUniqueInput
+}
+
+export type UserUpdateOneRequiredWithoutAuthSessionsNestedInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutAuthSessionsInput, Prisma.UserUncheckedCreateWithoutAuthSessionsInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutAuthSessionsInput
+  upsert?: Prisma.UserUpsertWithoutAuthSessionsInput
+  connect?: Prisma.UserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutAuthSessionsInput, Prisma.UserUpdateWithoutAuthSessionsInput>, Prisma.UserUncheckedUpdateWithoutAuthSessionsInput>
 }
 
 export type UserCreateNestedOneWithoutMembershipsInput = {
@@ -571,6 +775,238 @@ export type UserUpdateOneRequiredWithoutAudienceGroupsNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutAudienceGroupsInput, Prisma.UserUpdateWithoutAudienceGroupsInput>, Prisma.UserUncheckedUpdateWithoutAudienceGroupsInput>
 }
 
+export type UserCreateWithoutAuthTokensInput = {
+  id?: string
+  authSubject: string
+  email: string
+  name: string
+  status?: $Enums.UserStatus
+  termsVersion?: string | null
+  acceptedAt?: Date | string | null
+  country?: string | null
+  mfaEnrolled?: boolean
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  passwordHash?: string | null
+  passwordChangedAt?: Date | string | null
+  emailVerifiedAt?: Date | string | null
+  failedLoginCount?: number
+  lockedUntil?: Date | string | null
+  memberships?: Prisma.OrganizationMemberCreateNestedManyWithoutUserInput
+  approvals?: Prisma.ApprovalCreateNestedManyWithoutActorInput
+  createdCampaigns?: Prisma.CampaignCreateNestedManyWithoutCreatorInput
+  bootstrapTokens?: Prisma.AgentBootstrapTokenCreateNestedManyWithoutGeneratorInput
+  authSessions?: Prisma.AuthSessionCreateNestedManyWithoutUserInput
+  audienceGroups?: Prisma.AudienceGroupCreateNestedManyWithoutCreatorInput
+}
+
+export type UserUncheckedCreateWithoutAuthTokensInput = {
+  id?: string
+  authSubject: string
+  email: string
+  name: string
+  status?: $Enums.UserStatus
+  termsVersion?: string | null
+  acceptedAt?: Date | string | null
+  country?: string | null
+  mfaEnrolled?: boolean
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  passwordHash?: string | null
+  passwordChangedAt?: Date | string | null
+  emailVerifiedAt?: Date | string | null
+  failedLoginCount?: number
+  lockedUntil?: Date | string | null
+  memberships?: Prisma.OrganizationMemberUncheckedCreateNestedManyWithoutUserInput
+  approvals?: Prisma.ApprovalUncheckedCreateNestedManyWithoutActorInput
+  createdCampaigns?: Prisma.CampaignUncheckedCreateNestedManyWithoutCreatorInput
+  bootstrapTokens?: Prisma.AgentBootstrapTokenUncheckedCreateNestedManyWithoutGeneratorInput
+  authSessions?: Prisma.AuthSessionUncheckedCreateNestedManyWithoutUserInput
+  audienceGroups?: Prisma.AudienceGroupUncheckedCreateNestedManyWithoutCreatorInput
+}
+
+export type UserCreateOrConnectWithoutAuthTokensInput = {
+  where: Prisma.UserWhereUniqueInput
+  create: Prisma.XOR<Prisma.UserCreateWithoutAuthTokensInput, Prisma.UserUncheckedCreateWithoutAuthTokensInput>
+}
+
+export type UserUpsertWithoutAuthTokensInput = {
+  update: Prisma.XOR<Prisma.UserUpdateWithoutAuthTokensInput, Prisma.UserUncheckedUpdateWithoutAuthTokensInput>
+  create: Prisma.XOR<Prisma.UserCreateWithoutAuthTokensInput, Prisma.UserUncheckedCreateWithoutAuthTokensInput>
+  where?: Prisma.UserWhereInput
+}
+
+export type UserUpdateToOneWithWhereWithoutAuthTokensInput = {
+  where?: Prisma.UserWhereInput
+  data: Prisma.XOR<Prisma.UserUpdateWithoutAuthTokensInput, Prisma.UserUncheckedUpdateWithoutAuthTokensInput>
+}
+
+export type UserUpdateWithoutAuthTokensInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  authSubject?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumUserStatusFieldUpdateOperationsInput | $Enums.UserStatus
+  termsVersion?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  acceptedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  country?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  mfaEnrolled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  passwordHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  passwordChangedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  emailVerifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  failedLoginCount?: Prisma.IntFieldUpdateOperationsInput | number
+  lockedUntil?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  memberships?: Prisma.OrganizationMemberUpdateManyWithoutUserNestedInput
+  approvals?: Prisma.ApprovalUpdateManyWithoutActorNestedInput
+  createdCampaigns?: Prisma.CampaignUpdateManyWithoutCreatorNestedInput
+  bootstrapTokens?: Prisma.AgentBootstrapTokenUpdateManyWithoutGeneratorNestedInput
+  authSessions?: Prisma.AuthSessionUpdateManyWithoutUserNestedInput
+  audienceGroups?: Prisma.AudienceGroupUpdateManyWithoutCreatorNestedInput
+}
+
+export type UserUncheckedUpdateWithoutAuthTokensInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  authSubject?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumUserStatusFieldUpdateOperationsInput | $Enums.UserStatus
+  termsVersion?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  acceptedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  country?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  mfaEnrolled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  passwordHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  passwordChangedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  emailVerifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  failedLoginCount?: Prisma.IntFieldUpdateOperationsInput | number
+  lockedUntil?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  memberships?: Prisma.OrganizationMemberUncheckedUpdateManyWithoutUserNestedInput
+  approvals?: Prisma.ApprovalUncheckedUpdateManyWithoutActorNestedInput
+  createdCampaigns?: Prisma.CampaignUncheckedUpdateManyWithoutCreatorNestedInput
+  bootstrapTokens?: Prisma.AgentBootstrapTokenUncheckedUpdateManyWithoutGeneratorNestedInput
+  authSessions?: Prisma.AuthSessionUncheckedUpdateManyWithoutUserNestedInput
+  audienceGroups?: Prisma.AudienceGroupUncheckedUpdateManyWithoutCreatorNestedInput
+}
+
+export type UserCreateWithoutAuthSessionsInput = {
+  id?: string
+  authSubject: string
+  email: string
+  name: string
+  status?: $Enums.UserStatus
+  termsVersion?: string | null
+  acceptedAt?: Date | string | null
+  country?: string | null
+  mfaEnrolled?: boolean
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  passwordHash?: string | null
+  passwordChangedAt?: Date | string | null
+  emailVerifiedAt?: Date | string | null
+  failedLoginCount?: number
+  lockedUntil?: Date | string | null
+  memberships?: Prisma.OrganizationMemberCreateNestedManyWithoutUserInput
+  approvals?: Prisma.ApprovalCreateNestedManyWithoutActorInput
+  createdCampaigns?: Prisma.CampaignCreateNestedManyWithoutCreatorInput
+  bootstrapTokens?: Prisma.AgentBootstrapTokenCreateNestedManyWithoutGeneratorInput
+  authTokens?: Prisma.AuthTokenCreateNestedManyWithoutUserInput
+  audienceGroups?: Prisma.AudienceGroupCreateNestedManyWithoutCreatorInput
+}
+
+export type UserUncheckedCreateWithoutAuthSessionsInput = {
+  id?: string
+  authSubject: string
+  email: string
+  name: string
+  status?: $Enums.UserStatus
+  termsVersion?: string | null
+  acceptedAt?: Date | string | null
+  country?: string | null
+  mfaEnrolled?: boolean
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  passwordHash?: string | null
+  passwordChangedAt?: Date | string | null
+  emailVerifiedAt?: Date | string | null
+  failedLoginCount?: number
+  lockedUntil?: Date | string | null
+  memberships?: Prisma.OrganizationMemberUncheckedCreateNestedManyWithoutUserInput
+  approvals?: Prisma.ApprovalUncheckedCreateNestedManyWithoutActorInput
+  createdCampaigns?: Prisma.CampaignUncheckedCreateNestedManyWithoutCreatorInput
+  bootstrapTokens?: Prisma.AgentBootstrapTokenUncheckedCreateNestedManyWithoutGeneratorInput
+  authTokens?: Prisma.AuthTokenUncheckedCreateNestedManyWithoutUserInput
+  audienceGroups?: Prisma.AudienceGroupUncheckedCreateNestedManyWithoutCreatorInput
+}
+
+export type UserCreateOrConnectWithoutAuthSessionsInput = {
+  where: Prisma.UserWhereUniqueInput
+  create: Prisma.XOR<Prisma.UserCreateWithoutAuthSessionsInput, Prisma.UserUncheckedCreateWithoutAuthSessionsInput>
+}
+
+export type UserUpsertWithoutAuthSessionsInput = {
+  update: Prisma.XOR<Prisma.UserUpdateWithoutAuthSessionsInput, Prisma.UserUncheckedUpdateWithoutAuthSessionsInput>
+  create: Prisma.XOR<Prisma.UserCreateWithoutAuthSessionsInput, Prisma.UserUncheckedCreateWithoutAuthSessionsInput>
+  where?: Prisma.UserWhereInput
+}
+
+export type UserUpdateToOneWithWhereWithoutAuthSessionsInput = {
+  where?: Prisma.UserWhereInput
+  data: Prisma.XOR<Prisma.UserUpdateWithoutAuthSessionsInput, Prisma.UserUncheckedUpdateWithoutAuthSessionsInput>
+}
+
+export type UserUpdateWithoutAuthSessionsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  authSubject?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumUserStatusFieldUpdateOperationsInput | $Enums.UserStatus
+  termsVersion?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  acceptedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  country?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  mfaEnrolled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  passwordHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  passwordChangedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  emailVerifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  failedLoginCount?: Prisma.IntFieldUpdateOperationsInput | number
+  lockedUntil?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  memberships?: Prisma.OrganizationMemberUpdateManyWithoutUserNestedInput
+  approvals?: Prisma.ApprovalUpdateManyWithoutActorNestedInput
+  createdCampaigns?: Prisma.CampaignUpdateManyWithoutCreatorNestedInput
+  bootstrapTokens?: Prisma.AgentBootstrapTokenUpdateManyWithoutGeneratorNestedInput
+  authTokens?: Prisma.AuthTokenUpdateManyWithoutUserNestedInput
+  audienceGroups?: Prisma.AudienceGroupUpdateManyWithoutCreatorNestedInput
+}
+
+export type UserUncheckedUpdateWithoutAuthSessionsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  authSubject?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumUserStatusFieldUpdateOperationsInput | $Enums.UserStatus
+  termsVersion?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  acceptedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  country?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  mfaEnrolled?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  passwordHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  passwordChangedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  emailVerifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  failedLoginCount?: Prisma.IntFieldUpdateOperationsInput | number
+  lockedUntil?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  memberships?: Prisma.OrganizationMemberUncheckedUpdateManyWithoutUserNestedInput
+  approvals?: Prisma.ApprovalUncheckedUpdateManyWithoutActorNestedInput
+  createdCampaigns?: Prisma.CampaignUncheckedUpdateManyWithoutCreatorNestedInput
+  bootstrapTokens?: Prisma.AgentBootstrapTokenUncheckedUpdateManyWithoutGeneratorNestedInput
+  authTokens?: Prisma.AuthTokenUncheckedUpdateManyWithoutUserNestedInput
+  audienceGroups?: Prisma.AudienceGroupUncheckedUpdateManyWithoutCreatorNestedInput
+}
+
 export type UserCreateWithoutMembershipsInput = {
   id?: string
   authSubject: string
@@ -583,9 +1019,16 @@ export type UserCreateWithoutMembershipsInput = {
   mfaEnrolled?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
+  passwordHash?: string | null
+  passwordChangedAt?: Date | string | null
+  emailVerifiedAt?: Date | string | null
+  failedLoginCount?: number
+  lockedUntil?: Date | string | null
   approvals?: Prisma.ApprovalCreateNestedManyWithoutActorInput
   createdCampaigns?: Prisma.CampaignCreateNestedManyWithoutCreatorInput
   bootstrapTokens?: Prisma.AgentBootstrapTokenCreateNestedManyWithoutGeneratorInput
+  authTokens?: Prisma.AuthTokenCreateNestedManyWithoutUserInput
+  authSessions?: Prisma.AuthSessionCreateNestedManyWithoutUserInput
   audienceGroups?: Prisma.AudienceGroupCreateNestedManyWithoutCreatorInput
 }
 
@@ -601,9 +1044,16 @@ export type UserUncheckedCreateWithoutMembershipsInput = {
   mfaEnrolled?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
+  passwordHash?: string | null
+  passwordChangedAt?: Date | string | null
+  emailVerifiedAt?: Date | string | null
+  failedLoginCount?: number
+  lockedUntil?: Date | string | null
   approvals?: Prisma.ApprovalUncheckedCreateNestedManyWithoutActorInput
   createdCampaigns?: Prisma.CampaignUncheckedCreateNestedManyWithoutCreatorInput
   bootstrapTokens?: Prisma.AgentBootstrapTokenUncheckedCreateNestedManyWithoutGeneratorInput
+  authTokens?: Prisma.AuthTokenUncheckedCreateNestedManyWithoutUserInput
+  authSessions?: Prisma.AuthSessionUncheckedCreateNestedManyWithoutUserInput
   audienceGroups?: Prisma.AudienceGroupUncheckedCreateNestedManyWithoutCreatorInput
 }
 
@@ -635,9 +1085,16 @@ export type UserUpdateWithoutMembershipsInput = {
   mfaEnrolled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  passwordHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  passwordChangedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  emailVerifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  failedLoginCount?: Prisma.IntFieldUpdateOperationsInput | number
+  lockedUntil?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   approvals?: Prisma.ApprovalUpdateManyWithoutActorNestedInput
   createdCampaigns?: Prisma.CampaignUpdateManyWithoutCreatorNestedInput
   bootstrapTokens?: Prisma.AgentBootstrapTokenUpdateManyWithoutGeneratorNestedInput
+  authTokens?: Prisma.AuthTokenUpdateManyWithoutUserNestedInput
+  authSessions?: Prisma.AuthSessionUpdateManyWithoutUserNestedInput
   audienceGroups?: Prisma.AudienceGroupUpdateManyWithoutCreatorNestedInput
 }
 
@@ -653,9 +1110,16 @@ export type UserUncheckedUpdateWithoutMembershipsInput = {
   mfaEnrolled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  passwordHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  passwordChangedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  emailVerifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  failedLoginCount?: Prisma.IntFieldUpdateOperationsInput | number
+  lockedUntil?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   approvals?: Prisma.ApprovalUncheckedUpdateManyWithoutActorNestedInput
   createdCampaigns?: Prisma.CampaignUncheckedUpdateManyWithoutCreatorNestedInput
   bootstrapTokens?: Prisma.AgentBootstrapTokenUncheckedUpdateManyWithoutGeneratorNestedInput
+  authTokens?: Prisma.AuthTokenUncheckedUpdateManyWithoutUserNestedInput
+  authSessions?: Prisma.AuthSessionUncheckedUpdateManyWithoutUserNestedInput
   audienceGroups?: Prisma.AudienceGroupUncheckedUpdateManyWithoutCreatorNestedInput
 }
 
@@ -671,9 +1135,16 @@ export type UserCreateWithoutCreatedCampaignsInput = {
   mfaEnrolled?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
+  passwordHash?: string | null
+  passwordChangedAt?: Date | string | null
+  emailVerifiedAt?: Date | string | null
+  failedLoginCount?: number
+  lockedUntil?: Date | string | null
   memberships?: Prisma.OrganizationMemberCreateNestedManyWithoutUserInput
   approvals?: Prisma.ApprovalCreateNestedManyWithoutActorInput
   bootstrapTokens?: Prisma.AgentBootstrapTokenCreateNestedManyWithoutGeneratorInput
+  authTokens?: Prisma.AuthTokenCreateNestedManyWithoutUserInput
+  authSessions?: Prisma.AuthSessionCreateNestedManyWithoutUserInput
   audienceGroups?: Prisma.AudienceGroupCreateNestedManyWithoutCreatorInput
 }
 
@@ -689,9 +1160,16 @@ export type UserUncheckedCreateWithoutCreatedCampaignsInput = {
   mfaEnrolled?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
+  passwordHash?: string | null
+  passwordChangedAt?: Date | string | null
+  emailVerifiedAt?: Date | string | null
+  failedLoginCount?: number
+  lockedUntil?: Date | string | null
   memberships?: Prisma.OrganizationMemberUncheckedCreateNestedManyWithoutUserInput
   approvals?: Prisma.ApprovalUncheckedCreateNestedManyWithoutActorInput
   bootstrapTokens?: Prisma.AgentBootstrapTokenUncheckedCreateNestedManyWithoutGeneratorInput
+  authTokens?: Prisma.AuthTokenUncheckedCreateNestedManyWithoutUserInput
+  authSessions?: Prisma.AuthSessionUncheckedCreateNestedManyWithoutUserInput
   audienceGroups?: Prisma.AudienceGroupUncheckedCreateNestedManyWithoutCreatorInput
 }
 
@@ -723,9 +1201,16 @@ export type UserUpdateWithoutCreatedCampaignsInput = {
   mfaEnrolled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  passwordHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  passwordChangedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  emailVerifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  failedLoginCount?: Prisma.IntFieldUpdateOperationsInput | number
+  lockedUntil?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   memberships?: Prisma.OrganizationMemberUpdateManyWithoutUserNestedInput
   approvals?: Prisma.ApprovalUpdateManyWithoutActorNestedInput
   bootstrapTokens?: Prisma.AgentBootstrapTokenUpdateManyWithoutGeneratorNestedInput
+  authTokens?: Prisma.AuthTokenUpdateManyWithoutUserNestedInput
+  authSessions?: Prisma.AuthSessionUpdateManyWithoutUserNestedInput
   audienceGroups?: Prisma.AudienceGroupUpdateManyWithoutCreatorNestedInput
 }
 
@@ -741,9 +1226,16 @@ export type UserUncheckedUpdateWithoutCreatedCampaignsInput = {
   mfaEnrolled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  passwordHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  passwordChangedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  emailVerifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  failedLoginCount?: Prisma.IntFieldUpdateOperationsInput | number
+  lockedUntil?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   memberships?: Prisma.OrganizationMemberUncheckedUpdateManyWithoutUserNestedInput
   approvals?: Prisma.ApprovalUncheckedUpdateManyWithoutActorNestedInput
   bootstrapTokens?: Prisma.AgentBootstrapTokenUncheckedUpdateManyWithoutGeneratorNestedInput
+  authTokens?: Prisma.AuthTokenUncheckedUpdateManyWithoutUserNestedInput
+  authSessions?: Prisma.AuthSessionUncheckedUpdateManyWithoutUserNestedInput
   audienceGroups?: Prisma.AudienceGroupUncheckedUpdateManyWithoutCreatorNestedInput
 }
 
@@ -759,9 +1251,16 @@ export type UserCreateWithoutApprovalsInput = {
   mfaEnrolled?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
+  passwordHash?: string | null
+  passwordChangedAt?: Date | string | null
+  emailVerifiedAt?: Date | string | null
+  failedLoginCount?: number
+  lockedUntil?: Date | string | null
   memberships?: Prisma.OrganizationMemberCreateNestedManyWithoutUserInput
   createdCampaigns?: Prisma.CampaignCreateNestedManyWithoutCreatorInput
   bootstrapTokens?: Prisma.AgentBootstrapTokenCreateNestedManyWithoutGeneratorInput
+  authTokens?: Prisma.AuthTokenCreateNestedManyWithoutUserInput
+  authSessions?: Prisma.AuthSessionCreateNestedManyWithoutUserInput
   audienceGroups?: Prisma.AudienceGroupCreateNestedManyWithoutCreatorInput
 }
 
@@ -777,9 +1276,16 @@ export type UserUncheckedCreateWithoutApprovalsInput = {
   mfaEnrolled?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
+  passwordHash?: string | null
+  passwordChangedAt?: Date | string | null
+  emailVerifiedAt?: Date | string | null
+  failedLoginCount?: number
+  lockedUntil?: Date | string | null
   memberships?: Prisma.OrganizationMemberUncheckedCreateNestedManyWithoutUserInput
   createdCampaigns?: Prisma.CampaignUncheckedCreateNestedManyWithoutCreatorInput
   bootstrapTokens?: Prisma.AgentBootstrapTokenUncheckedCreateNestedManyWithoutGeneratorInput
+  authTokens?: Prisma.AuthTokenUncheckedCreateNestedManyWithoutUserInput
+  authSessions?: Prisma.AuthSessionUncheckedCreateNestedManyWithoutUserInput
   audienceGroups?: Prisma.AudienceGroupUncheckedCreateNestedManyWithoutCreatorInput
 }
 
@@ -811,9 +1317,16 @@ export type UserUpdateWithoutApprovalsInput = {
   mfaEnrolled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  passwordHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  passwordChangedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  emailVerifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  failedLoginCount?: Prisma.IntFieldUpdateOperationsInput | number
+  lockedUntil?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   memberships?: Prisma.OrganizationMemberUpdateManyWithoutUserNestedInput
   createdCampaigns?: Prisma.CampaignUpdateManyWithoutCreatorNestedInput
   bootstrapTokens?: Prisma.AgentBootstrapTokenUpdateManyWithoutGeneratorNestedInput
+  authTokens?: Prisma.AuthTokenUpdateManyWithoutUserNestedInput
+  authSessions?: Prisma.AuthSessionUpdateManyWithoutUserNestedInput
   audienceGroups?: Prisma.AudienceGroupUpdateManyWithoutCreatorNestedInput
 }
 
@@ -829,9 +1342,16 @@ export type UserUncheckedUpdateWithoutApprovalsInput = {
   mfaEnrolled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  passwordHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  passwordChangedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  emailVerifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  failedLoginCount?: Prisma.IntFieldUpdateOperationsInput | number
+  lockedUntil?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   memberships?: Prisma.OrganizationMemberUncheckedUpdateManyWithoutUserNestedInput
   createdCampaigns?: Prisma.CampaignUncheckedUpdateManyWithoutCreatorNestedInput
   bootstrapTokens?: Prisma.AgentBootstrapTokenUncheckedUpdateManyWithoutGeneratorNestedInput
+  authTokens?: Prisma.AuthTokenUncheckedUpdateManyWithoutUserNestedInput
+  authSessions?: Prisma.AuthSessionUncheckedUpdateManyWithoutUserNestedInput
   audienceGroups?: Prisma.AudienceGroupUncheckedUpdateManyWithoutCreatorNestedInput
 }
 
@@ -847,9 +1367,16 @@ export type UserCreateWithoutBootstrapTokensInput = {
   mfaEnrolled?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
+  passwordHash?: string | null
+  passwordChangedAt?: Date | string | null
+  emailVerifiedAt?: Date | string | null
+  failedLoginCount?: number
+  lockedUntil?: Date | string | null
   memberships?: Prisma.OrganizationMemberCreateNestedManyWithoutUserInput
   approvals?: Prisma.ApprovalCreateNestedManyWithoutActorInput
   createdCampaigns?: Prisma.CampaignCreateNestedManyWithoutCreatorInput
+  authTokens?: Prisma.AuthTokenCreateNestedManyWithoutUserInput
+  authSessions?: Prisma.AuthSessionCreateNestedManyWithoutUserInput
   audienceGroups?: Prisma.AudienceGroupCreateNestedManyWithoutCreatorInput
 }
 
@@ -865,9 +1392,16 @@ export type UserUncheckedCreateWithoutBootstrapTokensInput = {
   mfaEnrolled?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
+  passwordHash?: string | null
+  passwordChangedAt?: Date | string | null
+  emailVerifiedAt?: Date | string | null
+  failedLoginCount?: number
+  lockedUntil?: Date | string | null
   memberships?: Prisma.OrganizationMemberUncheckedCreateNestedManyWithoutUserInput
   approvals?: Prisma.ApprovalUncheckedCreateNestedManyWithoutActorInput
   createdCampaigns?: Prisma.CampaignUncheckedCreateNestedManyWithoutCreatorInput
+  authTokens?: Prisma.AuthTokenUncheckedCreateNestedManyWithoutUserInput
+  authSessions?: Prisma.AuthSessionUncheckedCreateNestedManyWithoutUserInput
   audienceGroups?: Prisma.AudienceGroupUncheckedCreateNestedManyWithoutCreatorInput
 }
 
@@ -899,9 +1433,16 @@ export type UserUpdateWithoutBootstrapTokensInput = {
   mfaEnrolled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  passwordHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  passwordChangedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  emailVerifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  failedLoginCount?: Prisma.IntFieldUpdateOperationsInput | number
+  lockedUntil?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   memberships?: Prisma.OrganizationMemberUpdateManyWithoutUserNestedInput
   approvals?: Prisma.ApprovalUpdateManyWithoutActorNestedInput
   createdCampaigns?: Prisma.CampaignUpdateManyWithoutCreatorNestedInput
+  authTokens?: Prisma.AuthTokenUpdateManyWithoutUserNestedInput
+  authSessions?: Prisma.AuthSessionUpdateManyWithoutUserNestedInput
   audienceGroups?: Prisma.AudienceGroupUpdateManyWithoutCreatorNestedInput
 }
 
@@ -917,9 +1458,16 @@ export type UserUncheckedUpdateWithoutBootstrapTokensInput = {
   mfaEnrolled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  passwordHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  passwordChangedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  emailVerifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  failedLoginCount?: Prisma.IntFieldUpdateOperationsInput | number
+  lockedUntil?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   memberships?: Prisma.OrganizationMemberUncheckedUpdateManyWithoutUserNestedInput
   approvals?: Prisma.ApprovalUncheckedUpdateManyWithoutActorNestedInput
   createdCampaigns?: Prisma.CampaignUncheckedUpdateManyWithoutCreatorNestedInput
+  authTokens?: Prisma.AuthTokenUncheckedUpdateManyWithoutUserNestedInput
+  authSessions?: Prisma.AuthSessionUncheckedUpdateManyWithoutUserNestedInput
   audienceGroups?: Prisma.AudienceGroupUncheckedUpdateManyWithoutCreatorNestedInput
 }
 
@@ -935,10 +1483,17 @@ export type UserCreateWithoutAudienceGroupsInput = {
   mfaEnrolled?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
+  passwordHash?: string | null
+  passwordChangedAt?: Date | string | null
+  emailVerifiedAt?: Date | string | null
+  failedLoginCount?: number
+  lockedUntil?: Date | string | null
   memberships?: Prisma.OrganizationMemberCreateNestedManyWithoutUserInput
   approvals?: Prisma.ApprovalCreateNestedManyWithoutActorInput
   createdCampaigns?: Prisma.CampaignCreateNestedManyWithoutCreatorInput
   bootstrapTokens?: Prisma.AgentBootstrapTokenCreateNestedManyWithoutGeneratorInput
+  authTokens?: Prisma.AuthTokenCreateNestedManyWithoutUserInput
+  authSessions?: Prisma.AuthSessionCreateNestedManyWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutAudienceGroupsInput = {
@@ -953,10 +1508,17 @@ export type UserUncheckedCreateWithoutAudienceGroupsInput = {
   mfaEnrolled?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
+  passwordHash?: string | null
+  passwordChangedAt?: Date | string | null
+  emailVerifiedAt?: Date | string | null
+  failedLoginCount?: number
+  lockedUntil?: Date | string | null
   memberships?: Prisma.OrganizationMemberUncheckedCreateNestedManyWithoutUserInput
   approvals?: Prisma.ApprovalUncheckedCreateNestedManyWithoutActorInput
   createdCampaigns?: Prisma.CampaignUncheckedCreateNestedManyWithoutCreatorInput
   bootstrapTokens?: Prisma.AgentBootstrapTokenUncheckedCreateNestedManyWithoutGeneratorInput
+  authTokens?: Prisma.AuthTokenUncheckedCreateNestedManyWithoutUserInput
+  authSessions?: Prisma.AuthSessionUncheckedCreateNestedManyWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutAudienceGroupsInput = {
@@ -987,10 +1549,17 @@ export type UserUpdateWithoutAudienceGroupsInput = {
   mfaEnrolled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  passwordHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  passwordChangedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  emailVerifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  failedLoginCount?: Prisma.IntFieldUpdateOperationsInput | number
+  lockedUntil?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   memberships?: Prisma.OrganizationMemberUpdateManyWithoutUserNestedInput
   approvals?: Prisma.ApprovalUpdateManyWithoutActorNestedInput
   createdCampaigns?: Prisma.CampaignUpdateManyWithoutCreatorNestedInput
   bootstrapTokens?: Prisma.AgentBootstrapTokenUpdateManyWithoutGeneratorNestedInput
+  authTokens?: Prisma.AuthTokenUpdateManyWithoutUserNestedInput
+  authSessions?: Prisma.AuthSessionUpdateManyWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutAudienceGroupsInput = {
@@ -1005,10 +1574,17 @@ export type UserUncheckedUpdateWithoutAudienceGroupsInput = {
   mfaEnrolled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  passwordHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  passwordChangedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  emailVerifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  failedLoginCount?: Prisma.IntFieldUpdateOperationsInput | number
+  lockedUntil?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   memberships?: Prisma.OrganizationMemberUncheckedUpdateManyWithoutUserNestedInput
   approvals?: Prisma.ApprovalUncheckedUpdateManyWithoutActorNestedInput
   createdCampaigns?: Prisma.CampaignUncheckedUpdateManyWithoutCreatorNestedInput
   bootstrapTokens?: Prisma.AgentBootstrapTokenUncheckedUpdateManyWithoutGeneratorNestedInput
+  authTokens?: Prisma.AuthTokenUncheckedUpdateManyWithoutUserNestedInput
+  authSessions?: Prisma.AuthSessionUncheckedUpdateManyWithoutUserNestedInput
 }
 
 
@@ -1021,6 +1597,8 @@ export type UserCountOutputType = {
   approvals: number
   createdCampaigns: number
   bootstrapTokens: number
+  authTokens: number
+  authSessions: number
   audienceGroups: number
 }
 
@@ -1029,6 +1607,8 @@ export type UserCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.I
   approvals?: boolean | UserCountOutputTypeCountApprovalsArgs
   createdCampaigns?: boolean | UserCountOutputTypeCountCreatedCampaignsArgs
   bootstrapTokens?: boolean | UserCountOutputTypeCountBootstrapTokensArgs
+  authTokens?: boolean | UserCountOutputTypeCountAuthTokensArgs
+  authSessions?: boolean | UserCountOutputTypeCountAuthSessionsArgs
   audienceGroups?: boolean | UserCountOutputTypeCountAudienceGroupsArgs
 }
 
@@ -1073,6 +1653,20 @@ export type UserCountOutputTypeCountBootstrapTokensArgs<ExtArgs extends runtime.
 /**
  * UserCountOutputType without action
  */
+export type UserCountOutputTypeCountAuthTokensArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.AuthTokenWhereInput
+}
+
+/**
+ * UserCountOutputType without action
+ */
+export type UserCountOutputTypeCountAuthSessionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.AuthSessionWhereInput
+}
+
+/**
+ * UserCountOutputType without action
+ */
 export type UserCountOutputTypeCountAudienceGroupsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   where?: Prisma.AudienceGroupWhereInput
 }
@@ -1090,10 +1684,17 @@ export type UserSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
   mfaEnrolled?: boolean
   createdAt?: boolean
   updatedAt?: boolean
+  passwordHash?: boolean
+  passwordChangedAt?: boolean
+  emailVerifiedAt?: boolean
+  failedLoginCount?: boolean
+  lockedUntil?: boolean
   memberships?: boolean | Prisma.User$membershipsArgs<ExtArgs>
   approvals?: boolean | Prisma.User$approvalsArgs<ExtArgs>
   createdCampaigns?: boolean | Prisma.User$createdCampaignsArgs<ExtArgs>
   bootstrapTokens?: boolean | Prisma.User$bootstrapTokensArgs<ExtArgs>
+  authTokens?: boolean | Prisma.User$authTokensArgs<ExtArgs>
+  authSessions?: boolean | Prisma.User$authSessionsArgs<ExtArgs>
   audienceGroups?: boolean | Prisma.User$audienceGroupsArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["user"]>
@@ -1110,6 +1711,11 @@ export type UserSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensio
   mfaEnrolled?: boolean
   createdAt?: boolean
   updatedAt?: boolean
+  passwordHash?: boolean
+  passwordChangedAt?: boolean
+  emailVerifiedAt?: boolean
+  failedLoginCount?: boolean
+  lockedUntil?: boolean
 }, ExtArgs["result"]["user"]>
 
 export type UserSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -1124,6 +1730,11 @@ export type UserSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensio
   mfaEnrolled?: boolean
   createdAt?: boolean
   updatedAt?: boolean
+  passwordHash?: boolean
+  passwordChangedAt?: boolean
+  emailVerifiedAt?: boolean
+  failedLoginCount?: boolean
+  lockedUntil?: boolean
 }, ExtArgs["result"]["user"]>
 
 export type UserSelectScalar = {
@@ -1138,14 +1749,21 @@ export type UserSelectScalar = {
   mfaEnrolled?: boolean
   createdAt?: boolean
   updatedAt?: boolean
+  passwordHash?: boolean
+  passwordChangedAt?: boolean
+  emailVerifiedAt?: boolean
+  failedLoginCount?: boolean
+  lockedUntil?: boolean
 }
 
-export type UserOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "authSubject" | "email" | "name" | "status" | "termsVersion" | "acceptedAt" | "country" | "mfaEnrolled" | "createdAt" | "updatedAt", ExtArgs["result"]["user"]>
+export type UserOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "authSubject" | "email" | "name" | "status" | "termsVersion" | "acceptedAt" | "country" | "mfaEnrolled" | "createdAt" | "updatedAt" | "passwordHash" | "passwordChangedAt" | "emailVerifiedAt" | "failedLoginCount" | "lockedUntil", ExtArgs["result"]["user"]>
 export type UserInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   memberships?: boolean | Prisma.User$membershipsArgs<ExtArgs>
   approvals?: boolean | Prisma.User$approvalsArgs<ExtArgs>
   createdCampaigns?: boolean | Prisma.User$createdCampaignsArgs<ExtArgs>
   bootstrapTokens?: boolean | Prisma.User$bootstrapTokensArgs<ExtArgs>
+  authTokens?: boolean | Prisma.User$authTokensArgs<ExtArgs>
+  authSessions?: boolean | Prisma.User$authSessionsArgs<ExtArgs>
   audienceGroups?: boolean | Prisma.User$audienceGroupsArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }
@@ -1159,6 +1777,8 @@ export type $UserPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
     approvals: Prisma.$ApprovalPayload<ExtArgs>[]
     createdCampaigns: Prisma.$CampaignPayload<ExtArgs>[]
     bootstrapTokens: Prisma.$AgentBootstrapTokenPayload<ExtArgs>[]
+    authTokens: Prisma.$AuthTokenPayload<ExtArgs>[]
+    authSessions: Prisma.$AuthSessionPayload<ExtArgs>[]
     /**
      * v6 §3: audience groups this user created.
      */
@@ -1167,8 +1787,9 @@ export type $UserPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
     /**
-     * OIDC subject. Identity lives in the IdP; Oolix stores only the subject
-     * claim so the provider can be swapped without touching authorization.
+     * Stable identity key. Oolix now manages credentials itself and writes
+     * `local:<id>` here; the column stays so an external identity provider
+     * could be reintroduced without touching authorization.
      */
     authSubject: string
     email: string
@@ -1183,6 +1804,20 @@ export type $UserPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
     mfaEnrolled: boolean
     createdAt: Date
     updatedAt: Date
+    /**
+     * scrypt, self-describing: `scrypt$N$r$p$salt$hash`. Null until the user
+     * chooses a password -- an invited user who has not accepted yet cannot
+     * sign in at all, rather than with a password nobody chose.
+     */
+    passwordHash: string | null
+    passwordChangedAt: Date | null
+    emailVerifiedAt: Date | null
+    /**
+     * Consecutive failed sign-ins. Reset on success; reaching the limit sets
+     * `lockedUntil`.
+     */
+    failedLoginCount: number
+    lockedUntil: Date | null
   }, ExtArgs["result"]["user"]>
   composites: {}
 }
@@ -1581,6 +2216,8 @@ export interface Prisma__UserClient<T, Null = never, ExtArgs extends runtime.Typ
   approvals<T extends Prisma.User$approvalsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$approvalsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ApprovalPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   createdCampaigns<T extends Prisma.User$createdCampaignsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$createdCampaignsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$CampaignPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   bootstrapTokens<T extends Prisma.User$bootstrapTokensArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$bootstrapTokensArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AgentBootstrapTokenPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  authTokens<T extends Prisma.User$authTokensArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$authTokensArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AuthTokenPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  authSessions<T extends Prisma.User$authSessionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$authSessionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AuthSessionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   audienceGroups<T extends Prisma.User$audienceGroupsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$audienceGroupsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AudienceGroupPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
@@ -1622,6 +2259,11 @@ export interface UserFieldRefs {
   readonly mfaEnrolled: Prisma.FieldRef<"User", 'Boolean'>
   readonly createdAt: Prisma.FieldRef<"User", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"User", 'DateTime'>
+  readonly passwordHash: Prisma.FieldRef<"User", 'String'>
+  readonly passwordChangedAt: Prisma.FieldRef<"User", 'DateTime'>
+  readonly emailVerifiedAt: Prisma.FieldRef<"User", 'DateTime'>
+  readonly failedLoginCount: Prisma.FieldRef<"User", 'Int'>
+  readonly lockedUntil: Prisma.FieldRef<"User", 'DateTime'>
 }
     
 
@@ -2108,6 +2750,54 @@ export type User$bootstrapTokensArgs<ExtArgs extends runtime.Types.Extensions.In
   take?: number
   skip?: number
   distinct?: Prisma.AgentBootstrapTokenScalarFieldEnum | Prisma.AgentBootstrapTokenScalarFieldEnum[]
+}
+
+/**
+ * User.authTokens
+ */
+export type User$authTokensArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AuthToken
+   */
+  select?: Prisma.AuthTokenSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the AuthToken
+   */
+  omit?: Prisma.AuthTokenOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AuthTokenInclude<ExtArgs> | null
+  where?: Prisma.AuthTokenWhereInput
+  orderBy?: Prisma.AuthTokenOrderByWithRelationInput | Prisma.AuthTokenOrderByWithRelationInput[]
+  cursor?: Prisma.AuthTokenWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.AuthTokenScalarFieldEnum | Prisma.AuthTokenScalarFieldEnum[]
+}
+
+/**
+ * User.authSessions
+ */
+export type User$authSessionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AuthSession
+   */
+  select?: Prisma.AuthSessionSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the AuthSession
+   */
+  omit?: Prisma.AuthSessionOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AuthSessionInclude<ExtArgs> | null
+  where?: Prisma.AuthSessionWhereInput
+  orderBy?: Prisma.AuthSessionOrderByWithRelationInput | Prisma.AuthSessionOrderByWithRelationInput[]
+  cursor?: Prisma.AuthSessionWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.AuthSessionScalarFieldEnum | Prisma.AuthSessionScalarFieldEnum[]
 }
 
 /**

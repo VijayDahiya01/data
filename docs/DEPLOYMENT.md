@@ -8,11 +8,12 @@ from guesswork.
 
 | | What | Why this size |
 | --- | --- | --- |
-| Compute | One host, 4 vCPU / 8 GB | Runs all three services plus Keycloak and the TLS terminator. The measured ceiling is ~700 req/s on a laptop; a pilot is orders of magnitude below that |
+| Compute | One host, 4 vCPU / 8 GB | Runs all three services and the TLS terminator. The measured ceiling is ~700 req/s on a laptop; a pilot is orders of magnitude below that |
 | PostgreSQL | Managed, 2 vCPU / 4 GB, 50 GB | The database is the cost: `/readyz` costs 2.7× the throughput of `/healthz` purely by touching it |
 | Redis | Managed, 1 GB | Rate limits, idempotency, and multi-replica frequency state (§76.1) |
 | Object storage | S3-compatible bucket | Creative assets |
-| DNS | Three names: `api.`, `app.`, `auth.` | An OIDC issuer is compared as a string; see `docs/HTTPS-DRILL.md` |
+| DNS | Two names: `api.`, `app.` | The portal's session cookie stays on its own host; see `docs/HTTPS-DRILL.md` |
+| Email | Brevo, free plan to start | Sign-up confirmations, invitations and password resets. Without it nobody new can get in, so the API refuses to start |
 | Backup storage | Off the deployment host | A backup on the same disk survives only the failures that do not matter |
 
 **Managed rather than self-run, for one reason:** somebody else does the
@@ -27,9 +28,7 @@ docker compose -f oolix/infra/docker/compose.prod.yml \
 ```
 
 `compose.managed-postgres.yml` removes the bundled Postgres and requires
-`DATABASE_URL` and — separately — `KEYCLOAK_JDBC_URL`. Keycloak needs a JDBC
-string, which is not the same as `DATABASE_URL`; giving it the `postgres://`
-form fails at start-up with a driver error that never mentions the format.
+`DATABASE_URL`.
 `compose.managed-redis.yml` removes the bundled Redis, requires `REDIS_URL`,
 and must come second. It is optional: Redis holds only the API's rate-limit
 windows, and the bundled container serves them fine — the Neon path in
@@ -43,8 +42,8 @@ windows, and the bundled container serves them fine — the Neon path in
   and Oolix never connects back. If someone asks what to open inbound for
   Oolix, the answer is nothing, and that is a selling point rather than an
   inconvenience.
-- The API, portal and Keycloak publish no host ports; they are reachable only
-  through the TLS terminator.
+- The API and portal publish no host ports; they are reachable only through
+  the TLS terminator.
 
 ## First deployment, in order
 
@@ -62,8 +61,9 @@ windows, and the bundled container serves them fine — the Neon path in
 4. **Start.** The migration runs to completion before the applications start;
    a failed migration stops the deployment rather than leaving a replica
    serving against a half-migrated schema.
-5. **Verify over HTTPS** — the four checks in `docs/HTTPS-DRILL.md`, especially
-   that Keycloak reports an `https://` issuer.
+5. **Verify over HTTPS** — the checks in `docs/HTTPS-DRILL.md` — then create
+   the first administrator, who is emailed an invitation:
+   `docker compose ... run --rm api node dist/cli/create-admin.js --email … --name "…"`.
 6. **Monitoring:** `--profile monitoring`, and **replace the placeholder
    webhooks in `oolix/infra/monitoring/alertmanager.yml`**. Until you do, every alert
    fires into nothing.
@@ -96,8 +96,8 @@ The last one is the only real test. Everything above is preparation for it.
 ## Not covered here
 
 **Multiple replicas.** The compose file runs one of each. Two API replicas need
-the migration step to stay separate (it already is), and two Keycloak replicas
-need the `--cache=local` decision revisited. Two Partner Agent replicas require
+the migration step to stay separate (it already is); they already share
+sessions and rate limits through Postgres and Redis. Two Partner Agent replicas require
 Redis-backed frequency state (§76.1) — in-process memory silently multiplies a
 Partner's frequency cap by the replica count.
 

@@ -23,6 +23,20 @@ export * from './enums';
  */
 export type User = Prisma.UserModel
 /**
+ * Model AuthToken
+ * A one-time link sent by email: verify an address, reset a password, or
+ * accept an invitation. Only a SHA-256 of the token is stored; the token
+ * itself exists in the email alone, so a database leak yields no usable link.
+ */
+export type AuthToken = Prisma.AuthTokenModel
+/**
+ * Model AuthSession
+ * One refresh token. Every token descended from a single sign-in shares a
+ * `familyId`; refreshing rotates to a new row. Presenting a token that was
+ * already rotated means it was copied, so the whole family is revoked.
+ */
+export type AuthSession = Prisma.AuthSessionModel
+/**
  * Model Organization
  * 
  */

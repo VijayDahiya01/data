@@ -3,7 +3,7 @@
  *
  * Two surfaces with different authentication, deliberately kept apart:
  *
- *   /v1/partner/agents/*  PARTNER_SECURITY_ADMIN, OIDC user token
+ *   /v1/partner/agents/*  PARTNER_SECURITY_ADMIN, signed-in user token
  *   /agent/v1/*           the Agent workload itself
  *
  * Registration and token issuance are @Public because the caller has no

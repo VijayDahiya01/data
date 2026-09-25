@@ -19,9 +19,9 @@
  *
  * Separate from `playwright.config.ts` because these two suites need opposite
  * things. The Mock Partner suite starts its own server and deliberately runs
- * against an Agent that is DOWN. This one needs the whole stack up — Keycloak,
- * the API, the portal — and cannot start any of it, so it points at what is
- * already running rather than pretending otherwise.
+ * against an Agent that is DOWN. This one needs the whole stack up — the
+ * databases, the API, the portal — and cannot start any of it, so it points at
+ * what is already running rather than pretending otherwise.
  *
  *   pnpm infra:up
  *   pnpm dev:api
@@ -38,7 +38,7 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   reporter: [['list']],
-  // These drive a real stack: a Keycloak round trip per sign-in, then a sweep
+  // These drive a real stack: a real sign-in per test, then a sweep
   // of many server-rendered pages. The 30s default is a per-test budget meant
   // for a single interaction.
   timeout: 150_000,

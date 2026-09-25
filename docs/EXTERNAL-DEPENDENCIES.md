@@ -35,11 +35,12 @@ not a guess. For one or two Partners:
 
 | | Spec | Notes |
 | --- | --- | --- |
-| Compute | 1 host, 4 vCPU / 8 GB | All services plus Keycloak and the TLS terminator |
+| Compute | 1 host, 4 vCPU / 8 GB | All services and the TLS terminator |
 | PostgreSQL | Managed, 2 vCPU / 4 GB, 50 GB | The database is the cost centre |
 | Redis | Managed, 1 GB | Rate limits, idempotency, §76.1 frequency state |
 | Object storage | S3-compatible bucket | Creative assets |
-| DNS | `api.` `app.` `auth.` | Three names on one domain |
+| DNS | `api.` `app.` | Two names on one domain |
+| Email | Brevo, free up to 300 a day | Confirmations, invitations, resets. Verify the sending domain (DKIM, DMARC) or they land in spam |
 | Backup target | Anything **not** this host | NFS, object storage, another region |
 
 Roughly **$120–160/month** on DigitalOcean or Linode, **$250–350** on AWS or
@@ -128,8 +129,9 @@ FEATURE_META_ENABLED=true pnpm verify:channels
 abuse — a tester who understands what an approval *means* and tries to get paid
 for delivery that never happened.
 
-**Scope it as** (this is `docs/GO-LIVE.md` §87.1's own wording): OIDC, MFA and
-RBAC; organization isolation; the Agent registration and revocation path; and
+**Scope it as** (this is `docs/GO-LIVE.md` §87.1's own wording, updated for
+sign-in now living in Oolix): sign-up, sign-in, sessions, password reset and
+invitations, and RBAC; organization isolation; the Agent registration and revocation path; and
 the manifest signing chain.
 
 **Hand them:**

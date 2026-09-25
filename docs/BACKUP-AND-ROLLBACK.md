@@ -17,11 +17,11 @@ taken *before* every migration rather than nightly only.
 
 `oolix/infra/backup/backup.sh` captures three things:
 
-1. The Oolix database — campaigns, approvals, activations, manifests
-2. The Keycloak database — who can sign in, and as what
-3. **The signing keys**
+1. The Oolix database — campaigns, approvals, activations, manifests, and
+   every account: who can sign in, and as what
+2. **The signing keys**
 
-The third is the one that gets forgotten, and it is the one that cannot be
+The second is the one that gets forgotten, and it is the one that cannot be
 regenerated. Every manifest a Partner Agent has cached was signed by the
 manifest key. Lose it and every Agent rejects every manifest it already holds —
 a database restore does not fix that, and no error anywhere says "the key
@@ -65,7 +65,6 @@ databases were dropped and every signing key deleted**, then restored. Result:
 | Marker row written before the backup | present |
 | Manifest signing key | same `kid` as before |
 | Manifest JWKS over HTTPS | 200 |
-| Keycloak realm | 200 |
 
 One defect surfaced only by doing it: the key archive is `0600` and owned by
 whoever took the backup, so the unprivileged service account could not read it.

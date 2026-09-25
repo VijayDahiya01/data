@@ -7,7 +7,8 @@ openapi: 3.1.0
 # shapes. CI validates generated server/client types against it."
 #
 # Three surfaces, deliberately separated (§67):
-#   /v1/...        Oolix user API        OIDC bearer token
+#   /v1/...        Oolix user API        Oolix-issued user bearer token
+#                                        (/v1/auth/* issues it and is public)
 #   /agent/v1/...  Agent-facing API      Oolix-issued workload token + X-Agent-Id
 #   /healthz,/readyz  probes             unauthenticated
 #
@@ -48,6 +49,11 @@ servers:
 tags:
   - name: Health
     description: Liveness, readiness and manifest verification keys (§69.2, §75).
+  - name: Auth
+    description: |
+      Sign-up, sign-in and account recovery (§35.1, §86). Public by nature:
+      these routes turn an anonymous caller into a signed-in one, so each
+      carries a per-IP budget.
   - name: Identity
     description: Users, organizations and membership (§35, §66).
   - name: Partner supply
@@ -79,7 +85,7 @@ tags:
     description: Oolix platform operations (§98.1).
 
 security:
-  - oidcBearer: []
+  - userBearer: []
 
 paths:
   # ---------------------------------------------------------------------------
@@ -166,6 +172,223 @@ paths:
                     items: { type: object, additionalProperties: true }
 
   # ---------------------------------------------------------------------------
+  /v1/auth/signup:
+    post:
+      operationId: signUp
+      tags: [Auth]
+      summary: Create an account and send the verification email
+      description: |
+        §35.1. The account starts at `PENDING_EMAIL_VERIFICATION` and cannot
+        sign in until the emailed link is used. The answer is identical
+        whether or not the address already has an account -- that account's
+        owner is told by email instead -- so this route cannot reveal who is
+        registered. 5 attempts/min/IP (§86).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SignUp' }
+      responses:
+        '202':
+          description: Verification email sent, or the existing owner notified
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthStatus' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/auth/verify-email:
+    post:
+      operationId: verifyEmail
+      tags: [Auth]
+      summary: Confirm an email address with the emailed link
+      description: The link's token is single-use and expires after 24 hours.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LinkToken' }
+      responses:
+        '200':
+          description: Address confirmed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthStatus' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/auth/resend-verification:
+    post:
+      operationId: resendVerification
+      tags: [Auth]
+      summary: Send a fresh verification link
+      description: Answers identically whether or not the address has a pending account.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmailOnly' }
+      responses:
+        '202':
+          description: Sent if there was anything to send
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthStatus' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/auth/login:
+    post:
+      operationId: logIn
+      tags: [Auth]
+      summary: Sign in with email and password
+      description: |
+        Every failure answers `AUTH_001` with one message, whether the address
+        is unknown, the password wrong, or sign-in paused after 10 consecutive
+        failures (for 15 minutes; the owner is emailed). Only a caller who gave
+        the right password can learn more: `AUTH_002` when the address is not
+        yet confirmed. 10 attempts/min/IP.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Credentials' }
+      responses:
+        '200':
+          description: Signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: '`AUTH_002` -- right password, email address not yet confirmed.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/auth/refresh:
+    post:
+      operationId: refreshSession
+      tags: [Auth]
+      summary: Exchange a refresh token for a new access and refresh token
+      description: |
+        Refresh tokens are single-use and rotated on every call. A token spent
+        more than 30 seconds ago and presented again is a copy: the whole
+        sign-in is revoked. The sign-in's absolute end never moves.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshToken' }
+      responses:
+        '200':
+          description: New tokens
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/auth/logout:
+    post:
+      operationId: logOut
+      tags: [Auth]
+      summary: End the sign-in this refresh token belongs to
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshToken' }
+      responses:
+        '204': { description: Signed out (also when already signed out) }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/auth/forgot-password:
+    post:
+      operationId: forgotPassword
+      tags: [Auth]
+      summary: Email a password-reset link
+      description: Answers identically whether or not the address has an account. The link lasts 30 minutes.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmailOnly' }
+      responses:
+        '202':
+          description: Sent if the address has an account
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthStatus' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/auth/reset-password:
+    post:
+      operationId: resetPassword
+      tags: [Auth]
+      summary: Choose a new password with the emailed link
+      description: Every existing sign-in ends. A refused password leaves the link usable.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResetPassword' }
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthStatus' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/auth/accept-invite:
+    post:
+      operationId: acceptInvitation
+      tags: [Auth]
+      summary: Accept an emailed invitation
+      description: |
+        §35.3. Someone new chooses a password here and is signed straight in;
+        someone who already has an account joins and signs in the usual way.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AcceptInvitation' }
+      responses:
+        '200':
+          description: Invitation accepted; tokens included for a newcomer
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AcceptedInvitation' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/me/password:
+    post:
+      operationId: changeMyPassword
+      tags: [Auth]
+      summary: Change your password
+      description: Every other sign-in ends; this one continues with the tokens returned.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangePassword' }
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /v1/me/context:
     get:
       operationId: getMyContext
@@ -177,6 +400,10 @@ paths:
         §52.1. Everything the portal needs to render role-aware navigation
         (§34) in one call, so the frontend never infers permissions from a role
         name. Roles come from the database, never from a token claim (§4.2).
+
+        Also answers someone who belongs to no organization yet, with
+        `active_organization: null` and no permissions -- the portal's cue to
+        send them to organization setup (§35.2).
       responses:
         '200':
           description: Caller context
@@ -1404,7 +1631,7 @@ paths:
       tags: [Attribution]
       summary: Report a CRM lead event
       description: |
-        §71. Authenticated by the Buyer's **CRM API key**, not an OIDC token:
+        §71. Authenticated by the Buyer's **CRM API key**, not a user token:
         the caller is a machine in the Buyer's own stack.
 
         Transitions are forward-only (`RECEIVED -> VALID -> QUALIFIED ->
@@ -2335,14 +2562,15 @@ paths:
 # =============================================================================
 components:
   securitySchemes:
-    oidcBearer:
+    userBearer:
       type: http
       scheme: bearer
       bearerFormat: JWT
       description: |
-        §64: OIDC access token. Identity is delegated to the provider; Oolix
-        stores only the subject claim. Roles are read from the database for the
-        active organization, never from a token claim (§4.2).
+        An ES256 access token issued by `POST /v1/auth/login` (ten minutes;
+        renew with `POST /v1/auth/refresh`). It says only who the caller is:
+        roles are read from the database for the active organization, never
+        from a token claim (§4.2).
     agentBearer:
       type: http
       scheme: bearer
@@ -2481,6 +2709,7 @@ components:
       enum:
         [
           AUTH_001,
+          AUTH_002,
           PERM_001,
           PERM_002,
           VAL_001,
@@ -2549,6 +2778,85 @@ components:
       enum: [PENDING_CHANNEL_CHECK, READY, SYNCING, LIVE, PAUSED, FAILED, ENDING, ENDED]
 
     # --- request bodies ------------------------------------------------------
+    SignUp:
+      type: object
+      required: [email, name, password, country, accept_terms, terms_version]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        name: { type: string, minLength: 2, maxLength: 100 }
+        password:
+          type: string
+          description: 12-128 characters, not built from the email address, not a common or breached password.
+        country: { type: string, minLength: 2, maxLength: 2 }
+        accept_terms: { type: boolean, const: true }
+        terms_version: { type: string, maxLength: 40 }
+    Credentials:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    EmailOnly:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+    LinkToken:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string, minLength: 20, maxLength: 200 }
+    ResetPassword:
+      type: object
+      required: [token, password]
+      properties:
+        token: { type: string, minLength: 20, maxLength: 200 }
+        password: { type: string }
+    AcceptInvitation:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string, minLength: 20, maxLength: 200 }
+        password: { type: string, description: Required for someone who has no account yet. }
+        name: { type: string, minLength: 2, maxLength: 100 }
+    RefreshToken:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token: { type: string }
+    ChangePassword:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password: { type: string }
+        new_password: { type: string }
+    AuthStatus:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string }
+    TokenPair:
+      type: object
+      required: [access_token, token_type, expires_in, refresh_token, session_expires_at]
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, const: Bearer }
+        expires_in: { type: integer, description: Seconds until the access token expires. }
+        refresh_token: { type: string, description: Single use -- every refresh returns a new one. }
+        session_expires_at:
+          type: string
+          format: date-time
+          description: When the sign-in ends, however often it is refreshed.
+    AcceptedInvitation:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, const: accepted }
+        access_token: { type: string }
+        token_type: { type: string, const: Bearer }
+        expires_in: { type: integer }
+        refresh_token: { type: string }
+        session_expires_at: { type: string, format: date-time }
     CreateOrganization:
       type: object
       required: [name, domain, type, country]

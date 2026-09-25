@@ -24,6 +24,9 @@ export interface ActionState {
 }
 
 function toState(err: unknown): ActionState {
+  // The API ended the sign-in (signed out elsewhere, password changed): the
+  // same dead session as below, reached one step later.
+  if (err instanceof ApiError && err.isAuthFailure) redirect('/login?error=session');
   if (err instanceof ApiError) {
     const fieldErrors: Record<string, string> = {};
     for (const fe of err.fieldErrors) fieldErrors[fe.field] = fe.message;
@@ -154,9 +157,11 @@ export async function resolvePayoutDispute(
 
 export async function inviteMember(_prev: ActionState, fd: FormData): Promise<ActionState> {
   try {
+    // `name` is required by the API. The form never sent it, so every
+    // invitation from the portal failed validation until 2026-09-24.
     await api('/v1/organizations/members/invite', {
       method: 'POST',
-      body: { email: str(fd, 'email'), role: str(fd, 'role') },
+      body: { name: str(fd, 'name'), email: str(fd, 'email'), role: str(fd, 'role') },
     });
   } catch (err) {
     return toState(err);

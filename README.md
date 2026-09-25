@@ -41,10 +41,10 @@ oolix/                   ── OUR SIDE: the control plane Oolix deploys ──
   packages/
     db/                  Canonical schema, migrations, seed and Prisma client (§73, §95, §96).
     manifest-schema/     Canonical JSON + ES256 manifest signing (§75).
-    auth-rbac/           Principals, RBAC scoping, OIDC, Agent workload auth (§66, §92).
+    auth-rbac/           Principals, RBAC scoping, passwords, user and Agent tokens (§66, §92).
     observability/       Structured logging, PII redaction, metrics and alerts (§78).
     runtime-config/      Secrets from files, validated configuration (§65.1).
-  infra/                 Dockerfiles, prod compose, Caddy, Keycloak realm, monitoring, backup.
+  infra/                 Dockerfiles, prod compose, Caddy, monitoring, backup.
 
 partner/                 ── THEIR SIDE: runs inside the Data Partner ────────────
   agent/                 Go. Local ad decisions against the Partner's own data (§45, §69).
@@ -121,7 +121,6 @@ Verify the §91 fixtures end to end:
 | API                   | <http://localhost:4000> (`/healthz`, `/readyz`)                      |
 | Partner Agent         | <http://localhost:8082> (`/healthz`, `/readyz`) — see the note below |
 | Mock Partner          | <http://localhost:4001>                                              |
-| Keycloak              | <http://localhost:8081> (admin / admin)                              |
 | Postgres (Oolix)      | `localhost:5432` — oolix / oolix                                     |
 | Postgres (Partner)    | `localhost:5433` — partner / partner                                 |
 | Redis (Oolix)         | `localhost:6379`                                                     |
@@ -137,19 +136,14 @@ Agent replicas and never mixed with control-plane data.
 ### Using the portal
 
 `pnpm dev:web` serves the portal at <http://localhost:3000>. Sign in with any
-seeded address and the password `password` — identity is delegated to the local
-Keycloak realm, so Oolix never sees a password (§64).
+seeded address and the password `password`, or create an account at
+[/signup](http://localhost:3000/signup).
 
-Keycloak then asks for a **one-time code**: the realm requires a second factor
-for everyone (§4.2, §82), because the API refuses the privileged roles without
-it. The seeded identities all carry the same development authenticator secret,
-`oolix-dev-totp-secret`, so you can add it once to any TOTP app (choose "enter
-a setup key") and it works for every one of them. The e2e suites compute the
-code themselves — see `e2e/lib/auth.ts`.
-
-That secret never reaches a deployment: these identities are merged in only
-when `KC_SEED_USERS` is exactly `true`, and `render-realm.mjs` refuses to seed
-them at all into a realm that requires TLS.
+Oolix handles sign-in itself: the API checks the password and issues the tokens,
+and there is no second factor — `docs/SECURITY-REVIEW.md` records that decision
+against §4.2 and §64, and what compensates. Locally, emails are not sent: the
+API prints each one, confirmation and reset links included, to its terminal
+(`EMAIL_PROVIDER=log`).
 
 What you can do end to end, in a browser:
 
@@ -194,7 +188,7 @@ it.
 
 ### Seed identities
 
-Local Keycloak users, all with password `password` (§65, §95):
+Seeded accounts, all with the password `password` (§65, §95):
 
 `buyer.admin@` · `buyer.operator@` · `partner.admin@` · `partner.security@` ·
 `partner.approver@` · `partner.finance@` · `network.admin@` · `finance@` · `analyst@` ·
@@ -297,14 +291,6 @@ identity is revoked reports `identity_valid: false` from `/readyz` with
 remediation text, rather than quietly serving stale config until its stale
 grace expires.
 
-### Re-creating the local Keycloak
-
-Recreating the Keycloak container issues **new OIDC subject ids** for the same
-emails. The API deliberately refuses to rebind an email to a different identity
-(that check is a real defence against invitation hijacking), so seeded users
-would be locked out. Re-run `pnpm db:seed` afterwards: in `development` and
-`test` it resets the identity binding so the next login re-links cleanly.
-
 ## External channels are off by default
 
 `FEATURE_META_ENABLED` and `FEATURE_GOOGLE_ENABLED` default to `false`.
@@ -319,7 +305,7 @@ The owned-media path must remain fully functional with both disabled.
 
 | Phase | Deliverable                                                                             | State                               |
 | ----- | --------------------------------------------------------------------------------------- | ----------------------------------- |
-| 0     | Foundations: repo, CI, OIDC, org/RBAC, canonical migrations, audit, compose             | exit criteria met                   |
+| 0     | Foundations: repo, CI, sign-in, org/RBAC, canonical migrations, audit, compose          | exit criteria met                   |
 | 1     | Partner supply: profile/policy, segments, reach buckets, placements, Agent registration | exit criteria met                   |
 | 2     | Catalogue + campaign builder, creative upload/versioning, budgets                       | exit criteria met                   |
 | 3     | Approval + ES256 manifests + control sync                                               | exit criteria met                   |

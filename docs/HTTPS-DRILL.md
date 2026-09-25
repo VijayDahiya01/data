@@ -1,15 +1,16 @@
 # Running the stack over HTTPS
 
-Everything in a pilot is served over TLS: the portal, the API, and Keycloak.
-This is not presentation. The Agent verifies manifest signatures against an
-issuer and audience, the API validates tokens against an issuer, and the
-portal marks its session cookie `Secure` only when its public URL is `https`.
-Those values have to change together or nothing authenticates — and the errors
-do not name the cause.
+Everything in a pilot is served over TLS: the portal and the API. This is not
+presentation. The Agent verifies manifest signatures against an issuer and
+audience, the API names its own public URL as the issuer of every sign-in
+token, emailed links are built from the portal's public URL, and the portal
+marks its session cookie `Secure` only when that URL is `https`. Those values
+have to change together or nothing authenticates — and the errors do not name
+the cause.
 
-`oolix/infra/caddy/Caddyfile` terminates TLS in front of everything. The API, portal
-and Keycloak publish no host ports at all: the terminator is the only service
-that faces anything.
+`oolix/infra/caddy/Caddyfile` terminates TLS in front of everything. The API and
+portal publish no host ports at all: the terminator is the only service that
+faces anything.
 
 ## The one setting
 
@@ -29,11 +30,15 @@ Prove the whole chain locally before renting anything.
 cp .env.prod.example .env.prod          # fill in every REQUIRED value
 ```
 
-Point the three names at your own machine — Windows
+Email stays real in a drill: the API refuses to start outside local development
+without a Brevo API key and a sender Brevo has verified (`.env.prod.example`,
+"email").
+
+Point the two names at your own machine — Windows
 `C:\Windows\System32\drivers\etc\hosts`, elsewhere `/etc/hosts`:
 
 ```
-127.0.0.1  api.oolix.localhost app.oolix.localhost auth.oolix.localhost
+127.0.0.1  api.oolix.localhost app.oolix.localhost
 ```
 
 Then, once, create the signing keys. This is deliberately a separate step:
@@ -60,23 +65,21 @@ docker exec oolix-prod-caddy-1 \
 
 curl --cacert /tmp/caddy-root.crt https://api.oolix.localhost/healthz
 curl --cacert /tmp/caddy-root.crt https://app.oolix.localhost/login
-curl --cacert /tmp/caddy-root.crt \
-  https://auth.oolix.localhost/realms/oolix/.well-known/openid-configuration
 ```
 
-Four things are worth confirming by eye, because each has failed silently:
+Three things are worth confirming by eye, because each has failed silently:
 
-1. **The issuer is `https://`, not `http://`.** If Keycloak reports http, the
-   proxy headers are not reaching it and every token will be rejected later.
-2. **Plain HTTP redirects rather than serves** — `http://api…` should answer
+1. **Plain HTTP redirects rather than serves** — `http://api…` should answer
    `308`.
-3. **`Strict-Transport-Security` is present** on a response.
-4. **An authorization request with the real `redirect_uri` returns `302`**, not
-   an "Invalid parameter: redirect_uri" page:
+2. **`Strict-Transport-Security` is present** on a response.
+3. **Sign-in answers.** A wrong password must come back as `401` with
+   `AUTH_001` — which proves the sign-in key loaded and the database is
+   reachable, without needing an account:
 
 ```sh
-curl --cacert /tmp/caddy-root.crt -o /dev/null -w '%{http_code}\n' \
- "https://auth.oolix.localhost/realms/oolix/protocol/openid-connect/auth?client_id=oolix-web&response_type=code&scope=openid&redirect_uri=https%3A%2F%2Fapp.oolix.localhost%2Fapi%2Fauth%2Fcallback"
+curl --cacert /tmp/caddy-root.crt -s https://api.oolix.localhost/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"nobody@example.com","password":"not-the-password"}'
 ```
 
 A browser will warn once, until the local CA is trusted. The certificate is
@@ -84,17 +87,16 @@ real; its issuer is simply not yet known to the machine.
 
 ## Going to a real domain
 
-Change four things and nothing else:
+Change three things and nothing else:
 
 | Variable              | From                       | To                        |
 | --------------------- | -------------------------- | ------------------------- |
 | `TLS_MODE`            | `internal`                 | an email address for ACME |
 | `API_HOST`            | `api.oolix.localhost`      | the real name             |
 | `APP_HOST`            | `app.oolix.localhost`      | the real name             |
-| `AUTH_HOST`           | `auth.oolix.localhost`     | the real name             |
 
-Then set `API_PUBLIC_URL`, `WEB_PUBLIC_URL` and `KEYCLOAK_PUBLIC_URL` to the
-matching `https://` addresses. The names must resolve publicly and reach ports
+Then set `API_PUBLIC_URL` and `WEB_PUBLIC_URL` to the matching `https://`
+addresses. The names must resolve publicly and reach ports
 80 and 443, because that is how the certificate is issued.
 
 **A Partner Agent's `api_base_url` must be exactly `API_PUBLIC_URL`.** It is
@@ -104,7 +106,9 @@ address that reaches the same server fails with
 
 ## What the drill found
 
-None of this worked the first time, and every failure was silent or misleading:
+None of this worked the first time, and every failure was silent or misleading.
+(The three Keycloak findings are history: sign-in moved into Oolix on
+2026-09-24, and Keycloak with it.)
 
 - The migration step had never run: `pnpm deploy --prod` writes no `.bin` entry
   for the Prisma CLI, so `npx prisma` exited 127. The image now installs a

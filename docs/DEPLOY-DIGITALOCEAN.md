@@ -65,31 +65,15 @@ On each database: **Settings → Trusted Sources → add your Droplet.** Until y
 do this the database is reachable from anywhere with the password, and DO will
 warn you about it on the dashboard rather than blocking it.
 
-### Keycloak needs its own database
-
-Keycloak will not share a schema with the application. On the Postgres
-instance: **Users & Databases → Add database → `keycloak`**.
-
-Forgetting this produces a crash loop on a missing database *after* everything
-else has come up healthy — which reads as an identity problem rather than a
-missing `CREATE DATABASE`.
-
 ### Note the connection details
 
 DO gives you a host, **port 25060** (not 5432), a user, a password, and
-`sslmode=require`. You need three strings from this, and two of them are not
-interchangeable:
+`sslmode=require`. You need two strings from this:
 
 ```
 DATABASE_URL=postgresql://doadmin:PASS@HOST:25060/defaultdb?sslmode=require
-KEYCLOAK_JDBC_URL=jdbc:postgresql://HOST:25060/keycloak?sslmode=require
 REDIS_URL=rediss://default:PASS@VALKEY_HOST:<port DO shows you>
 ```
-
-**`KEYCLOAK_JDBC_URL` is a JDBC string and `DATABASE_URL` is not.** Giving
-Keycloak the `postgresql://` form fails at start-up with a driver error that
-never mentions the format. It is the single most common way this deployment
-goes wrong.
 
 Note `rediss://` — two s's, meaning TLS. DO's Valkey requires it and will
 refuse a plain `redis://`. Copy the port from the dashboard rather than
@@ -110,18 +94,17 @@ secret shown **once**.
 ## Step 4 — DNS
 
 Point your domain's nameservers at DigitalOcean (`ns1/ns2/ns3.digitalocean.com`),
-then Networking → Domains → add three **A** records to the droplet's IP:
+then Networking → Domains → add two **A** records to the droplet's IP:
 
 ```
 api     →  <droplet-ip>
 app     →  <droplet-ip>
-auth    →  <droplet-ip>
 ```
 
 Verify before continuing — Let's Encrypt will fail if these do not resolve:
 
 ```sh
-dig +short api.yourdomain.com app.yourdomain.com auth.yourdomain.com
+dig +short api.yourdomain.com app.yourdomain.com
 ```
 
 ---
@@ -163,10 +146,17 @@ No Node or pnpm needed on the droplet — the Dockerfiles build inside Docker.
 
 ## Step 7 — Configuration
 
+Sign-up confirmations, invitations and password resets are emailed through
+**Brevo**, and the API will not start without it. At brevo.com: sign up, then
+**Senders, Domains & Dedicated IPs → Domains → Add a domain** and add the DNS
+records it shows (its code, DKIM, DMARC) in Networking → Domains — that is what
+keeps these emails out of spam. Then **SMTP & API → API Keys → Generate a new
+API key**: it starts `xkeysib-`. (The SMTP tab's `xsmtpsib-` key does not work.)
+
 ```sh
 cp .env.prod.example .env.prod
 chmod 600 .env.prod
-for i in 1 2 3 4; do openssl rand -base64 32; done   # one per secret, never reused
+openssl rand -base64 32        # the portal session secret
 nano .env.prod
 ```
 
@@ -178,10 +168,6 @@ IMAGE_TAG=<commit-sha>
 
 # --- managed services -------------------------------------------------------
 DATABASE_URL=postgresql://doadmin:PASS@HOST:25060/defaultdb?sslmode=require
-KEYCLOAK_JDBC_URL=jdbc:postgresql://HOST:25060/keycloak?sslmode=require
-# A JDBC URL carries no credentials, so Keycloak's go here, separately.
-KEYCLOAK_DB_USER=doadmin
-KEYCLOAK_DB_PASSWORD=<the managed Postgres password>
 REDIS_URL=rediss://default:PASS@VALKEY_HOST:<port DO shows you>
 POSTGRES_USER=doadmin
 POSTGRES_PASSWORD=<the managed Postgres password>
@@ -192,23 +178,18 @@ POSTGRES_HOST=HOST
 POSTGRES_PORT=25060
 POSTGRES_DB=defaultdb
 
-# --- identity ---------------------------------------------------------------
-KEYCLOAK_ADMIN=oolix-admin
-KEYCLOAK_ADMIN_PASSWORD=<generated>
-OIDC_CLIENT_ID=oolix-web
-OIDC_CLIENT_SECRET=<generated>
+# --- sign-in and email ------------------------------------------------------
 PORTAL_SESSION_SECRET=<generated>
-KC_SSL_REQUIRED=external
-KC_DIRECT_GRANTS=false
-KC_SEED_USERS=false
+EMAIL_PROVIDER=brevo
+BREVO_API_KEY=xkeysib-...
+# A sender on the domain Brevo verified.
+EMAIL_FROM=Oolix <no-reply@yourdomain.com>
 
 # --- public addresses -------------------------------------------------------
 API_PUBLIC_URL=https://api.yourdomain.com
 WEB_PUBLIC_URL=https://app.yourdomain.com
-KEYCLOAK_PUBLIC_URL=https://auth.yourdomain.com
 API_HOST=api.yourdomain.com
 APP_HOST=app.yourdomain.com
-AUTH_HOST=auth.yourdomain.com
 # An EMAIL, not "internal". This is what switches Caddy to real Let's Encrypt
 # certificates; "internal" issues from a local CA that browsers distrust and
 # Partner Agents refuse.
@@ -238,10 +219,9 @@ FEATURE_META_ENABLED=false
 FEATURE_GOOGLE_ENABLED=false
 ```
 
-The three public URLs must match the DNS names **exactly**. An OIDC issuer is
-compared as a string: if the browser reaches Keycloak by one name and the
-portal's server side by another, every token is rejected as invalid while
-everything looks correct.
+The public URLs must match the DNS names **exactly**. Every emailed link is
+built from `WEB_PUBLIC_URL`, so a typo sends each confirmation, invitation and
+reset somewhere that does not exist while the stack looks healthy.
 
 ---
 
@@ -283,8 +263,8 @@ docker run --rm -v "$PWD:/w" -w /w node:24-alpine node scripts/preflight.mjs --e
 ```
 
 Run it from a container so the droplet needs no Node. It refuses placeholder or
-reused secrets, seeded development identities, the password grant, non-HTTPS or
-localhost URLs, `TLS_MODE=internal`, a moving `IMAGE_TAG`, placeholder alert
+reused secrets, an email setup that cannot deliver, non-HTTPS, localhost or
+mismatched URLs, `TLS_MODE=internal`, a moving `IMAGE_TAG`, placeholder alert
 webhooks, and a local `BACKUP_DEST`.
 
 **Fix everything it reports before continuing.** Each check exists because that
@@ -301,7 +281,8 @@ docker compose -f oolix/infra/docker/compose.prod.yml \
                -f oolix/infra/docker/compose.managed-redis.yml \
                --env-file .env.prod build
 
-# Signing keys — ONCE. Back these up immediately (step 11).
+# Signing keys — manifests, Agent tokens and sign-ins. Back these up
+# immediately (step 11). Idempotent: an existing key is never replaced.
 docker compose -f oolix/infra/docker/compose.prod.yml \
                -f oolix/infra/docker/compose.managed-postgres.yml \
                -f oolix/infra/docker/compose.managed-redis.yml \
@@ -325,7 +306,6 @@ Certificates take 30–60 seconds on first start. Then:
 curl -s https://api.yourdomain.com/healthz
 curl -s https://api.yourdomain.com/readyz      # touches the database
 curl -sI https://app.yourdomain.com/login
-curl -s https://auth.yourdomain.com/realms/oolix/.well-known/openid-configuration | head -c 100
 ```
 
 `/readyz` returning `{"status":"ready","checks":{"database":true}}` is the one
@@ -344,46 +324,25 @@ docker run --rm -v oolix-prod_api-keys:/k -v /mnt/oolix-backups:/b \
   alpine tar czf /b/signing-keys-$(date +%F).tar.gz -C /k .
 ```
 
-**Create the first admin.** The realm ships with **no users** — deliberately;
-it used to ship thirteen with the password `password`. Create your first
-account in the Keycloak admin console at `https://auth.yourdomain.com/admin`
-using `KEYCLOAK_ADMIN` / `KEYCLOAK_ADMIN_PASSWORD`, in the **oolix** realm (not
-master).
-
-Set a **temporary** password, which attaches the `UPDATE_PASSWORD` required
-action so the person chooses their own on first sign-in and you never know it.
-
-**Every account enrols an authenticator on first sign-in.** The realm requires
-a second factor (§4.2, §82): after the password, Keycloak shows a QR code for
-Google Authenticator, FreeOTP, Microsoft Authenticator or any TOTP app, and the
-account is not usable until it is scanned. This is not optional and cannot be
-skipped per-user — Keycloak cannot know which Oolix role an account will hold,
-so the requirement is realm-wide.
-
-Budget a minute per person for this at the start of a demo, and have the phone
-that will scan it in the room. An account that has enrolled on one device
-cannot sign in from another without it.
-
-**Prove a privileged role can actually use it**, from your laptop rather than
-the droplet — it drives a real browser:
+**Create the first administrator.** A new deployment has no accounts at all.
+This creates the Oolix operations organisation, makes one person its
+administrator and emails them an invitation; the link sets their password:
 
 ```sh
-pnpm verify:mfa \
-  --api https://api.yourdomain.com \
-  --keycloak https://auth.yourdomain.com \
-  --portal https://app.yourdomain.com \
-  --user first.admin@yourdomain.com --password '<the temporary password>' \
-  --client-secret "$OIDC_CLIENT_SECRET"
+docker compose -f oolix/infra/docker/compose.prod.yml \
+               -f oolix/infra/docker/compose.managed-postgres.yml \
+               -f oolix/infra/docker/compose.managed-redis.yml \
+               --env-file .env.prod \
+  run --rm api node dist/cli/create-admin.js --email you@yourdomain.com --name "Your Name"
 ```
 
-It signs in twice: once asking for MFA, once not. The first must reach the API
-and the second must be refused. Run it against a **freshly created** account —
-it walks the enrolment page and prints the secret it enrolled, so keep that
-output if the account is one you intend to keep using.
+It refuses once an administrator exists; the next ones are invited from the
+portal's **Team** page. Everyone else signs up at `https://app.yourdomain.com/signup`
+or is invited by their own organisation's admin, and a new organisation waits
+for that administrator to verify it.
 
-This is worth the two minutes because the failure it catches is invisible from
-outside: sign-in succeeds, health is green, and every API call the person makes
-answers `AUTH_001`.
+There is no second factor — `docs/SECURITY-REVIEW.md` records that decision and
+what compensates for it.
 
 **Rehearse one restore**, before a Partner's data exists. A backup nobody has
 restored is a hypothesis. See `docs/BACKUP-AND-ROLLBACK.md`.
@@ -398,10 +357,20 @@ sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=<new-sha>/" .env.prod
 docker compose -f oolix/infra/docker/compose.prod.yml -f oolix/infra/docker/compose.managed-postgres.yml \
   -f oolix/infra/docker/compose.managed-redis.yml --env-file .env.prod build
 docker compose -f oolix/infra/docker/compose.prod.yml -f oolix/infra/docker/compose.managed-postgres.yml \
+  -f oolix/infra/docker/compose.managed-redis.yml --env-file .env.prod --profile init run --rm keys
+docker compose -f oolix/infra/docker/compose.prod.yml -f oolix/infra/docker/compose.managed-postgres.yml \
   -f oolix/infra/docker/compose.managed-redis.yml --env-file .env.prod up -d
 ```
 
-Migrations run as their own step and must exit 0 before the apps start.
+The `keys` line adds any signing key a newer release needs and leaves existing
+ones alone. Migrations run as their own step and must exit 0 before the apps
+start.
+
+**Upgrading from a release that still ran Keycloak** (before 24 September
+2026): run preflight first — it lists the Keycloak settings to delete and the
+email settings to add — then the lines above. `up -d --remove-orphans` stops the
+old Keycloak container. Accounts carry over without passwords, so each person
+uses **Forgot your password?** once.
 
 **Rolling back is a tag change — and only safe if the release did not migrate
 the schema.** Prisma's `migrate deploy` is forward-only; there are no down
@@ -415,11 +384,10 @@ only.
 
 | Symptom | Cause |
 | --- | --- |
-| Keycloak crash-loops with a driver error | `KEYCLOAK_JDBC_URL` was given the `postgresql://` form |
-| Keycloak crash-loops on a missing database | The `keycloak` database was never created (step 2) |
-| Every API call 401, everything looks fine | The three public URLs disagree with DNS. An OIDC issuer is a string |
-| Sign-in succeeds, then every call 401 `AUTH_001` | The token reached the API without MFA evidence. Either `acr_values` is missing from the authorization request, or the realm was imported without the `oolix-browser` flow. `pnpm --filter @oolix/contracts test:unit` checks both |
-| Everything passes preflight but CSP and HSTS headers are absent | `APP_ENV` is not the exact string `production`. `staging` also stops enforcing MFA |
+| The API will not start: `No user-session signing key` | The `keys` step has not run since the release that added the sign-in key |
+| The API will not start: `EMAIL_PROVIDER`, `BREVO_API_KEY` or `EMAIL_FROM` | Outside local development a real sender is required — step 7 |
+| Sign-up says "check your email" and nothing arrives | Spam folder first. Then the API log's `email_send_failed` line: status 401 is the wrong key (an SMTP key, perhaps), 400 an unverified sender |
+| Everything passes preflight but CSP and HSTS headers are absent | `APP_ENV` is not the exact string `production` |
 | Certificates never issue | DNS not resolving yet, or port 80 closed in the firewall |
 | Database connection refused | The droplet is not in the database's Trusted Sources |
 | Database connects locally but not from the droplet | Missing `?sslmode=require`, or port 5432 instead of 25060 |

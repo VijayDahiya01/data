@@ -17,14 +17,7 @@ import process from 'node:process';
 
 const isWindows = process.platform === 'win32';
 
-const SERVICES = [
-  'postgres',
-  'redis',
-  'partner-postgres',
-  'partner-redis',
-  'localstack',
-  'keycloak',
-];
+const SERVICES = ['postgres', 'redis', 'partner-postgres', 'partner-redis', 'localstack'];
 
 /**
  * Node 24 refuses to spawn .cmd/.bat without a shell (the CVE-2024-27980

@@ -1,13 +1,18 @@
 /**
- * Login (§35.1).
+ * Sign in (§35.1).
  *
- * §64 delegates identity to the OIDC provider, so there is no password field
- * here and Oolix never sees one. The button starts the authorization-code flow;
- * the exchange happens server-side (see /api/auth/callback).
+ * Oolix checks the password itself now (docs/SECURITY-REVIEW.md records the
+ * decision to leave the external identity provider). The form posts to a
+ * server action; the password goes to the API server-to-server and the
+ * tokens that come back are sealed into an httpOnly cookie, so neither is
+ * ever visible to a script on this page.
  */
+import Link from 'next/link';
 import { readSession } from '@/lib/session';
 import { redirect } from 'next/navigation';
 import { env } from '@/lib/env';
+import { AuthPage } from '@/components/AuthPage';
+import { SignInForm } from '@/components/AuthForms';
 
 /**
  * Where seeded demo accounts exist, and therefore where naming them is safe.
@@ -18,45 +23,58 @@ import { env } from '@/lib/env';
  */
 const DEMO_ENVIRONMENTS = new Set(['local', 'test']);
 
-const MESSAGES: Record<string, string> = {
-  expired: 'That sign-in attempt timed out. Please try again.',
-  exchange: 'Sign-in could not be completed. Please try again.',
-  session: 'Your session ended. Please sign in again.',
+const MESSAGES: Record<string, { tone?: 'warn'; text: string }> = {
+  session: { tone: 'warn', text: 'Your session ended. Please sign in again.' },
+  verified: { text: 'Email address confirmed. You can sign in now.' },
+  reset: {
+    text: 'Password changed, and every other session signed out. Sign in with the new one.',
+  },
+  joined: { text: 'Invitation accepted. Sign in with your existing password.' },
 };
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; return_to?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    return_to?: string;
+    verified?: string;
+    reset?: string;
+    joined?: string;
+  }>;
 }) {
   const params = await searchParams;
-  const session = await readSession();
-  if (session && session.expiresAt > Date.now()) redirect(params.return_to ?? '/');
+  const returnTo =
+    params.return_to && params.return_to.startsWith('/') && !params.return_to.startsWith('//')
+      ? params.return_to
+      : '/';
 
-  const returnTo = params.return_to && params.return_to.startsWith('/') ? params.return_to : '/';
+  // Already signed in: carry on. Not when sent here BECAUSE the API refused
+  // the session (`error`): the cookie would still look current, and sending
+  // it back would loop until the access token's expiry. Signing in replaces it.
+  const session = await readSession();
+  if (session && session.expiresAt > Date.now() && !params.error) redirect(returnTo);
+
   const appEnv = env().APP_ENV;
-  const href = `/api/auth/login?return_to=${encodeURIComponent(returnTo)}`;
-  const message = params.error ? MESSAGES[params.error] : undefined;
+  const key =
+    params.error ??
+    (params.verified ? 'verified' : params.reset ? 'reset' : params.joined ? 'joined' : undefined);
+  const notice = key ? MESSAGES[key] : undefined;
 
   return (
-    <main className="login">
-      <div className="brand-mark" aria-hidden="true">
-        OX
-      </div>
-      <h1>Oolix</h1>
-      <p className="muted">Privacy-safe partner media activation.</p>
-
-      {message ? <div className="notice notice-warn">{message}</div> : null}
-
-      <div className="card" style={{ marginTop: '1.25rem' }}>
-        <p style={{ marginTop: 0 }}>
-          Sign in with your organization account. Your own identity provider handles sign-in — Oolix
-          never sees your password.
-        </p>
-        <a className="btn btn-primary" href={href} style={{ width: '100%', textAlign: 'center' }}>
-          Continue to sign in
-        </a>
-      </div>
+    <AuthPage
+      title="Oolix"
+      lead="Privacy-safe partner media activation."
+      notice={notice}
+      footer={
+        <>
+          <Link href="/forgot-password">Forgot your password?</Link>
+          {' · '}
+          <Link href="/signup">Create an account</Link>
+        </>
+      }
+    >
+      <SignInForm returnTo={returnTo} />
 
       {/* Seeded accounts and their shared password, printed on the page.
           Harmless against a seeded database and indefensible against a real
@@ -81,6 +99,6 @@ export default async function LoginPage({
           </ul>
         </div>
       ) : null}
-    </main>
+    </AuthPage>
   );
 }

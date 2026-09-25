@@ -28,7 +28,7 @@ const schema = schemaSource
   .join('\n');
 
 /** Run the seed command exactly as a developer or CI job would. */
-function seed(env: string) {
+function seed(env: string, extraEnv: Record<string, string> = {}) {
   // Node refuses to spawn a `.cmd` directly, and `shell: true` concatenates
   // arguments unescaped (DEP0190). `cmd /c` with a real argument array avoids
   // both.
@@ -44,7 +44,7 @@ function seed(env: string) {
     // A real DATABASE_URL is deliberately absent: a refusal must happen before
     // anything connects. If the guard ever moved after the connection, this
     // test would start failing for a different reason -- which is also useful.
-    env: { ...process.env, DATABASE_URL: '' },
+    env: { ...process.env, DATABASE_URL: '', ...extraEnv },
   });
 }
 
@@ -67,6 +67,20 @@ describe('db:seed environment guard (§95)', () => {
     // back to a default that happens to be writable.
     const result = seed('prodution');
     expect(result.status).not.toBe(0);
+  }, 60_000);
+
+  // Staging is reachable by more people than its testers, so its seeded
+  // accounts must not share the well-known development password.
+  it('refuses staging without a password of its own', () => {
+    const result = seed('staging', { SEED_USER_PASSWORD: '' });
+    expect(result.status).not.toBe(0);
+    expect(`${result.stderr}${result.stdout}`).toMatch(/REFUSED[\s\S]*SEED_USER_PASSWORD/);
+  }, 60_000);
+
+  it('refuses a staging password the sign-up policy would refuse', () => {
+    const result = seed('staging', { SEED_USER_PASSWORD: 'password' });
+    expect(result.status).not.toBe(0);
+    expect(`${result.stderr}${result.stdout}`).toMatch(/REFUSED/);
   }, 60_000);
 });
 

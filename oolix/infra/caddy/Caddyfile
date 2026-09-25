@@ -1,9 +1,9 @@
 # =============================================================================
 # TLS termination for the Oolix stack.
 #
-# Everything reaches the deployment through here. The API, the portal and
-# Keycloak publish no ports of their own — they are on the internal network
-# only — so this file is the entire attack surface that faces the internet.
+# Everything reaches the deployment through here. The API and the portal
+# publish no ports of their own — they are on the internal network only — so
+# this file is the entire attack surface that faces the internet.
 #
 # ── The one setting that matters ─────────────────────────────────────────────
 #
@@ -14,14 +14,20 @@
 # Both are valid `tls` arguments in Caddy, which is why one variable covers the
 # local drill and the real deployment without a second file to keep in step.
 #
-# ── Why three hostnames rather than paths ────────────────────────────────────
+# ── Why two hostnames rather than paths ──────────────────────────────────────
 #
-# An OIDC issuer is compared as a string. The browser is redirected to Keycloak
-# to sign in and the portal exchanges the code server-side; if those two reach
-# Keycloak by different names, the issuer in the token does not match what the
-# API validates and every request is rejected as invalid — while every part
-# looks correctly configured. Distinct public names that resolve identically
-# from the browser and from inside the network remove that class of failure.
+# The portal's session cookie belongs to its own host, so the API host never
+# receives it, and Partner Agents are pointed at the API name alone.
+#
+# ── Client addresses ─────────────────────────────────────────────────────────
+#
+# `reverse_proxy` replaces any X-Forwarded-For a client sends with the address
+# it really connected from, because no `trusted_proxies` is configured. The
+# API limits sign-up, sign-in and password-reset attempts per address and
+# relies on that header to name it. Put a CDN or load balancer in front of
+# Caddy and it must be listed in `trusted_proxies` -- otherwise every visitor
+# arrives from its one address, and ten sign-in attempts a minute from anybody
+# block everybody.
 # =============================================================================
 
 {
@@ -75,22 +81,4 @@
 	}
 
 	reverse_proxy portal:3000
-}
-
-# --- Keycloak ----------------------------------------------------------------
-{$AUTH_HOST} {
-	tls {$TLS_MODE}
-	encode zstd gzip
-
-	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
-		-Server
-	}
-
-	# Keycloak builds absolute URLs from these, so they have to be forwarded
-	# accurately or the login redirect lands on the wrong scheme.
-	reverse_proxy keycloak:8081 {
-		header_up X-Forwarded-Proto {scheme}
-		header_up X-Forwarded-Host {host}
-	}
 }

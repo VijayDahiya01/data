@@ -69,7 +69,8 @@ function harness(org: OrgRow | null) {
     },
   };
 
-  const service = new IdentityOrgService(prisma as never, audit as never);
+  // Verification never sends an invitation, so the auth service is not reached.
+  const service = new IdentityOrgService(prisma as never, audit as never, {} as never);
   return { service, updated, audited };
 }
 

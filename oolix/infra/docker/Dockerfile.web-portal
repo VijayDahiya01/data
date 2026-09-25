@@ -1,10 +1,10 @@
 # =============================================================================
 # Oolix portal — the interface for all four personas.
 #
-# Server-rendered on purpose: the OIDC access token is held in a server-side
-# session and never reaches the browser (§82), so this container is a trust
-# boundary rather than a static asset host. It needs the session secret and the
-# OIDC client secret at runtime, and it must never be built with them.
+# Server-rendered on purpose: a person's access and refresh tokens are held in
+# a sealed, httpOnly session cookie that browser code cannot read (§82), so
+# this container is a trust boundary rather than a static asset host. It needs
+# the session secret at runtime, and it must never be built with it.
 #
 # Build from the repository root:
 #   docker build -f oolix/infra/docker/Dockerfile.web-portal -t oolix/web-portal:dev .
@@ -64,20 +64,17 @@ ENV APP_ENV=production \
     NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     OOLIX_API_INTERNAL_URL="http://api:4000" \
-    WEB_PUBLIC_URL="http://localhost:3000" \
-    OIDC_ISSUER_URL="http://keycloak:8081/realms/oolix" \
-    OIDC_CLIENT_ID="oolix-web"
+    WEB_PUBLIC_URL="http://localhost:3000"
 
-# The two secret-shaped values are passed to the build command rather than set
-# with ENV. ENV persists into the image's metadata, so even a placeholder there
+# The secret-shaped value is passed to the build command rather than set with
+# ENV. ENV persists into the image's metadata, so even a placeholder there
 # would model exactly the wrong habit — and Docker flags it, which trains people
 # to ignore a warning that should stay meaningful.
 #
 # `^...` is the portal's workspace dependencies -- today only `contracts`. See
 # the API gateway image for why this is not a folder glob.
 RUN pnpm --filter "@oolix/web-portal^..." build \
- && OIDC_CLIENT_SECRET=placeholder-replaced-at-runtime \
-    PORTAL_SESSION_SECRET=placeholder-replaced-at-runtime \
+ && PORTAL_SESSION_SECRET=placeholder-replaced-at-runtime \
     pnpm --filter @oolix/web-portal build
 
 # -----------------------------------------------------------------------------

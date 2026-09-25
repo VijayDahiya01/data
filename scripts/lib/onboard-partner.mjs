@@ -12,10 +12,13 @@
  */
 import { generateKeyPair, exportJWK, SignJWT } from 'jose';
 
+// Most scripts import sign-in from here, beside the onboarding it precedes.
+export { seedToken } from './login.mjs';
+
 /**
  * @param {object} opts
  * @param {string} opts.api            API base URL
- * @param {string} opts.securityToken  OIDC token for a PARTNER_SECURITY_ADMIN
+ * @param {string} opts.securityToken  access token for a PARTNER_SECURITY_ADMIN
  * @param {string} opts.orgId          the Partner organization id
  * @returns {Promise<{agentId: string, clientId: string, accessToken: string}>}
  */
@@ -106,24 +109,4 @@ export async function onboardPartnerAgent({ api, securityToken, orgId }) {
     accessToken: tok.access_token,
     privateKey,
   };
-}
-
-/** Fetch an OIDC token for a seeded local identity. */
-export async function seedToken(username, opts = {}) {
-  const keycloak =
-    opts.keycloak ?? process.env.OIDC_ISSUER_URL ?? 'http://localhost:8081/realms/oolix';
-  const body = new URLSearchParams({
-    grant_type: 'password',
-    client_id: opts.clientId ?? process.env.OIDC_CLIENT_ID ?? 'oolix-web',
-    client_secret: opts.clientSecret ?? process.env.OIDC_CLIENT_SECRET ?? 'local-only-secret',
-    username,
-    password: 'password',
-  });
-  const res = await fetch(`${keycloak}/protocol/openid-connect/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  });
-  if (!res.ok) throw new Error(`token for ${username}: ${res.status} ${await res.text()}`);
-  return (await res.json()).access_token;
 }

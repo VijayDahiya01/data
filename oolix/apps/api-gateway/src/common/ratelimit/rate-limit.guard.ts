@@ -28,6 +28,15 @@ export const RateLimit = (cls: RateLimitClass) => SetMetadata(RATE_LIMIT_KEY, cl
 
 /** Exempt from limiting. Health probes only -- an orchestrator polls these. */
 export const NO_RATE_LIMIT_KEY = 'oolix:noRateLimit';
+
+/** Classes counted per client address rather than per signed-in principal. */
+const IP_SCOPED: ReadonlySet<RateLimitClass> = new Set([
+  'signup',
+  'login',
+  'passwordReset',
+  'emailVerification',
+  'authLink',
+]);
 export const NoRateLimit = () => SetMetadata(NO_RATE_LIMIT_KEY, true);
 
 @Injectable()
@@ -60,8 +69,9 @@ export class RateLimitGuard implements CanActivate {
 
     // §86 scopes the signup budget to the IP, not the caller: the whole point
     // is that one actor creating a stream of fresh accounts stays inside one
-    // window.
-    const principal = cls === 'signup' ? `ip:${req.ip}` : derivePrincipalKey(req);
+    // window. Sign-in and recovery work the same way, for the same reason --
+    // before authentication there is no caller to scope by.
+    const principal = IP_SCOPED.has(cls) ? `ip:${req.ip}` : derivePrincipalKey(req);
 
     // §94: "production configuration may override by organization without
     // changing code". Overrides live in Redis so raising a Buyer's CRM quota
@@ -106,6 +116,7 @@ export function derivePrincipalKey(req: AuthenticatedRequest): string {
   const p = req.principal;
   if (p?.kind === 'agent') return `agent:${p.agentId}`;
   if (p?.kind === 'user') return `user:${p.orgId}:${p.userId}`;
+  if (p?.kind === 'onboarding') return `user:none:${p.userId}`;
 
   // CRM callers present a bearer API key that the HANDLER verifies, not the
   // guard. Hashing the presented key gives a stable window per integration

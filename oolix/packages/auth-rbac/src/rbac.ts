@@ -48,6 +48,10 @@ export function assertPermission(p: Principal, permission: Permission): asserts 
  * org", and a miss here leaks one Partner's commercial data to another.
  */
 export function assertOrgScope(p: Principal, scope: ResourceScope): void {
+  // Someone still onboarding belongs to no organization, so no organization's
+  // resource is ever in scope for them.
+  if (p.kind === 'onboarding') throw new OolixError('PERM_002', 'Organization access denied.');
+
   const principalOrg = isAgent(p) ? p.partnerOrgId : p.orgId;
   if (principalOrg === scope.orgId) return;
 

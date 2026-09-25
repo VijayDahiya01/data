@@ -29,7 +29,7 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,json,md,yaml,yml}\"",
     "infra:down": "docker compose down",
     "infra:logs": "docker compose logs -f",
-    "infra:reset": "docker compose down -v && docker compose up -d --quiet-pull postgres redis partner-postgres partner-redis localstack keycloak",
+    "infra:reset": "docker compose down -v && docker compose up -d --quiet-pull postgres redis partner-postgres partner-redis localstack",
     "infra:up": "node scripts/infra-up.mjs",
     "infra:wait": "node scripts/wait-for-stack.mjs",
     "lint": "eslint .",
@@ -58,9 +58,7 @@
     "keys:retire": "node oolix/apps/api-gateway/dist/keys/rotate-cli.js retire",
     "keys:init": "node oolix/apps/api-gateway/dist/keys/rotate-cli.js init",
     "verify:channels": "node scripts/verify-channels.mjs",
-    "verify:mfa": "node scripts/verify-mfa.mjs",
     "preflight": "node scripts/preflight.mjs",
-    "dev:rebind": "node scripts/rebind-identities.mjs",
     "probe": "node scripts/pen-probe.mjs",
     "probe:authed": "node scripts/pen-probe-authed.mjs"
   },

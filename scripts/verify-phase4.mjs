@@ -17,6 +17,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { agentUrl } from './lib/agent-port.mjs';
+import { seedToken } from './lib/login.mjs';
 
 const AGENT = agentUrl();
 const MOCK = process.env.MOCK_PARTNER_URL ?? 'http://localhost:4001';
@@ -54,26 +55,7 @@ const PROBE_USER = `UP${randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase(
  */
 
 const API = process.env.API_URL ?? 'http://localhost:4000';
-const KEYCLOAK =
-  process.env.KEYCLOAK_TOKEN_URL ??
-  'http://localhost:8081/realms/oolix/protocol/openid-connect/token';
-
-async function login(username) {
-  const res = await fetch(KEYCLOAK, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: process.env.OIDC_CLIENT_ID ?? 'oolix-web',
-      client_secret: process.env.OIDC_CLIENT_SECRET ?? 'local-only-secret',
-      grant_type: 'password',
-      username,
-      password: 'password',
-    }),
-  });
-  const body = await res.json();
-  if (!body.access_token) throw new Error(`login ${username}: ${JSON.stringify(body)}`);
-  return body.access_token;
-}
+const login = (username) => seedToken(username, { api: API });
 
 async function apiCall(path, { method = 'GET', body, token } = {}) {
   const res = await fetch(`${API}${path}`, {

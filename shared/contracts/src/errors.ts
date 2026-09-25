@@ -37,6 +37,9 @@ export const NoAdReasonSchema = z.enum(NO_AD_REASONS);
 // --------------------------------------------------------------------------
 export const ERROR_CODES = {
   AUTH_001: { http: 401, message: 'Invalid or expired user or workload token.', retryable: false },
+  // Returned only after the CORRECT password, so it tells nobody but the
+  // account's owner that the account exists.
+  AUTH_002: { http: 403, message: 'Email address not verified.', retryable: false },
   PERM_001: { http: 403, message: 'Permission denied.', retryable: false },
   PERM_002: { http: 403, message: 'Organization or network access denied.', retryable: false },
   VAL_001: { http: 400, message: 'Validation error.', retryable: false },

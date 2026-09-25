@@ -22,7 +22,9 @@ import { FileKeyStore } from './key-store.js';
 loadDotEnv();
 loadFileSecrets();
 
-type Purpose = 'manifest' | 'agent-token';
+type Purpose = 'manifest' | 'agent-token' | 'user-session';
+
+const PURPOSES: Purpose[] = ['manifest', 'agent-token', 'user-session'];
 
 function storePath(purpose: Purpose): string {
   if (purpose === 'manifest') {
@@ -31,6 +33,8 @@ function storePath(purpose: Purpose): string {
     const jwks = process.env.MANIFEST_JWKS_PATH ?? './.keys/manifest-jwks-local.json';
     return jwks.replace(/\.json$/, '') + '.keyfile.json';
   }
+  // Must match USER_SESSION_KEY_PATH in user-key.service.ts, for the same reason.
+  if (purpose === 'user-session') return './.keys/user-session.keyfile.json';
   return './.keys/agent-token.keyfile.json';
 }
 
@@ -45,8 +49,8 @@ function parseDuration(text: string): number {
 }
 
 function purposeArg(value: string | undefined): Purpose {
-  if (value === 'manifest' || value === 'agent-token') return value;
-  throw new Error(`purpose must be "manifest" or "agent-token", got ${value ?? '(nothing)'}`);
+  if (PURPOSES.includes(value as Purpose)) return value as Purpose;
+  throw new Error(`purpose must be one of ${PURPOSES.join(', ')}; got ${value ?? '(nothing)'}`);
 }
 
 async function main(): Promise<void> {
@@ -61,7 +65,7 @@ async function main(): Promise<void> {
   }
 
   if (command === 'list') {
-    for (const purpose of ['manifest', 'agent-token'] as Purpose[]) {
+    for (const purpose of PURPOSES) {
       const store = await FileKeyStore.load(storePath(purpose), purpose);
       console.log(`\n${purpose}  (${storePath(purpose)})`);
       for (const k of store.inventory()) {

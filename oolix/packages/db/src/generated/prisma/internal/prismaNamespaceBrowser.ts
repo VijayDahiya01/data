@@ -52,6 +52,8 @@ export const AnyNull = runtime.AnyNull
 
 export const ModelName = {
   User: 'User',
+  AuthToken: 'AuthToken',
+  AuthSession: 'AuthSession',
   Organization: 'Organization',
   OrganizationMember: 'OrganizationMember',
   Network: 'Network',
@@ -126,10 +128,42 @@ export const UserScalarFieldEnum = {
   country: 'country',
   mfaEnrolled: 'mfaEnrolled',
   createdAt: 'createdAt',
-  updatedAt: 'updatedAt'
+  updatedAt: 'updatedAt',
+  passwordHash: 'passwordHash',
+  passwordChangedAt: 'passwordChangedAt',
+  emailVerifiedAt: 'emailVerifiedAt',
+  failedLoginCount: 'failedLoginCount',
+  lockedUntil: 'lockedUntil'
 } as const
 
 export type UserScalarFieldEnum = (typeof UserScalarFieldEnum)[keyof typeof UserScalarFieldEnum]
+
+
+export const AuthTokenScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  purpose: 'purpose',
+  tokenHash: 'tokenHash',
+  expiresAt: 'expiresAt',
+  usedAt: 'usedAt',
+  createdAt: 'createdAt'
+} as const
+
+export type AuthTokenScalarFieldEnum = (typeof AuthTokenScalarFieldEnum)[keyof typeof AuthTokenScalarFieldEnum]
+
+
+export const AuthSessionScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  familyId: 'familyId',
+  refreshTokenHash: 'refreshTokenHash',
+  createdAt: 'createdAt',
+  expiresAt: 'expiresAt',
+  rotatedAt: 'rotatedAt',
+  revokedAt: 'revokedAt'
+} as const
+
+export type AuthSessionScalarFieldEnum = (typeof AuthSessionScalarFieldEnum)[keyof typeof AuthSessionScalarFieldEnum]
 
 
 export const OrganizationScalarFieldEnum = {

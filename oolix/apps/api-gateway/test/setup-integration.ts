@@ -32,12 +32,12 @@ process.env.DATABASE_URL =
   process.env.DATABASE_URL ?? 'postgresql://oolix:oolix@localhost:5432/oolix?schema=public';
 process.env.REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 
-// The suite deliberately never mints a real OIDC token: CI has no identity
-// provider (§64 runs Keycloak only in the local stack). These satisfy config
-// validation; the tests assert on the REJECTION path, which needs no issuer.
-process.env.OIDC_ISSUER_URL =
-  process.env.OIDC_ISSUER_URL ?? 'http://localhost:8080/realms/oolix-local';
-process.env.OIDC_CLIENT_ID = process.env.OIDC_CLIENT_ID ?? 'oolix-web';
+// Sign-in is Oolix's own now, so the suite exercises it for real: emails are
+// kept in memory for the tests to read (no mail is sent), and the breached-
+// password lookup -- a call to an external service -- is off, so the suite
+// never depends on the network.
+process.env.EMAIL_PROVIDER = 'capture';
+process.env.PASSWORD_BREACH_CHECK = 'false';
 
 // Keys are generated on first boot into a scratch directory, so a CI runner
 // starts from nothing and a developer's real local keys are left alone.

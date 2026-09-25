@@ -62,6 +62,14 @@ enum UserStatus {
   DISABLED
 }
 
+/// What a one-time link in an email is allowed to do. A token is bound to one
+/// purpose, so a verification link can never be replayed as a password reset.
+enum AuthTokenPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  INVITATION
+}
+
 enum MembershipStatus {
   INVITED
   ACTIVE
@@ -437,8 +445,9 @@ enum TargetingSource {
 
 model User {
   id           String     @id @default(uuid()) @db.Uuid
-  /// OIDC subject. Identity lives in the IdP; Oolix stores only the subject
-  /// claim so the provider can be swapped without touching authorization.
+  /// Stable identity key. Oolix now manages credentials itself and writes
+  /// `local:<id>` here; the column stays so an external identity provider
+  /// could be reintroduced without touching authorization.
   authSubject  String     @unique @map("auth_subject")
   email        String     @unique
   name         String
@@ -447,19 +456,75 @@ model User {
   termsVersion String?    @map("terms_version")
   acceptedAt   DateTime?  @map("accepted_at") @db.Timestamptz(6)
   country      String?    @db.Char(2)
+  // Unused since sign-in moved in-house with no second factor. Kept so the
+  // `keycloak-final` images, which still select it, can run against a
+  // database this release has migrated. Drop it once that fallback is retired.
   mfaEnrolled  Boolean    @default(false) @map("mfa_enrolled")
   createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  /// scrypt, self-describing: `scrypt$N$r$p$salt$hash`. Null until the user
+  /// chooses a password -- an invited user who has not accepted yet cannot
+  /// sign in at all, rather than with a password nobody chose.
+  passwordHash      String?   @map("password_hash")
+  passwordChangedAt DateTime? @map("password_changed_at") @db.Timestamptz(6)
+  emailVerifiedAt   DateTime? @map("email_verified_at") @db.Timestamptz(6)
+  /// Consecutive failed sign-ins. Reset on success; reaching the limit sets
+  /// `lockedUntil`.
+  failedLoginCount  Int       @default(0) @map("failed_login_count")
+  lockedUntil       DateTime? @map("locked_until") @db.Timestamptz(6)
 
   memberships      OrganizationMember[]
   approvals        Approval[]
   createdCampaigns Campaign[]            @relation("CampaignCreatedBy")
   bootstrapTokens  AgentBootstrapToken[]
+  authTokens       AuthToken[]
+  authSessions     AuthSession[]
 
   /// v6 §3: audience groups this user created.
   audienceGroups AudienceGroup[]
 
   @@map("users")
+}
+
+/// A one-time link sent by email: verify an address, reset a password, or
+/// accept an invitation. Only a SHA-256 of the token is stored; the token
+/// itself exists in the email alone, so a database leak yields no usable link.
+model AuthToken {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  purpose   AuthTokenPurpose
+  tokenHash String           @unique @map("token_hash")
+  expiresAt DateTime         @map("expires_at") @db.Timestamptz(6)
+  /// Set when consumed. A used token is refused, never re-accepted.
+  usedAt    DateTime?        @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@map("auth_tokens")
+}
+
+/// One refresh token. Every token descended from a single sign-in shares a
+/// `familyId`; refreshing rotates to a new row. Presenting a token that was
+/// already rotated means it was copied, so the whole family is revoked.
+model AuthSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  familyId         String    @map("family_id") @db.Uuid
+  refreshTokenHash String    @unique @map("refresh_token_hash")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// The family's absolute end, fixed at sign-in. Rotation never extends it.
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(6)
+  rotatedAt        DateTime? @map("rotated_at") @db.Timestamptz(6)
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([familyId])
+  @@index([userId])
+  @@map("auth_sessions")
 }
 
 model Organization {

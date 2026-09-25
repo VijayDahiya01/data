@@ -25,10 +25,9 @@ ENV_FILE="${ENV_FILE:-.env.prod}"
 DC="docker compose -f $COMPOSE_FILE --env-file $ENV_FILE"
 
 # shellcheck disable=SC2046
-export $(grep -E '^(POSTGRES_USER|POSTGRES_DB|KEYCLOAK_DB)=' "$ENV_FILE" | xargs) 2>/dev/null || true
+export $(grep -E '^(POSTGRES_USER|POSTGRES_DB)=' "$ENV_FILE" | xargs) 2>/dev/null || true
 PGUSER="${POSTGRES_USER:-oolix}"
 APPDB="${POSTGRES_DB:-oolix}"
-KCDB="${KEYCLOAK_DB:-keycloak}"
 
 echo "verifying $SRC"
 ( cd "$SRC" && sha256sum -c SHA256SUMS ) || {
@@ -37,9 +36,11 @@ echo "verifying $SRC"
 }
 
 echo "stopping applications"
-$DC stop api portal worker keycloak >/dev/null
+$DC stop api portal worker >/dev/null
 
-for db in "$APPDB" "$KCDB"; do
+# A backup taken while sign-in still ran on Keycloak also holds keycloak.dump.
+# It is left alone: accounts now live in the Oolix database itself.
+for db in "$APPDB"; do
   [ -f "$SRC/$db.dump" ] || { echo "no dump for $db, skipping"; continue; }
   echo "restoring $db"
   # Terminate stragglers: a single idle connection blocks DROP DATABASE, and

@@ -36,6 +36,7 @@ export default tseslint.config(
       '**/scripts/**',
       '**/seed/**',
       '**/*-cli.ts',
+      '**/src/cli/**',
       // Container entrypoints and deployment tooling. Their output contract IS
       // stdout -- an operator reading `docker logs` is the audience, and the
       // structured logger they would otherwise use does not exist inside an

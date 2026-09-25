@@ -1,11 +1,14 @@
 /**
  * Authenticated principals -- spec v5 §66, §92.4.
  *
- * Two kinds of caller reach Oolix Cloud, and they are never interchangeable:
+ * Three kinds of caller reach Oolix Cloud, and they are never interchangeable:
  *
- *   UserPrincipal  -- a human via OIDC, acting inside ONE organization.
- *   AgentPrincipal -- a Partner Agent workload, via an ES256 client
- *                     assertion, acting only for its own Partner.
+ *   UserPrincipal       -- a signed-in person acting inside ONE organization.
+ *   OnboardingPrincipal -- a signed-in person who belongs to no organization
+ *                          yet. Accepted only by routes that say so; it
+ *                          carries no organization, roles or permissions.
+ *   AgentPrincipal      -- a Partner Agent workload, via an ES256 client
+ *                          assertion, acting only for its own Partner.
  *
  * §92.4 is emphatic: "never trust a partner_org_id supplied in the body". The
  * Agent's Partner comes from its registration record, and it is attached here
@@ -27,7 +30,20 @@ export interface UserPrincipal {
   networkIds: string[];
   /** §66.3: gates campaign submission and Partner publication. */
   businessVerified: boolean;
-  mfaSatisfied: boolean;
+}
+
+/**
+ * §35.1 → §35.2: someone who verified their email and signed in, but has not
+ * created or joined an organization. It exists so that step is reachable at
+ * all -- a principal REQUIRING an organization made "create your first
+ * organization" impossible -- and it is deliberately a separate kind rather
+ * than a UserPrincipal with an empty orgId, so no handler written for an
+ * organization member can receive one by accident.
+ */
+export interface OnboardingPrincipal {
+  kind: 'onboarding';
+  userId: string;
+  email: string;
 }
 
 export interface AgentPrincipal {
@@ -40,7 +56,7 @@ export interface AgentPrincipal {
   agentVersion: string;
 }
 
-export type Principal = UserPrincipal | AgentPrincipal;
+export type Principal = UserPrincipal | OnboardingPrincipal | AgentPrincipal;
 
 /** §92.4: scopes required per Agent endpoint class. */
 export const AGENT_SCOPES = [

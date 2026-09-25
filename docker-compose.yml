@@ -78,73 +78,6 @@ services:
       retries: 20
       start_period: 20s
 
-  # Renders the realm import for THIS deployment's hostnames.
-  #
-  # Keycloak does not substitute environment variables inside a realm import,
-  # so a checked-in file can only ever name one environment. It refuses to
-  # start on an unsubstituted placeholder -- "Invalid client oolix-web: A
-  # redirect URI is not a valid URI" -- which at least fails loudly rather than
-  # leaving a realm whose redirect URIs silently do not match the portal.
-  # Renders the realm import for THIS deployment.
-  #
-  # Keycloak does not substitute environment variables inside a realm import,
-  # so a checked-in file can only ever describe one environment. The renderer
-  # fills in the placeholders, validates the result, and -- the part that
-  # matters -- decides whether the development identities are included at all.
-  # See infra/keycloak/render-realm.mjs.
-  realm-render:
-    image: node:22-alpine
-    restart: 'no'
-    environment:
-      WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:-http://localhost:3000}
-      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8081}
-      # Development values. Each is deliberately weaker than production and set
-      # explicitly, so "what is different about production" is a list somebody
-      # can read rather than a diff nobody runs.
-      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-local-only-secret-not-for-production}
-      KC_SSL_REQUIRED: ${KC_SSL_REQUIRED:-none}
-      KC_PASSWORD_POLICY: ${KC_PASSWORD_POLICY:-}
-      # The verify scripts fetch tokens with the password grant.
-      KC_DIRECT_GRANTS: ${KC_DIRECT_GRANTS:-true}
-      # The thirteen seeded identities. Local only -- see dev-users.json.
-      KC_SEED_USERS: ${KC_SEED_USERS:-true}
-    volumes:
-      - ./oolix/infra/keycloak:/src:ro
-      - realm-import:/out
-    command: ['node', '/src/render-realm.mjs']
-
-  keycloak:
-    image: quay.io/keycloak/keycloak:26.5
-    container_name: oolix-keycloak
-    restart: unless-stopped
-    command: ['start-dev', '--import-realm', '--http-port=8081']
-    environment:
-      KC_BOOTSTRAP_ADMIN_USERNAME: admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
-      KC_HEALTH_ENABLED: 'true'
-      KC_HTTP_ENABLED: 'true'
-      # The realm import reads this for the portal's redirect URIs. It is a
-      # variable rather than a literal because the same realm file is imported
-      # by the production compose, where the portal is on a real hostname over
-      # HTTPS -- and a redirect URI that does not match is a login failure with
-      # no useful message.
-      WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:-http://localhost:3000}
-    ports:
-      - '8081:8081'
-    volumes:
-      - realm-import:/opt/keycloak/data/import:ro
-    depends_on:
-      # Without this, a fresh machine can start Keycloak before the realm has
-      # been rendered, and it imports an empty directory: no realm, no login,
-      # and nothing in the logs that points at the cause.
-      realm-render:
-        condition: service_completed_successfully
-    # No container healthcheck: the Keycloak 26 image ships neither curl nor
-    # wget, and its bash is built without /dev/tcp network redirection, so
-    # there is no in-container way to probe the realm. Readiness is checked
-    # from the host instead -- see scripts/wait-for-stack.mjs, which polls the
-    # OIDC discovery document (the same endpoint the API needs anyway).
-
   # Partner-local audience source. Stands in for the Data Partner's restricted
   # view/table (§7.1 "Restricted view/table"). Oolix has NO credential to this.
   partner-postgres:
@@ -167,7 +100,6 @@ services:
       retries: 20
 
 volumes:
-  realm-import:
   postgres-data:
   redis-data:
   partner-redis-data:

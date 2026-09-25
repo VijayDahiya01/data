@@ -23,7 +23,7 @@
 #
 # Environment:
 #   PGHOST PGUSER PGPASSWORD    the Oolix database
-#   APP_DB KEYCLOAK_DB          database names
+#   APP_DB                      its name
 #   BACKUP_DIR                  where to write (mount this OFF-HOST)
 #   BACKUP_INTERVAL_SECONDS     default 86400
 #   BACKUP_KEEP                 how many to retain locally, default 7
@@ -32,7 +32,6 @@
 set -eu
 
 APP_DB="${APP_DB:-oolix}"
-KEYCLOAK_DB="${KEYCLOAK_DB:-keycloak}"
 BACKUP_DIR="${BACKUP_DIR:-/backups}"
 BACKUP_INTERVAL_SECONDS="${BACKUP_INTERVAL_SECONDS:-86400}"
 BACKUP_KEEP="${BACKUP_KEEP:-7}"
@@ -49,7 +48,7 @@ run_backup() {
 
   # Custom format: restores in parallel, restores selectively, and pg_restore
   # refuses a truncated file rather than replaying half of it.
-  for db in "$APP_DB" "$KEYCLOAK_DB"; do
+  for db in "$APP_DB"; do
     if ! pg_dump -d "$db" --format=custom --no-owner > "$out/$db.dump" 2>"$out/$db.err"; then
       log "FAILED: pg_dump $db -- $(head -c 300 "$out/$db.err")"
       return 1
@@ -81,7 +80,6 @@ run_backup() {
   {
     echo "taken_at=$stamp"
     echo "app_database=$APP_DB"
-    echo "keycloak_database=$KEYCLOAK_DB"
     echo "scheduled=true"
   } > "$out/manifest.txt"
 

@@ -14,7 +14,8 @@ metrics and alert rules exist on both sides of the Partner boundary, a load
 baseline is measured, and 31 adversarial probes run against a live instance.
 
 **What is left is procurement and paperwork, not engineering:** a host, a
-managed database, a managed Redis, a bucket and three DNS names; Meta App
+managed database, a managed Redis, a bucket, two DNS names and an
+email-sending account; Meta App
 Review and Google Data Manager access for the external channels; and the
 counterparty work at the bottom of this document, which takes longer than any
 of it.
@@ -59,10 +60,32 @@ something else.
 | 9 | Monitoring and alerts | done, both sides of the boundary |
 | 10 | Migration and release rollback | done, and drilled |
 | 11 | Load baseline | done |
-| 12 | Application security review | automated part done; an engagement still needed |
+| 12 | Application security review | automated part done; an engagement still needed — now including Oolix's own sign-in |
 | 13 | Meta and Google activation | built; blocked on platform credentials |
 
 ---
+
+## Sign-in moved into Oolix — 2026-09-24
+
+Keycloak is gone. Oolix now runs its own sign-up, sign-in, email confirmation,
+invitations and password reset, and sends email through Brevo. One service
+fewer to operate: no identity server, no second database, no admin console, no
+`auth.` hostname. The last Keycloak release is tagged `keycloak-final`.
+
+**What it costs.** There is no second factor, so the §4.2/§82 requirement for
+the privileged roles is not met; §64's "Oolix never sees a password" no longer
+holds; and the new code has had only our own review. All three are recorded,
+with what compensates, in `docs/SECURITY-REVIEW.md`. A second factor and an
+independent test of sign-in belong before a pilot carries a real Partner's
+approvals.
+
+**What it fixed on the way.** Two gaps that Keycloak had hidden: a brand-new
+account could never create its organization (the guard refused anyone without
+a membership), and nothing could create the first Oolix administrator in an
+empty database — now `create-admin`, which emails an invitation.
+
+The sections below dated 2026-09-22 (MFA) and 2026-09-09 (the realm file), and
+the Keycloak checks in the 2026-09-14 boot, are history.
 
 ## The production stack, actually booted — 2026-09-14
 
@@ -673,7 +696,8 @@ burst below the limit) and two that could not pass (`fetch` refuses to send
 `TRACE`). Both fixed; both were reporting on the probe rather than the server.
 
 **Still needed before the pilot carries a second Partner:** an engagement by
-someone who does this for a living. Business-logic abuse, the approval workflow
+someone who does this for a living — and since 2026-09-24 that includes
+Oolix's own sign-up, sign-in, sessions and recovery, which replaced Keycloak. Business-logic abuse, the approval workflow
 as an adversary would use it, cross-organization access with two real sessions,
 the portal's client side, and dependency review are all outside what these
 probes can reach. See `docs/SECURITY-REVIEW.md`.

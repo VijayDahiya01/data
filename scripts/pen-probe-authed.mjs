@@ -16,8 +16,10 @@
  *
  *   node scripts/pen-probe-authed.mjs
  *
- * Local only: it needs the password grant, which production disables.
+ * Local only: it signs in as the seeded accounts, with the development
+ * password production never has.
  */
+import { createHmac, generateKeyPairSync, sign as cryptoSign } from 'node:crypto';
 import pg from 'pg';
 import { seedToken } from './lib/onboard-partner.mjs';
 
@@ -57,10 +59,20 @@ async function api(path, { token, orgId, method = 'GET', body } = {}) {
   return { status: res.status, body: json, text };
 }
 
-/** A refusal, a 404, or an empty result. Anything else leaked something. */
-function refused(r) {
-  if (r.status === 401 || r.status === 403 || r.status === 404) return true;
+/**
+ * A refusal, a 404, or an empty result. Anything else leaked something.
+ *
+ * A 401 is NOT a refusal here. Every cross-tenant probe holds a live token, so
+ * a 401 means the token itself was turned away -- expired, say, after the
+ * machine slept mid-run -- and the scoping under test was never reached.
+ * Counting it as a pass once let a whole run of dead tokens report green.
+ * The token-forgery probes are the exception: for them, 401 is the point.
+ */
+function refused(r, { tokenRefusal = false } = {}) {
   if (r.status === 429) return null; // inconclusive: never reached the guard
+  if (tokenRefusal) return r.status === 401;
+  if (r.status === 401) return null;
+  if (r.status === 403 || r.status === 404) return true;
   if (r.status >= 500) return false;
   // A 200 that returns nothing is also a refusal -- scoping by org rather
   // than erroring is a legitimate design.
@@ -70,10 +82,17 @@ function refused(r) {
   return false;
 }
 
-function verdict(name, severity, r, note = '') {
-  const ok = refused(r);
+function verdict(name, severity, r, note = '', opts = {}) {
+  const ok = refused(r, opts);
   if (ok === null) {
-    record(name, severity, false, 'INCONCLUSIVE: rate limited before the guard was reached');
+    record(
+      name,
+      severity,
+      false,
+      r.status === 401
+        ? 'INCONCLUSIVE: the token itself was refused (expired?), so scoping was never tested'
+        : 'INCONCLUSIVE: rate limited before the guard was reached',
+    );
     return;
   }
   record(name, severity, ok, ok ? `refused with ${r.status}` : `LEAKED with ${r.status} ${note}`);
@@ -340,6 +359,85 @@ try {
     leaked === null,
     leaked ? `LEAKED from ${leaked}` : `checked ${surfaces.length} surfaces`,
   );
+
+  // -------------------------------------------------------------------------
+  // Forged and outlived sign-in tokens.
+  //
+  // Oolix signs its own sign-in tokens now, so the classic JWT attacks are
+  // aimed at Oolix itself. Every forgery keeps the claims of a REAL, live
+  // token and changes only what an attacker could: the algorithm, the key or
+  // the payload. Made-up claims would be refused for naming nobody, and pass
+  // whether or not the signature was ever checked.
+  // -------------------------------------------------------------------------
+  {
+    const [h, p, s] = buyer.split('.');
+    const header = JSON.parse(Buffer.from(h, 'base64url').toString());
+    const claims = JSON.parse(Buffer.from(p, 'base64url').toString());
+    const enc = (v) => Buffer.from(JSON.stringify(v)).toString('base64url');
+    const probe = async (name, token) =>
+      verdict(name, 'critical', await api('/v1/me/context', { token, orgId: BUYER_ORG }), '', {
+        tokenRefusal: true,
+      });
+
+    // The control: untouched, the token works -- so each refusal below is the
+    // forgery being refused, not the token having been dead all along.
+    const control = await api('/v1/me/context', { token: buyer, orgId: BUYER_ORG });
+    record(
+      'the untouched sign-in token is accepted (control)',
+      'high',
+      control.status === 200,
+      `status ${control.status}`,
+    );
+
+    await probe('sign-in token with alg:none', `${enc({ ...header, alg: 'none' })}.${p}.`);
+
+    // HS256 keyed with public material anyone can fetch: key confusion.
+    const jwks = await (await fetch(`${API}/.well-known/oolix-manifest-jwks.json`)).text();
+    const hsInput = `${enc({ alg: 'HS256', typ: 'JWT', kid: header.kid })}.${p}`;
+    await probe(
+      'sign-in token re-signed HS256 with a published key as the secret',
+      `${hsInput}.${createHmac('sha256', jwks).update(hsInput).digest('base64url')}`,
+    );
+
+    // An attacker's own ES256 key: under the real kid, then embedded as `jwk`.
+    const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const signed = (hdr) => {
+      const input = `${enc(hdr)}.${p}`;
+      const sig = cryptoSign('sha256', Buffer.from(input), {
+        key: privateKey,
+        dsaEncoding: 'ieee-p1363',
+      });
+      return `${input}.${sig.toString('base64url')}`;
+    };
+    await probe("sign-in token signed with an attacker's key under the real kid", signed(header));
+    await probe(
+      'sign-in token carrying its own key in the header',
+      signed({ ...header, jwk: publicKey.export({ format: 'jwk' }) }),
+    );
+
+    // The real signature over an edited payload: somebody else's account.
+    await probe(
+      'sign-in token with its subject swapped for another account',
+      `${h}.${enc({ ...claims, sub: 'ffffffff-0002-4002-8002-000000000002' })}.${s}`,
+    );
+
+    // Signing out ends the token at once, not ten minutes later.
+    const res = await fetch(`${API}/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'buyer.operator@example.test',
+        password: process.env.SEED_USER_PASSWORD ?? 'password',
+      }),
+    });
+    const pair = await res.json();
+    await fetch(`${API}/v1/auth/logout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: pair.refresh_token }),
+    });
+    await probe('a sign-in token after signing out', pair.access_token);
+  }
 } finally {
   await db.end();
 }
@@ -349,10 +447,15 @@ const order = { critical: 0, high: 1, medium: 2, low: 3 };
 results.sort((a, b) => order[a.severity] - order[b.severity]);
 
 console.log('');
+// --verbose lists the passes too, so a run shows which probes it reached.
+const verbose = process.argv.includes('--verbose');
 for (const r of results) {
-  if (!r.passed) console.log(`  [FAIL] ${r.severity.padEnd(8)} ${r.name}\n           ${r.detail}`);
+  if (!r.passed || verbose) {
+    const mark = r.passed ? 'pass' : 'FAIL';
+    console.log(`  [${mark}] ${r.severity.padEnd(8)} ${r.name}\n           ${r.detail}`);
+  }
 }
-console.log(`\n${results.length - failures}/${results.length} cross-tenant probes passed`);
+console.log(`\n${results.length - failures}/${results.length} authenticated probes passed`);
 if (failures > 0) {
   console.log("A FAIL here means one tenant can reach another tenant's data.\n");
   process.exit(1);

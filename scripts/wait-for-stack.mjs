@@ -3,9 +3,8 @@
  * Wait until every local dependency in docker-compose.yml is actually usable.
  *
  * `docker compose ps` reporting "healthy" is not the same as "ready to serve":
- * Keycloak has no in-container healthcheck at all (its image has no HTTP
- * client), and LocalStack reports healthy before its ready.d hooks finish
- * creating the queues the worker needs. This probes the real endpoints.
+ * LocalStack reports healthy before its ready.d hooks finish creating the
+ * queues the worker needs. This probes the real endpoints.
  *
  * Usage: node scripts/wait-for-stack.mjs [--timeout 180]
  */
@@ -21,7 +20,6 @@ const checks = [
   { name: 'partner-postgres(5433)', fn: () => tcp(5433) },
   { name: 'partner-redis   (6380)', fn: () => tcp(6380) },
   { name: 'localstack s3+sqs     ', fn: localstackReady },
-  { name: 'keycloak realm "oolix"', fn: keycloakReady },
 ];
 
 function tcp(port, host = '127.0.0.1') {
@@ -49,20 +47,6 @@ async function localstackReady() {
     const s3 = body.services?.s3;
     const sqs = body.services?.sqs;
     return ['running', 'available'].includes(s3) && ['running', 'available'].includes(sqs);
-  } catch {
-    return false;
-  }
-}
-
-async function keycloakReady() {
-  try {
-    const res = await fetch('http://localhost:8081/realms/oolix/.well-known/openid-configuration', {
-      signal: AbortSignal.timeout(3000),
-    });
-    if (!res.ok) return false;
-    const body = await res.json();
-    // A realm that exists but has not finished importing has no jwks_uri.
-    return typeof body.jwks_uri === 'string';
   } catch {
     return false;
   }

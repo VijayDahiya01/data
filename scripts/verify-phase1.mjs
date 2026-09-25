@@ -3,18 +3,16 @@
  * Phase 1 exit criterion (spec v5 §85):
  *   "Partner reaches READY_FOR_CAMPAIGNS in sandbox."
  *
- * Drives the real HTTP surface end to end -- a real Keycloak token, the real
+ * Drives the real HTTP surface end to end -- a real sign-in token, the real
  * §92 Agent bootstrap/assertion/token chain, the real readiness evaluation --
  * so this proves the running system, not a mock of it.
  *
  * Usage: node scripts/verify-phase1.mjs
  */
 import { generateKeyPair, exportJWK, SignJWT } from 'jose';
+import { seedToken } from './lib/login.mjs';
 
 const API = process.env.API_PUBLIC_URL ?? 'http://localhost:4000';
-const KEYCLOAK = process.env.OIDC_ISSUER_URL ?? 'http://localhost:8081/realms/oolix';
-const CLIENT_ID = process.env.OIDC_CLIENT_ID ?? 'oolix-web';
-const CLIENT_SECRET = process.env.OIDC_CLIENT_SECRET ?? 'local-only-secret';
 
 const PARTNER_A_ORG = '22222222-2222-4222-8222-222222222222';
 
@@ -25,25 +23,7 @@ const check = (label, ok, detail = '') => {
   return ok;
 };
 
-async function token(username) {
-  const body = new URLSearchParams({
-    grant_type: 'password',
-    client_id: CLIENT_ID,
-    client_secret: CLIENT_SECRET,
-    username,
-    password: 'password',
-    // No explicit scope: the realm assigns profile/email/roles and the
-    // oolix-api audience mapper as DEFAULT client scopes, and Keycloak
-    // rejects requesting a default scope as if it were optional.
-  });
-  const res = await fetch(`${KEYCLOAK}/protocol/openid-connect/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  });
-  if (!res.ok) throw new Error(`token for ${username}: ${res.status} ${await res.text()}`);
-  return (await res.json()).access_token;
-}
+const token = (username) => seedToken(username, { api: API });
 
 async function api(path, { method = 'GET', token: tok, body, headers = {} } = {}) {
   const res = await fetch(`${API}${path}`, {
@@ -73,7 +53,7 @@ console.log('1. Authentication (§66, §35)');
 const partnerAdmin = await token('partner.admin@example.test');
 const partnerSecurity = await token('partner.security@example.test');
 const buyerAdmin = await token('buyer.admin@example.test');
-check('Keycloak issues tokens for seeded identities', Boolean(partnerAdmin && partnerSecurity));
+check('seeded identities sign in', Boolean(partnerAdmin && partnerSecurity));
 
 const ctx = await api('/v1/me/context', { token: partnerAdmin });
 check('GET /v1/me/context resolves the Partner org', ctx.status === 200, `status ${ctx.status}`);
