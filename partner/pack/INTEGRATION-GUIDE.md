@@ -17,6 +17,15 @@ is configuration.
 integration, plus whatever your change process costs. The slowest part is
 usually getting a database user provisioned, so start that first.
 
+> **Most Partners should not start at Step 1.** _Partner Connect_ — one Compose
+> file and a setup page on your own server — replaces Steps 1 to 5: nothing is
+> created in your database, no mapping is written by hand, and the Agent
+> publishes what it can answer by itself. Follow _The quick way_ in
+> `docs/DEPLOY-PARTNER-AGENT.md` (the portal's **Integrations → Connect your
+> data** has the command), then continue here from
+> [Step 6](#step-6--define-your-ad-slots). Steps 1 to 5 remain for teams that
+> want to build the attribute view themselves.
+
 ---
 
 ## Before you start

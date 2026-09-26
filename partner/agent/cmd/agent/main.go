@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -36,7 +37,10 @@ import (
 	"github.com/oolix/partner-agent/internal/controlsync"
 	"github.com/oolix/partner-agent/internal/eventbuffer"
 	"github.com/oolix/partner-agent/internal/httpapi"
+	"github.com/oolix/partner-agent/internal/localstore"
+	"github.com/oolix/partner-agent/internal/managed"
 	"github.com/oolix/partner-agent/internal/metrics"
+	"github.com/oolix/partner-agent/internal/setupui"
 	"github.com/oolix/partner-agent/internal/state"
 )
 
@@ -45,6 +49,8 @@ func main() {
 	showVersion := flag.Bool("version", false, "print the agent version and exit")
 	register := flag.Bool("register", false,
 		"exchange a bootstrap token for an identity, then exit (§92.2)")
+	managedMode := flag.Bool("managed", false,
+		"run in managed mode, configured from OOLIX_* environment variables (the Compose bundle)")
 	flag.Parse()
 
 	if *showVersion {
@@ -58,6 +64,10 @@ func main() {
 	// a volume was lost and the Agent quietly minted a second one while the
 	// first still showed as live in the Partner's console.
 	if *register {
+		if *managedMode {
+			fmt.Fprintln(os.Stderr, "in managed mode the Agent registers from its setup page")
+			os.Exit(2)
+		}
 		if err := runRegister(*configPath); err != nil {
 			fmt.Fprintf(os.Stderr, "registration failed: %v\n", err)
 			os.Exit(1)
@@ -65,7 +75,7 @@ func main() {
 		return
 	}
 
-	if err := run(*configPath); err != nil {
+	if err := run(*configPath, *managedMode); err != nil {
 		fmt.Fprintf(os.Stderr, "agent failed: %v\n", err)
 		os.Exit(1)
 	}
@@ -116,8 +126,14 @@ func runRegister(configPath string) error {
 	return nil
 }
 
-func run(configPath string) error {
-	cfg, err := config.Load(configPath)
+func run(configPath string, managedMode bool) error {
+	var cfg *config.Config
+	var err error
+	if managedMode {
+		cfg, err = config.FromEnv()
+	} else {
+		cfg, err = config.Load(configPath)
+	}
 	if err != nil {
 		return err
 	}
@@ -140,6 +156,10 @@ func run(configPath string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	if cfg.IsManaged() {
+		return runManaged(ctx, cfg, logger)
+	}
+
 	// --- connector (§7.1) --------------------------------------------------
 	dsn, err := cfg.ResolveDSN()
 	if err != nil {
@@ -159,48 +179,6 @@ func run(configPath string) error {
 		return fmt.Errorf("connector: %w", err)
 	}
 	defer conn.Close()
-
-	// --- partner-local state (§76.1) --------------------------------------
-	var store state.Store
-	switch cfg.State.Mode {
-	case "redis":
-		store, err = state.NewRedis(cfg.State.RedisURL, cfg.State.RedisKeyPrefix)
-		if err != nil {
-			return fmt.Errorf("partner-local redis: %w", err)
-		}
-	default:
-		// §76.1: single replica only. With several replicas each would keep
-		// its own counters and a Partner's frequency cap would be multiplied
-		// by the replica count.
-		logger.Warn("using embedded state: SINGLE REPLICA ONLY (spec §76.1)")
-		store = state.NewEmbedded()
-	}
-	defer store.Close()
-
-	// --- workload identity (§92) ------------------------------------------
-	key, err := loadPrivateKey(cfg.Oolix.PrivateKeyPath)
-	if err != nil {
-		return fmt.Errorf("agent private key: %w", err)
-	}
-
-	httpClient := &http.Client{Timeout: 10 * time.Second}
-
-	syncer := controlsync.New(controlsync.Options{
-		APIBaseURL:       cfg.Oolix.APIBaseURL,
-		AgentID:          cfg.Oolix.AgentID,
-		ClientID:         cfg.Oolix.ClientID,
-		PartnerOrgID:     cfg.Agent.PartnerID,
-		PrivateKey:       key,
-		TokenAudience:    cfg.Oolix.TokenAudience,
-		ManifestIssuer:   cfg.Oolix.ManifestIssuer,
-		ManifestAudience: cfg.Oolix.ManifestAudience,
-		Interval:         cfg.Agent.ControlSyncInterval,
-		StaleGrace:       cfg.Agent.StaleGrace,
-		HTTPClient:       httpClient,
-		Logger:           logger,
-	})
-
-	tokens := attribution.NewIssuer(httpClient, cfg.Oolix.APIBaseURL, cfg.Oolix.AgentID, syncer.AccessToken)
 
 	// --- v6 audience evaluation (§5.2, §8.2, §11, §12) ---------------------
 	//
@@ -255,6 +233,77 @@ func run(configPath string) error {
 		logger.Info("v6 audience evaluation disabled: no local attribute mapping configured")
 	}
 
+	return serve(ctx, cfg, logger, serving{
+		conn:         conn,
+		evaluator:    evaluator,
+		index:        audienceIndex(evaluator),
+		audiencePool: audiencePool,
+	})
+}
+
+// serving is what differs between the two ways of running: where ad
+// decisions and audience counts read from.
+type serving struct {
+	conn connector.Connector
+	// evaluator answers reach estimates and compiles audiences; nil when the
+	// Partner has published no attribute mapping.
+	evaluator *audience.Evaluator
+	index     addecision.AudienceIndex
+	// audiencePool is shared with the external-channel export; nil in managed
+	// mode, which does not export.
+	audiencePool *pgxpool.Pool
+	// onSyncer is told the control-plane client once it exists.
+	onSyncer func(*controlsync.Syncer)
+}
+
+// serve runs the parts both modes share: the decision engine, the private
+// ad-decision API, control sync and the reporting loops.
+func serve(ctx context.Context, cfg *config.Config, logger *slog.Logger, parts serving) error {
+	conn, evaluator, audiencePool := parts.conn, parts.evaluator, parts.audiencePool
+	var err error
+
+	// --- partner-local state (§76.1) --------------------------------------
+	var store state.Store
+	switch cfg.State.Mode {
+	case "redis":
+		store, err = state.NewRedis(cfg.State.RedisURL, cfg.State.RedisKeyPrefix)
+		if err != nil {
+			return fmt.Errorf("partner-local redis: %w", err)
+		}
+	default:
+		// §76.1: single replica only. With several replicas each would keep
+		// its own counters and a Partner's frequency cap would be multiplied
+		// by the replica count.
+		logger.Warn("using embedded state: SINGLE REPLICA ONLY (spec §76.1)")
+		store = state.NewEmbedded()
+	}
+	defer store.Close()
+
+	// --- workload identity (§92) ------------------------------------------
+	key, err := loadPrivateKey(cfg.Oolix.PrivateKeyPath)
+	if err != nil {
+		return fmt.Errorf("agent private key: %w", err)
+	}
+
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+
+	syncer := controlsync.New(controlsync.Options{
+		APIBaseURL:       cfg.Oolix.APIBaseURL,
+		AgentID:          cfg.Oolix.AgentID,
+		ClientID:         cfg.Oolix.ClientID,
+		PartnerOrgID:     cfg.Agent.PartnerID,
+		PrivateKey:       key,
+		TokenAudience:    cfg.Oolix.TokenAudience,
+		ManifestIssuer:   cfg.Oolix.ManifestIssuer,
+		ManifestAudience: cfg.Oolix.ManifestAudience,
+		Interval:         cfg.Agent.ControlSyncInterval,
+		StaleGrace:       cfg.Agent.StaleGrace,
+		HTTPClient:       httpClient,
+		Logger:           logger,
+	})
+
+	tokens := attribution.NewIssuer(httpClient, cfg.Oolix.APIBaseURL, cfg.Oolix.AgentID, syncer.AccessToken)
+
 	engine := &addecision.Engine{
 		Connector: conn,
 		State:     store,
@@ -262,7 +311,7 @@ func run(configPath string) error {
 		// §12: membership for an audience-targeted manifest is one indexed read
 		// against what was materialized locally, never a rule evaluation on the
 		// decision path.
-		Audience:   audienceIndex(evaluator),
+		Audience:   parts.index,
 		StaleGrace: cfg.Agent.StaleGrace,
 		CacheTTLMs: 30_000,
 	}
@@ -272,6 +321,9 @@ func run(configPath string) error {
 	// no numbers on the thing running on their infrastructure.
 	recorder := metrics.New()
 	syncer.OnSyncResult(recorder.ObserveControlSync)
+	if parts.onSyncer != nil {
+		parts.onSyncer(syncer)
+	}
 
 	server := &httpapi.Server{
 		Engine:     engine,
@@ -626,4 +678,165 @@ func externalViews(snap *addecision.ConfigSnapshot) []channel.ActivationView {
 		})
 	}
 	return out
+}
+
+// runManaged runs the Agent in managed mode (Partner Connect).
+//
+// The setup page comes up first and stays up: it is how the Partner registers
+// the Agent, points it at their database and watches the copy. Ad decisions,
+// control sync and audience counting start once the Agent has an identity --
+// immediately on a restart, or the moment the Partner registers.
+func runManaged(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
+	dsn, err := cfg.Managed.LocalStoreDSN()
+	if err != nil {
+		return err
+	}
+	store, err := openLocalStore(ctx, dsn, filepath.Join(cfg.Managed.StateDir, "local.key"), logger)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	runner := managed.NewRunner(store, logger)
+	go runner.Run(ctx)
+
+	keyPath := filepath.Join(cfg.Managed.StateDir, "agent-key.pem")
+	registered := make(chan managed.Identity, 1)
+	ui, err := setupui.New(ctx, setupui.Options{
+		Store: store, Runner: runner, Logger: logger,
+		APIBaseURL:   cfg.Oolix.APIBaseURL,
+		KeyPath:      keyPath,
+		ImportFolder: cfg.Managed.ImportFolder,
+		Password:     os.Getenv("OOLIX_SETUP_PASSWORD"),
+		OnRegistered: func(id managed.Identity) {
+			select {
+			case registered <- id:
+			default:
+			}
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("setup page: %w", err)
+	}
+	setupServer := &http.Server{
+		Addr:              cfg.Managed.SetupListenAddr,
+		Handler:           ui.Handler(),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		// Reading a sample of a large table can take a while.
+		WriteTimeout: 3 * time.Minute,
+		IdleTimeout:  60 * time.Second,
+	}
+	setupErr := make(chan error, 1)
+	go func() {
+		logger.Info("setup page listening", "addr", cfg.Managed.SetupListenAddr)
+		if err := setupServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			setupErr <- err
+		}
+	}()
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = setupServer.Shutdown(shutdownCtx)
+	}()
+
+	id, err := managed.Settings{Store: store}.Identity(ctx)
+	if err != nil {
+		return err
+	}
+	if id == nil {
+		logger.Info("not connected to Oolix yet: open the setup page to finish setting up this Agent")
+		select {
+		case <-ctx.Done():
+			return nil
+		case err := <-setupErr:
+			return fmt.Errorf("setup page: %w", err)
+		case v := <-registered:
+			id = &v
+		}
+	}
+
+	// The identity the setup page stored stands in for the hand-written
+	// `oolix:` block of a classic configuration.
+	cfg.Agent.PartnerID = id.PartnerOrgID
+	cfg.Oolix.AgentID, cfg.Oolix.ClientID = id.AgentID, id.ClientID
+	cfg.Oolix.ManifestIssuer = id.ManifestIssuer
+	if id.ManifestAudience != "" {
+		cfg.Oolix.ManifestAudience = id.ManifestAudience
+	}
+	if id.TokenAudience != "" {
+		cfg.Oolix.TokenAudience = id.TokenAudience
+	}
+	cfg.Oolix.PrivateKeyPath = keyPath
+
+	// Ad decisions and audience counts read the local copy, never the
+	// Partner's database. The copy holds scrambled ids, so every lookup
+	// scrambles the id it was asked about the same way.
+	view, err := connector.NewPostgresView(ctx, connector.PostgresOptions{
+		DSN:             dsn,
+		MembershipQuery: managed.MembershipQuery,
+		ConsentQuery:    managed.ConsentQuery,
+		MaxOpenConns:    cfg.Connector.MaxOpenConns,
+		QueryTimeout:    cfg.Connector.QueryTimeout,
+	})
+	if err != nil {
+		return fmt.Errorf("local store connector: %w", err)
+	}
+	defer view.Close()
+
+	poolCfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return fmt.Errorf("audience pool: %w", err)
+	}
+	poolCfg.MaxConns = 2
+	audiencePool, err := pgxpool.NewWithConfig(ctx, poolCfg)
+	if err != nil {
+		return fmt.Errorf("audience pool: %w", err)
+	}
+	defer audiencePool.Close()
+	evaluator := audience.NewEvaluator(audience.EvaluatorOptions{
+		Pool:           audiencePool,
+		AttributeTable: localstore.AttributesTable,
+		Mappings:       managed.EvaluatorMappings(),
+		MappingVersion: managed.MappingVersion,
+		Timeout:        cfg.Connector.Audience.EvaluationTimeout,
+	})
+	logger.Info("managed mode serving from the local copy", "agent_id", id.AgentID)
+
+	return serve(ctx, cfg, logger, serving{
+		conn:      managed.ScrambledConnector{Connector: view, Scramble: store.ScrambleID},
+		evaluator: evaluator,
+		index:     managed.ScrambledAudience{AudienceIndex: evaluator, Scramble: store.ScrambleID},
+		onSyncer: func(s *controlsync.Syncer) {
+			runner.SetQualityReporter(func(ctx context.Context, q managed.Quality) error {
+				return s.ReportQuality(ctx, q)
+			})
+			// In the background: publishing anything left over from before a
+			// restart needs a token, and serving should not wait for it.
+			go runner.SetPublisher(ctx, func(ctx context.Context, c managed.Capabilities) error {
+				return s.PublishCapabilities(ctx, c)
+			})
+		},
+	})
+}
+
+// openLocalStore connects to the local store, waiting for it while it starts:
+// in the Compose bundle both containers come up together.
+func openLocalStore(ctx context.Context, dsn, keyFile string, logger *slog.Logger) (*localstore.Store, error) {
+	deadline := time.Now().Add(90 * time.Second)
+	for {
+		store, err := localstore.Open(ctx, dsn, keyFile)
+		if err == nil {
+			return store, nil
+		}
+		if time.Now().After(deadline) || ctx.Err() != nil {
+			return nil, fmt.Errorf("local store: %w", err)
+		}
+		logger.Info("waiting for the local store to start", "error", err.Error())
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(3 * time.Second):
+		}
+	}
 }

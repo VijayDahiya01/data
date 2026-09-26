@@ -1,0 +1,45 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+{{if .Refresh}}<meta http-equiv="refresh" content="{{.Refresh}}">{{end}}
+<title>{{.Title}} · Oolix Partner Connect</title>
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/">Oolix <span>Partner Connect</span></a>
+  {{if .CSRF}}
+  <form method="post" action="/logout">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <button class="link" type="submit">Sign out</button>
+  </form>
+  {{end}}
+</header>
+<div class="wrap{{if .Steps}} with-steps{{end}}">
+  {{if .Steps}}
+  <nav class="steps" aria-label="Setup steps">
+    <ol>
+      {{range .Steps}}
+      <li class="{{if .Done}}done{{end}}{{if .Current}} current{{end}}{{if .Locked}} locked{{end}}">
+        {{if .Locked}}<span>{{.Label}}</span>{{else}}<a href="{{.Path}}"{{if .Current}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}
+        {{if .Detail}}<small>{{.Detail}}</small>{{end}}
+      </li>
+      {{end}}
+    </ol>
+    <a class="overview-link" href="/">Overview</a>
+  </nav>
+  {{end}}
+  <main>
+    {{if .Notice}}<p class="notice" role="status">{{.Notice}}</p>{{end}}
+    {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+    {{template "content" .}}
+  </main>
+</div>
+<footer class="foot">
+  This page runs on your own server. Oolix never sees your database, your login, or your customers.
+</footer>
+</body>
+</html>{{end}}

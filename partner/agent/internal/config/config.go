@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -25,6 +26,87 @@ type Config struct {
 	State     StateConfig     `yaml:"state"`
 	Channels  ChannelsConfig  `yaml:"channels"`
 	Logging   LoggingConfig   `yaml:"logging"`
+	Managed   ManagedConfig   `yaml:"managed"`
+}
+
+// ConnectorManaged is managed mode (Partner Connect): the Partner points the
+// Agent at their database from a web page, and the Agent keeps its own cleaned
+// copy of the customer table. No Oolix table is created in the Partner's
+// database and no mapping is written by hand.
+const ConnectorManaged = "managed"
+
+// ManagedConfig is managed mode's own plumbing. None of it describes the
+// Partner's database: that is entered on the setup page and kept, with the
+// password sealed, in the local store.
+type ManagedConfig struct {
+	// LocalStoreURL is the Agent's own PostgreSQL, where the cleaned copy lives.
+	LocalStoreURL string `yaml:"local_store_url"`
+	// LocalStorePasswordFile holds the local store's password. The Compose
+	// bundle generates it on first start, so no password is ever typed.
+	LocalStorePasswordFile string `yaml:"local_store_password_file"`
+	// SetupListenAddr serves the setup page. Like listen_addr it belongs on a
+	// private network only.
+	SetupListenAddr string `yaml:"setup_listen_addr"`
+	// StateDir holds the Agent's private key and the local secret key.
+	StateDir string `yaml:"state_dir"`
+	// ImportFolder is where a Partner without database access drops CSV or
+	// Excel exports.
+	ImportFolder string `yaml:"import_folder"`
+}
+
+// IsManaged reports whether the Agent runs in managed mode.
+func (c *Config) IsManaged() bool { return c.Connector.Type == ConnectorManaged }
+
+// LocalStoreDSN is the local store URL carrying the password from the
+// password file, when one is named.
+func (m ManagedConfig) LocalStoreDSN() (string, error) {
+	if m.LocalStorePasswordFile == "" {
+		return m.LocalStoreURL, nil
+	}
+	raw, err := os.ReadFile(m.LocalStorePasswordFile)
+	if err != nil {
+		return "", fmt.Errorf("local store password: %w", err)
+	}
+	password := strings.TrimSpace(string(raw))
+	if password == "" {
+		return "", fmt.Errorf("local store password file %s is empty", m.LocalStorePasswordFile)
+	}
+	u, err := url.Parse(m.LocalStoreURL)
+	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") {
+		return "", errors.New("managed.local_store_url must be a postgres:// URL when a password file is used")
+	}
+	user := "postgres"
+	if u.User != nil && u.User.Username() != "" {
+		user = u.User.Username()
+	}
+	u.User = url.UserPassword(user, password)
+	return u.String(), nil
+}
+
+// FromEnv builds a managed-mode configuration from environment variables. It
+// is what the Compose bundle runs: one file for the Partner to download and
+// nothing in it to edit.
+func FromEnv() (*Config, error) {
+	env := func(key string) string { return strings.TrimSpace(os.Getenv(key)) }
+	cfg := Config{
+		Agent:     AgentConfig{ListenAddr: env("OOLIX_LISTEN_ADDR")},
+		Oolix:     OolixConfig{APIBaseURL: strings.TrimRight(env("OOLIX_API_BASE_URL"), "/")},
+		Connector: ConnectorConfig{Type: ConnectorManaged},
+		State:     StateConfig{Mode: env("OOLIX_STATE_MODE"), RedisURL: env("OOLIX_REDIS_URL")},
+		Logging:   LoggingConfig{Level: env("OOLIX_LOG_LEVEL"), Format: env("OOLIX_LOG_FORMAT")},
+		Managed: ManagedConfig{
+			LocalStoreURL:          env("OOLIX_LOCAL_STORE_URL"),
+			LocalStorePasswordFile: env("OOLIX_LOCAL_STORE_PASSWORD_FILE"),
+			SetupListenAddr:        env("OOLIX_SETUP_LISTEN_ADDR"),
+			StateDir:               env("OOLIX_STATE_DIR"),
+			ImportFolder:           env("OOLIX_IMPORT_FOLDER"),
+		},
+	}
+	cfg.applyDefaults()
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
 }
 
 type AgentConfig struct {
@@ -373,9 +455,23 @@ func (c *Config) applyDefaults() {
 	if len(c.Logging.RedactFields) == 0 {
 		c.Logging.RedactFields = []string{"partner_user_id", "email", "phone", "mobile_id"}
 	}
+	if c.IsManaged() {
+		if c.Managed.SetupListenAddr == "" {
+			c.Managed.SetupListenAddr = "0.0.0.0:8083"
+		}
+		if c.Managed.StateDir == "" {
+			c.Managed.StateDir = "/var/lib/oolix-agent"
+		}
+		if c.Managed.ImportFolder == "" {
+			c.Managed.ImportFolder = "/data/import"
+		}
+	}
 }
 
 func (c *Config) validate() error {
+	if c.IsManaged() {
+		return c.validateManaged()
+	}
 	var problems []string
 
 	// A half-written audience block is the failure that hides. Naming the table
@@ -465,6 +561,55 @@ func (c *Config) validate() error {
 		}
 	}
 
+	if len(problems) > 0 {
+		return errors.New("invalid agent configuration:\n  - " + strings.Join(problems, "\n  - "))
+	}
+	return nil
+}
+
+// validateManaged checks a managed-mode configuration.
+//
+// The identity, the Partner's database and the attribute mapping all come
+// from the setup page in managed mode. A value for one of them here would be
+// silently ignored -- the failure this file's strict parsing exists to
+// prevent -- so it is refused and the reason named instead.
+func (c *Config) validateManaged() error {
+	var problems []string
+	if c.Oolix.APIBaseURL == "" {
+		problems = append(problems, "oolix.api_base_url (OOLIX_API_BASE_URL) is required")
+	}
+	if c.Managed.LocalStoreURL == "" {
+		problems = append(problems, "managed.local_store_url (OOLIX_LOCAL_STORE_URL) is required")
+	}
+	fromSetup := map[string]bool{
+		"agent.partner_id":           c.Agent.PartnerID != "",
+		"oolix.agent_id":             c.Oolix.AgentID != "",
+		"oolix.client_id":            c.Oolix.ClientID != "",
+		"oolix.private_key_path":     c.Oolix.PrivateKeyPath != "",
+		"oolix.manifest_issuer":      c.Oolix.ManifestIssuer != "",
+		"connector.dsn":              c.Connector.DSN != "" || c.Connector.DSNSecretRef != "",
+		"connector.membership_query": c.Connector.MembershipQuery != "",
+		"connector.consent_query":    c.Connector.ConsentQuery != "",
+		"connector.audience":         c.Connector.Audience.AttributeTable != "" || len(c.Connector.Audience.Mapping) > 0,
+	}
+	for _, key := range []string{"agent.partner_id", "oolix.agent_id", "oolix.client_id",
+		"oolix.private_key_path", "oolix.manifest_issuer", "connector.dsn",
+		"connector.membership_query", "connector.consent_query", "connector.audience"} {
+		if fromSetup[key] {
+			problems = append(problems, key+" is not used in managed mode: the setup page sets it up")
+		}
+	}
+	if c.Channels.Meta.Enabled || c.Channels.Google.Enabled {
+		problems = append(problems,
+			"external channels (Meta, Google) are not available in managed mode yet; "+
+				"use connector.type postgres_view for them")
+	}
+	if c.State.Mode == "redis" && c.State.RedisURL == "" {
+		problems = append(problems, "state.redis_url is required when state.mode is redis (spec §76.1)")
+	}
+	if c.State.Mode != "embedded" && c.State.Mode != "redis" {
+		problems = append(problems, `state.mode must be "embedded" or "redis"`)
+	}
 	if len(problems) > 0 {
 		return errors.New("invalid agent configuration:\n  - " + strings.Join(problems, "\n  - "))
 	}

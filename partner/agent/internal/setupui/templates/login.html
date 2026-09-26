@@ -1,0 +1,13 @@
+{{define "content"}}
+<section class="card narrow">
+  <h1>Sign in</h1>
+  <p>The password was written to the Agent's log when it first started. On the server, run:</p>
+  <pre><code>docker compose logs agent | grep setup_password</code></pre>
+  <form method="post" action="/login" class="form">
+    <label for="password">Setup password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+    <button type="submit">Sign in</button>
+  </form>
+  <p class="muted">Lost it? Restart the Agent with <code>OOLIX_SETUP_PASSWORD</code> set to a password of your choice.</p>
+</section>
+{{end}}

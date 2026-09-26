@@ -569,6 +569,7 @@ model Organization {
   partnerCapabilities PartnerCapability[]
   partnerMatches      PartnerMatchSnapshot[]
   reachEstimates      ReachEstimate[]
+  dataQuality         PartnerDataQuality?
 
   @@index([type, verificationStatus])
   @@index([domain])
@@ -1524,6 +1525,27 @@ model PartnerCapability {
   @@unique([partnerOrgId, capabilityVersion])
   @@index([partnerOrgId, status])
   @@map("partner_capabilities")
+}
+
+/// How complete a managed Agent's copy is (Partner Connect), from its last
+/// full sync: per published attribute, the share of customers with a usable
+/// value. Percentages and a size band only -- never a customer, a value, or an
+/// exact count. One row per Partner, replaced by each report; shown only to
+/// that Partner.
+model PartnerDataQuality {
+  partnerOrgId    String   @id @map("partner_org_id") @db.Uuid
+  agentId         String   @map("agent_id") @db.Uuid
+  syncMode        String   @map("sync_mode")
+  syncedAt        DateTime @map("synced_at") @db.Timestamptz(6)
+  /// UNDER_10K ... OVER_1M, the same bands as reach estimates.
+  customersBucket String   @map("customers_bucket")
+  /// [{ attribute_key, coverage_pct, unreadable_pct }]
+  attributesJson  Json     @map("attributes_json")
+  reportedAt      DateTime @default(now()) @map("reported_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [partnerOrgId], references: [id], onDelete: Cascade)
+
+  @@map("partner_data_quality")
 }
 
 /// v6 §3: a reusable Buyer-defined audience intent.

@@ -46,7 +46,14 @@ node scripts/verify-pack.mjs
 
 ## Reading order
 
-**If you are integrating**, start with
+**If you are integrating**, the quickest path is Partner Connect:
+**[`docker-compose.partner.yml`](docker-compose.partner.yml)** runs the Agent
+next to its own local store, and a setup page on your server does the rest —
+see _The quick way_ in `docs/DEPLOY-PARTNER-AGENT.md`. The Oolix API serves
+this same file with your deployment's address filled in, and a test keeps the
+two identical.
+
+To build the attribute view yourself instead, start with
 **[`INTEGRATION-GUIDE.md`](INTEGRATION-GUIDE.md)**. It goes from "we have agreed
 to do this" to "an ad is serving", and the tables it asks you to build are in
 **[`partner-schema.sql`](partner-schema.sql)**. The rest of this pack is

@@ -156,6 +156,19 @@ kbd {
   word-break: break-word;
 }
 
+/* Commands a reader copies into a terminal, one per line. */
+pre.code-block {
+  font-family: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, monospace;
+  font-size: 0.86em;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  margin: 0.5rem 0;
+  overflow-x: auto;
+  white-space: pre;
+}
+
 /* --- shell ---------------------------------------------------------------- */
 
 .shell {

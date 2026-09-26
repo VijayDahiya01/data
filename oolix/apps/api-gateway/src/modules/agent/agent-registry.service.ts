@@ -28,6 +28,7 @@ import { AuditService } from '../../common/audit/audit.service.js';
 import { AgentKeyService } from '../../keys/agent-key.service.js';
 import { CONFIG, type OolixConfig } from '../../config/configuration.js';
 import { toBytes } from '../../common/bytes.js';
+import { renderPartnerCompose } from './partner-compose.js';
 
 export const RegisterAgentSchema = z.object({
   bootstrap_token: z.string().min(20),
@@ -74,6 +75,16 @@ export class AgentRegistryService {
     @Inject(AgentKeyService) private readonly keys: AgentKeyService,
     @Inject(CONFIG) private readonly config: OolixConfig,
   ) {}
+
+  /**
+   * The Partner Connect bundle, with this deployment's API address and Agent
+   * image filled in. It holds no secret: the Agent registers from its setup
+   * page with a one-time code, and the local store's password is generated
+   * on the Partner's server.
+   */
+  composeBundle(): string {
+    return renderPartnerCompose(this.config.API_PUBLIC_URL, this.config.PARTNER_AGENT_IMAGE);
+  }
 
   // -------------------------------------------------------------------------
   // §92.1 bootstrap token
@@ -191,6 +202,14 @@ export class AgentRegistryService {
       token_endpoint: `${this.config.API_PUBLIC_URL}/agent/v1/token`,
       issuer: this.config.AGENT_TOKEN_ISSUER,
       audience: this.config.AGENT_TOKEN_AUDIENCE,
+      /**
+       * The Partner this Agent now acts for, and the values its manifests are
+       * pinned to (§75). A managed Agent registers from its setup page and
+       * configures itself from these instead of a hand-edited file.
+       */
+      partner_org_id: result.partnerOrgId,
+      manifest_issuer: this.config.MANIFEST_ISSUER,
+      manifest_audience: this.config.MANIFEST_AUDIENCE,
       /** §75: where to fetch manifest verification keys. */
       manifest_jwks_uri: `${this.config.API_PUBLIC_URL}/.well-known/oolix-manifest-jwks.json`,
       control_sync_interval_seconds: this.config.CONTROL_SYNC_INTERVAL_SEC,

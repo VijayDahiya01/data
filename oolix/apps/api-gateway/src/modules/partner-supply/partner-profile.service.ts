@@ -143,7 +143,7 @@ export class PartnerProfileService {
    * never successfully materialized.
    */
   async evaluateReadiness(partnerOrgId: string): Promise<ReadinessReport> {
-    const [org, profile, policyCount, agent, segments, placements] = await Promise.all([
+    const [org, profile, policyCount, agent, segments, placements, capability] = await Promise.all([
       this.prisma.organization.findUnique({ where: { id: partnerOrgId } }),
       this.prisma.partnerProfile.findUnique({ where: { orgId: partnerOrgId } }),
       this.prisma.partnerPolicy.count({ where: { partnerOrgId } }),
@@ -159,11 +159,24 @@ export class PartnerProfileService {
         where: { partnerOrgId },
         select: { id: true, status: true },
       }),
+      this.prisma.partnerCapability.findFirst({
+        where: { partnerOrgId, status: 'ACTIVE' },
+        orderBy: { capabilityVersion: 'desc' },
+        select: { capabilityVersion: true, attributesJson: true },
+      }),
     ]);
 
     if (!org) throw new OolixError('PART_001', 'Organization not found.');
 
     const publishedSegments = segments.filter((s) => s.status === 'PUBLISHED' && s.freshnessAt);
+    // v6 §5: published capabilities make a Partner targetable just as a
+    // prebuilt segment does -- Buyers match on them and the Agent answers.
+    // Attributes withdrawn as UNAVAILABLE do not count.
+    const availableAttributes = capability
+      ? (capability.attributesJson as { status?: string }[]).filter(
+          (a) => (a.status ?? 'AVAILABLE') === 'AVAILABLE',
+        ).length
+      : 0;
     const activePlacements = placements.filter((p) => p.status === 'ACTIVE');
 
     const checks = [
@@ -200,9 +213,11 @@ export class PartnerProfileService {
           : 'agent has never sent a heartbeat',
       },
       {
-        step: 'segment_published',
-        complete: publishedSegments.length > 0,
-        detail: `${publishedSegments.length} published segment(s) with a freshness timestamp`,
+        step: 'audience_published',
+        complete: publishedSegments.length > 0 || availableAttributes > 0,
+        detail:
+          `${availableAttributes} attribute(s) published for audience targeting; ` +
+          `${publishedSegments.length} published segment(s) with a freshness timestamp`,
       },
       {
         step: 'placement_active',

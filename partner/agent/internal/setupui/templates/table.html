@@ -1,0 +1,28 @@
+{{define "content"}}
+<h1>Choose the customer table</h1>
+<p class="lead">Pick the table with one row per customer. The Agent reads a sample of up to 1,000 rows to suggest
+  matches; nothing is copied yet.</p>
+{{with .Data.Tables}}
+<form method="post" action="/table" class="card form">
+  <input type="hidden" name="csrf" value="{{$.CSRF}}">
+  <table class="list">
+    <thead><tr><th></th><th>Table</th><th class="num">Rows (about)</th></tr></thead>
+    <tbody>
+      {{range .}}
+      <tr>
+        <td><input type="radio" name="table" id="t-{{.Name}}" value="{{.Name}}"{{if .Selected}} checked{{end}} required></td>
+        <td><label for="t-{{.Name}}"><code>{{.Name}}</code></label>{{if .Likely}} <span class="tag">looks like customers</span>{{end}}</td>
+        <td class="num">{{if ge .Rows 0}}{{num .Rows}}{{else}}&ndash;{{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  <button type="submit">Use this table</button>
+</form>
+{{else}}
+<section class="card">
+  <p>No tables were found. Check that the login can see the customer table, or <a href="/source">change the
+    connection</a>.</p>
+</section>
+{{end}}
+{{end}}

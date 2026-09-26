@@ -156,7 +156,8 @@ Oolix performs all of the following, in order, on every request:
 4. Load the Agent registration; require `status = ACTIVE` and an active
    `partner_org_id`.
 5. Verify the scope the endpoint requires — `config:read`, `reporting:write`,
-   `channel_status:write`.
+   `channel_status:write`, `heartbeat:write`, or `capabilities:write` (a
+   managed Agent publishing what its local copy can answer).
 6. Reject revoked keys and Agent versions per security policy.
 7. Attach `agent_id` and `partner_org_id` to the request context.
 

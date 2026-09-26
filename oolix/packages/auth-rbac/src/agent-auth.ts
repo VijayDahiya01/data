@@ -219,5 +219,11 @@ export async function verifyClientAssertion(
 
 /** Scopes granted to a freshly registered Agent. */
 export function defaultAgentScopes(): AgentScope[] {
-  return ['config:read', 'reporting:write', 'channel_status:write', 'heartbeat:write'];
+  return [
+    'config:read',
+    'reporting:write',
+    'channel_status:write',
+    'heartbeat:write',
+    'capabilities:write',
+  ];
 }

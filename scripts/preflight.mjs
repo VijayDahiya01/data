@@ -280,6 +280,20 @@ if (env) {
 console.log('\n4. Rollback');
 
 if (env) {
+  // What a Partner's `docker compose up` pulls for Partner Connect. Unset, the
+  // bundle names the local development image, which no Partner can pull.
+  const agentImage = env.PARTNER_AGENT_IMAGE;
+  if (!agentImage || agentImage.endsWith(':dev') || agentImage.endsWith(':latest')) {
+    warn(
+      'PARTNER_AGENT_IMAGE names a released Agent image',
+      'Partner Connect bundles would run `' +
+        (agentImage || 'oolix/partner-agent:dev') +
+        '`. Set ghcr.io/<owner>/<repo>/partner-agent:<sha>.',
+    );
+  } else {
+    pass('PARTNER_AGENT_IMAGE names a released Agent image', agentImage);
+  }
+
   const tag = env.IMAGE_TAG;
   if (!tag) {
     warn('IMAGE_TAG is pinned', 'unset means the compose default, probably `dev`');

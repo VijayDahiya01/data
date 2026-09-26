@@ -1,0 +1,96 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1>Connect your database</h1>
+<p class="lead">The Agent only reads. It never changes your data and never creates anything in your database.
+  Use a login that can only read the customer table.</p>
+
+<form method="post" action="/source" class="form card" id="source-form">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+
+  <label for="kind">What holds your customer list?</label>
+  <select id="kind" name="kind">
+    {{range $d.Kinds}}<option value="{{.Value}}"{{if eq .Value (print $d.Config.Kind)}} selected{{end}}>{{.Label}}</option>{{end}}
+  </select>
+
+  <fieldset data-kinds="postgres mysql sqlserver mongodb">
+    <legend>Server</legend>
+    <div class="row">
+      <div class="grow">
+        <label for="host">Server address</label>
+        <input id="host" name="host" value="{{$d.Config.Host}}" placeholder="db.internal or 10.0.0.5" spellcheck="false">
+      </div>
+      <div>
+        <label for="port">Port</label>
+        <input id="port" name="port" value="{{$d.Port}}" inputmode="numeric" size="6" placeholder="default">
+      </div>
+    </div>
+    <label for="database">Database name</label>
+    <input id="database" name="database" value="{{$d.Config.Database}}" spellcheck="false">
+    <div class="row">
+      <div class="grow">
+        <label for="user">Username</label>
+        <input id="user" name="user" value="{{$d.Config.User}}" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="grow">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="new-password"
+          placeholder="{{if $d.HasPassword}}saved -- leave blank to keep it{{end}}">
+      </div>
+    </div>
+    <label for="tls">Encryption</label>
+    <select id="tls" name="tls">
+      {{range $d.TLSModes}}<option value="{{.Value}}"{{if eq .Value $d.Config.TLS}} selected{{end}}>{{.Label}}</option>{{end}}
+    </select>
+    <details>
+      <summary>Use a connection string instead</summary>
+      <label for="uri">Connection string</label>
+      <input id="uri" name="uri" autocomplete="off" spellcheck="false"
+        placeholder="postgres://reader:password@db.internal:5432/shop">
+      {{if $d.HasURI}}<label class="check"><input type="checkbox" name="keep_uri" checked> Keep the saved connection string</label>{{end}}
+      <p class="muted">It is stored encrypted, like the password.</p>
+    </details>
+  </fieldset>
+
+  <fieldset data-kinds="file">
+    <legend>Files</legend>
+    <p>Put CSV or Excel exports of your customer list in the <code>import</code> folder next to
+      <code>docker-compose.yml</code> (inside the Agent it is <code>{{$d.ImportFolder}}</code>).
+      Replace the file with a fresh export, under the same name, whenever you like: the Agent reads it again
+      every night.</p>
+    {{if $d.Files}}
+    <p>Found: {{range $i, $f := $d.Files}}{{if $i}}, {{end}}<code>{{$f}}</code>{{end}}</p>
+    {{else}}
+    <p class="muted">No files there yet.</p>
+    {{end}}
+  </fieldset>
+
+  <label for="location">Times in your data are written in</label>
+  <select id="location" name="location">
+    {{range $d.Locations}}<option value="{{.Value}}"{{if eq .Value $d.Config.Location}} selected{{end}}>{{.Label}}</option>{{end}}
+  </select>
+
+  <button type="submit">Test and save</button>
+</form>
+
+<details class="card help">
+  <summary>How to create a read-only login</summary>
+  <p>Replace <code>shop</code>, <code>customers</code> and the password with your own.</p>
+  <h3>PostgreSQL</h3>
+  <pre><code>CREATE ROLE oolix_reader LOGIN PASSWORD 'choose-a-strong-password';
+GRANT CONNECT ON DATABASE shop TO oolix_reader;
+GRANT USAGE ON SCHEMA public TO oolix_reader;
+GRANT SELECT ON public.customers TO oolix_reader;</code></pre>
+  <h3>MySQL / MariaDB</h3>
+  <pre><code>CREATE USER 'oolix_reader'@'%' IDENTIFIED BY 'choose-a-strong-password';
+GRANT SELECT ON shop.customers TO 'oolix_reader'@'%';</code></pre>
+  <h3>Microsoft SQL Server</h3>
+  <pre><code>CREATE LOGIN oolix_reader WITH PASSWORD = 'choose-a-strong-password';
+USE shop;
+CREATE USER oolix_reader FOR LOGIN oolix_reader;
+GRANT SELECT ON dbo.customers TO oolix_reader;</code></pre>
+  <h3>MongoDB</h3>
+  <pre><code>use admin
+db.createUser({ user: "oolix_reader", pwd: "choose-a-strong-password",
+                roles: [{ role: "read", db: "shop" }] })</code></pre>
+</details>
+{{end}}

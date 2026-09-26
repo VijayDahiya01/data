@@ -39,6 +39,12 @@ type RegistrationResult struct {
 	TokenEndpoint string `json:"token_endpoint"`
 	Issuer        string `json:"issuer"`
 	Audience      string `json:"audience"`
+	// The Partner organization the Agent now acts for, and the pinned values
+	// its manifests are checked against. Older control planes omit them; the
+	// setup page needs them to finish without hand-editing a config file.
+	PartnerOrgID     string `json:"partner_org_id,omitempty"`
+	ManifestIssuer   string `json:"manifest_issuer,omitempty"`
+	ManifestAudience string `json:"manifest_audience,omitempty"`
 }
 
 type registerRequest struct {

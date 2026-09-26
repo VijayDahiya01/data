@@ -1,0 +1,137 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1>Orders and bookings</h1>
+<p class="lead">Optional. If you keep a table with one row per order, or one per booking, the Agent reads it
+  every night and works out, per customer, what advertisers most often ask about. You do not need to prepare
+  anything: no totals, no summary table. Skip this step if you do not have one.</p>
+
+<form method="post" action="/activity" class="form" id="activity-form">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+
+  {{range $c := $d.Cards}}
+  {{$k := $c.Kind}}
+  <section class="card">
+    <h2>{{$c.Title}}</h2>
+    <p class="muted">{{$c.Lead}}</p>
+    {{if $c.Problem}}<p class="error">{{$c.Problem}}</p>{{end}}
+
+    <label for="{{$k}}_table">Table</label>
+    <select id="{{$k}}_table" name="{{$k}}_table" data-recheck>
+      <option value="">None</option>
+      {{range $c.Tables}}<option value="{{.Name}}"{{if .Selected}} selected{{end}}>{{.Name}}{{if .Likely}} (looks like {{$k}}){{end}}</option>{{end}}
+    </select>
+
+    {{if $c.Columns}}
+    <div class="row">
+      <div class="grow">
+        <label for="{{$k}}_customer">Customer ID</label>
+        <select id="{{$k}}_customer" name="{{$k}}_customer" data-recheck>
+          <option value="">Choose a column</option>
+          {{range $c.Columns}}<option value="{{.Name}}"{{if eq .Name $c.Customer}} selected{{end}}>{{.Name}}</option>{{end}}
+        </select>
+        <p class="muted">The same ID as in your customer table.</p>
+      </div>
+      <div class="grow">
+        <label for="{{$k}}_date">Date of the {{if eq $k "orders"}}order{{else}}booking{{end}}</label>
+        <select id="{{$k}}_date" name="{{$k}}_date" data-recheck>
+          <option value="">Choose a column</option>
+          {{range $c.Columns}}<option value="{{.Name}}"{{if eq .Name $c.Date}} selected{{end}}>{{.Name}}</option>{{end}}
+        </select>
+      </div>
+    </div>
+
+    {{if $c.Date}}
+    <div class="score">
+      <meter min="0" max="100" low="50" high="90" optimum="100" value="{{$c.DatePercent}}"></meter>
+      <span>{{$c.DatePercent}}% of {{num $c.DateMeasure.Sampled}} sampled dates can be read;
+        {{$c.InWindow}}% of those are from the last two years, which is what is read</span>
+    </div>
+    {{if $c.AskOrder}}
+    <div class="question{{if $c.OrderNote}} ask{{end}}">
+      <label for="{{$k}}_order">In this column, 03/04/2026 means</label>
+      <select id="{{$k}}_order" name="{{$k}}_order" data-recheck>
+        <option value="day"{{if eq $c.Order "day"}} selected{{end}}>3 April 2026 (day first)</option>
+        <option value="month"{{if eq $c.Order "month"}} selected{{end}}>March 4, 2026 (month first)</option>
+      </select>
+      {{if $c.OrderNote}}<p class="muted">{{$c.OrderNote}}</p>{{end}}
+    </div>
+    {{end}}
+    {{with $c.DateMeasure.Examples}}
+    <table class="examples">
+      <thead><tr><th>In your table</th><th>Read as</th></tr></thead>
+      <tbody>{{range .}}<tr><td><code>{{.Raw}}</code></td><td>{{.Clean}}</td></tr>{{end}}</tbody>
+    </table>
+    {{end}}
+    {{end}}
+
+    {{range $f := $c.Fields}}
+    <div class="attr{{if $f.Column}} mapped{{end}}">
+      <div class="attr-head">
+        <label for="{{$k}}_{{$f.Key}}"><strong>{{$f.Label}}</strong></label>
+        <span class="muted">{{$f.Expects}}</span>
+      </div>
+      <select id="{{$k}}_{{$f.Key}}" name="{{$k}}_{{$f.Key}}" data-recheck>
+        <option value="">Not in this table</option>
+        {{range $c.Columns}}<option value="{{.Name}}"{{if eq .Name $f.Column}} selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+      {{if $f.Column}}
+      <div class="score">
+        <meter min="0" max="100" low="50" high="90" optimum="100" value="{{$f.Percent}}"></meter>
+        <span>{{$f.Percent}}% of {{num $f.Measure.Sampled}} sampled values can be used</span>
+      </div>
+      {{if $f.Answers}}
+      <div class="question ask">
+        <p>These values do not match anything known. What does each one mean?</p>
+        <table class="answers">
+          <tbody>
+            {{range $i, $a := $f.Answers}}
+            <tr>
+              <td><code>{{$a.Raw}}</code>{{if $a.Count}} <span class="muted">&times; {{$a.Count}}</span>{{end}}
+                <input type="hidden" name="{{$k}}_raw_{{$f.Key}}_{{$i}}" value="{{$a.Raw}}"></td>
+              <td>
+                <select name="{{$k}}_code_{{$f.Key}}_{{$i}}" aria-label="Meaning of {{$a.Raw}}">
+                  <option value="">Decide later (left empty)</option>
+                  <option value="-"{{if eq $a.Code "-"}} selected{{end}}>Ignore this value</option>
+                  {{range $f.Codes}}<option value="{{.}}"{{if eq . $a.Code}} selected{{end}}>{{.}}</option>{{end}}
+                </select>
+              </td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{end}}
+      {{end}}
+    </div>
+    {{end}}
+
+    {{if eq $k "orders"}}
+    <label class="check"><input type="checkbox" name="orders_all_online"{{if $c.AllOnline}} checked{{end}} data-recheck>
+      Every order in this table was placed online</label>
+    {{end}}
+
+    {{with $c.Offers}}
+    <h3>Worked out from this table</h3>
+    <ul class="plain">
+      {{range .}}
+      <li>
+        <input type="hidden" name="{{$k}}_shown_{{.Key}}" value="1">
+        <label class="check"><input type="checkbox" name="{{$k}}_offer_{{.Key}}"{{if .Offered}} checked{{end}}>
+          <span><strong>{{.Label}}</strong> <span class="muted">&mdash; {{.How}}</span></span></label>
+      </li>
+      {{end}}
+    </ul>
+    <p class="muted">Ticked attributes are offered to advertisers. The orders themselves are never kept: only
+      these answers, per customer.</p>
+    {{end}}
+    {{end}}
+  </section>
+  {{end}}
+
+  <div class="actions">
+    <a class="button secondary" href="/consent">Skip</a>
+    <button type="submit" name="action" value="check" class="secondary">Check again</button>
+    <button type="submit" name="action" value="next">Save and continue</button>
+  </div>
+</form>
+{{end}}

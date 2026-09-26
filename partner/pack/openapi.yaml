@@ -1161,6 +1161,36 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '429': { $ref: '#/components/responses/RateLimited' }
 
+  /v1/partner/capabilities/quality:
+    get:
+      tags: [Partner supply]
+      operationId: getPartnerDataQuality
+      summary: How complete this Partner's copy is
+      description: |
+        What this Partner's managed Agent last reported after a full sync:
+        per published attribute, the share of customers with a usable value.
+        `reported_at` is null until a managed Agent has reported.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      responses:
+        '200':
+          description: The latest report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reported_at: { type: [string, 'null'], format: date-time }
+                  synced_at: { type: [string, 'null'], format: date-time }
+                  sync_mode: { type: string, enum: [FULL, INCREMENTAL] }
+                  customers_bucket: { type: string }
+                  attributes:
+                    type: array
+                    items: { $ref: '#/components/schemas/AttributeQuality' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
   /v1/campaigns:
     get:
       operationId: listCampaigns
@@ -2119,8 +2149,35 @@ paths:
       responses:
         '201':
           description: Agent identity and endpoints
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgentRegistration' }
         '401': { description: 'Bootstrap token invalid, used or expired (§92.1)' }
 
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /agent/v1/compose:
+    get:
+      operationId: agentComposeBundle
+      tags: [Agent]
+      summary: The Partner Connect bundle (docker-compose.yml)
+      description: |
+        The Compose file that runs the Agent in managed mode next to its local
+        store -- `partner/pack/docker-compose.partner.yml` with this
+        deployment's API address and Agent image filled in. Public and free of
+        secrets, so a Partner can fetch it straight onto the server that will
+        run the Agent:
+
+            curl -fsSLo docker-compose.yml <API_PUBLIC_URL>/agent/v1/compose
+
+        The Agent registers from its own setup page with a one-time code, and
+        the local store's password is generated on the Partner's server.
+      security: []
+      responses:
+        '200':
+          description: The Compose file
+          content:
+            text/yaml:
+              schema: { type: string }
         '429': { $ref: '#/components/responses/RateLimited' }
   /agent/v1/token:
     post:
@@ -2397,6 +2454,72 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /agent/v1/audience/capabilities:
+    post:
+      operationId: agentPublishCapabilities
+      tags: [Agent, Audience]
+      summary: Publish what this Agent can answer
+      description: |
+        v6 §5.1, published by a managed Agent itself (Partner Connect). The
+        Agent keeps its own cleaned copy of the Partner's customer table, so
+        after each sync that changes what it can answer it publishes the list
+        here instead of someone repeating it in the portal.
+
+        The body is the same shape as `PUT /v1/partner/capabilities`, with the
+        same rules: attribute keys and operators from the taxonomy, and no
+        field that could carry a local column name, a value or a customer
+        (§17). Each publication is a new capability version. The Partner is the
+        Agent's own registered organization (§92.4), which must be a verified
+        business (§66.3). Requires the `capabilities:write` scope.
+
+        Withdrawing is publishing the same attributes as `UNAVAILABLE` -- what
+        an Agent does when the Partner deletes its local copy.
+      security:
+        - agentBearer: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PublishCapabilities' }
+      responses:
+        '201':
+          description: Capabilities published at a new version
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: '`PERM_001` -- the Partner is not a verified business, or the token lacks `capabilities:write`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /agent/v1/audience/quality:
+    post:
+      operationId: agentReportDataQuality
+      tags: [Agent, Audience]
+      summary: Report how complete the local copy is
+      description: |
+        Partner Connect. After each full sync a managed Agent reports, per
+        published attribute, the share of the Partner's customers with a usable
+        value and the share of values it could not read, with the number of
+        customers as a reach size band. Percentages and bands only -- there is
+        no field for a count, a customer or a value. The Partner sees it in
+        their own portal; no Buyer does. Each report replaces the last.
+      security:
+        - agentBearer: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DataQualityReport' }
+      responses:
+        '201': { description: Report recorded }
+        '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /agent/v1/attribution/tokens:
@@ -3351,6 +3474,60 @@ components:
             y: { type: string }
         agent_version: { type: string, maxLength: 32 }
         capabilities: { type: array, items: { $ref: '#/components/schemas/Channel' }, minItems: 1 }
+
+    DataQualityReport:
+      type: object
+      required: [synced_at, sync_mode, customers_bucket, attributes]
+      description: Percentages and a size band only. No count, customer or value.
+      properties:
+        synced_at: { type: string, format: date-time }
+        sync_mode: { type: string, enum: [FULL, INCREMENTAL] }
+        customers_bucket:
+          type: string
+          enum: [UNDER_10K, 10K_50K, 50K_100K, 100K_250K, 250K_500K, 500K_1M, OVER_1M]
+        attributes:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/AttributeQuality' }
+
+    AttributeQuality:
+      type: object
+      required: [attribute_key, coverage_pct, unreadable_pct]
+      properties:
+        attribute_key: { type: string }
+        coverage_pct:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Share of the Partner's customers with a usable value.
+        unreadable_pct:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Share of the values present that could not be read.
+
+    AgentRegistration:
+      type: object
+      required: [agent_id, client_id, token_endpoint, issuer, audience, partner_org_id]
+      description: |
+        What an Agent needs to run, returned once at registration. A managed
+        Agent (Partner Connect) configures itself from this reply; a classic
+        Agent's operator copies the identity into its configuration file.
+      properties:
+        agent_id: { type: string, format: uuid }
+        client_id: { type: string }
+        token_endpoint: { type: string, format: uri }
+        issuer: { type: string, description: Issuer of the Agent's access tokens }
+        audience: { type: string, description: Audience of the Agent's access tokens }
+        partner_org_id:
+          type: string
+          format: uuid
+          description: The Partner this Agent acts for. Manifests are checked against it.
+        manifest_issuer: { type: string, description: 'Pinned manifest issuer (§75)' }
+        manifest_audience: { type: string, description: 'Pinned manifest audience (§75)' }
+        manifest_jwks_uri: { type: string, format: uri }
+        control_sync_interval_seconds: { type: integer }
+        stale_grace_seconds: { type: integer }
 
     AgentConfigBundle:
       type: object

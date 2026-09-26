@@ -44,6 +44,7 @@
     "verify:pack": "node scripts/verify-pack.mjs",
     "verify:v6": "node scripts/verify-v6.mjs",
     "verify:v6:serving": "node scripts/verify-v6-serving.mjs",
+    "verify:partner-connect": "node scripts/verify-partner-connect.mjs",
     "verify:phase1": "node scripts/verify-phase1.mjs",
     "verify:phase2": "node scripts/verify-phase2.mjs",
     "verify:phase3": "node scripts/verify-phase3.mjs",

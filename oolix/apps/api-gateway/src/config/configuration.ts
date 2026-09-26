@@ -27,6 +27,17 @@ export const ConfigSchema = z
 
     API_PORT: int(4000),
     API_PUBLIC_URL: z.string().url().default('http://localhost:4000'),
+    // The Agent image the Partner Connect bundle runs. Pin a released tag or
+    // digest (CI builds ghcr.io/<owner>/<repo>/partner-agent:<sha>); the default
+    // is the image a local build tags. Limited to the characters an image
+    // reference uses, because it is written into a YAML file Partners run.
+    PARTNER_AGENT_IMAGE: z
+      .string()
+      .regex(
+        /^[a-z0-9][a-z0-9._/:@-]*$/i,
+        'an image reference such as ghcr.io/org/partner-agent:1.2.3',
+      )
+      .default('oolix/partner-agent:dev'),
     WEB_PUBLIC_URL: z.string().url().default('http://localhost:3000'),
 
     DATABASE_URL: z.string().min(1),

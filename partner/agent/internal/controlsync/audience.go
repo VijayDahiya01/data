@@ -433,3 +433,71 @@ func (s *Syncer) ReportSync(
 	}
 	return nil
 }
+
+// PublishCapabilities tells Oolix which standard attributes this Agent can
+// answer, and with which operators. A managed Agent calls it after a sync;
+// the body names attribute keys only, never a local column or a value.
+func (s *Syncer) PublishCapabilities(ctx context.Context, capabilities any) error {
+	token, err := s.tokens.Token(ctx)
+	if err != nil {
+		return err
+	}
+	body, err := json.Marshal(capabilities)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		s.opts.APIBaseURL+"/agent/v1/audience/capabilities", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-Agent-Id", s.opts.AgentID)
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := s.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode >= 300 {
+		responseBody, _ := io.ReadAll(io.LimitReader(res.Body, 2048))
+		return fmt.Errorf("publishing capabilities returned %d: %s", res.StatusCode, string(responseBody))
+	}
+	return nil
+}
+
+// ReportQuality tells Oolix how complete a managed Agent's copy is after a
+// full sync: per published attribute, the share of customers with a value.
+// Percentages and a size band only, for the Partner's own portal.
+func (s *Syncer) ReportQuality(ctx context.Context, report any) error {
+	token, err := s.tokens.Token(ctx)
+	if err != nil {
+		return err
+	}
+	body, err := json.Marshal(report)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		s.opts.APIBaseURL+"/agent/v1/audience/quality", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-Agent-Id", s.opts.AgentID)
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := s.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode >= 300 {
+		responseBody, _ := io.ReadAll(io.LimitReader(res.Body, 2048))
+		return fmt.Errorf("reporting data quality returned %d: %s", res.StatusCode, string(responseBody))
+	}
+	return nil
+}

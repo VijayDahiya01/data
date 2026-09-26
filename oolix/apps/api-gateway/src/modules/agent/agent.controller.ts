@@ -10,7 +10,8 @@
  * access token yet -- they authenticate with the bootstrap token and the
  * client assertion respectively, both verified inside the service.
  */
-import { Body, Controller, Get, Headers, Inject, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Inject, Param, Post, Res } from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
 import { OolixError } from '@oolix/contracts';
 import type { AgentPrincipal, UserPrincipal } from '@oolix/auth-rbac';
 import { Public, RequireAgentScope, RequirePermissions } from '../../common/auth/auth.guard.js';
@@ -103,6 +104,25 @@ export class AgentControlController {
   @Post('token')
   async token(@Body(new ZodValidationPipe(AgentTokenSchema)) body: AgentTokenInput) {
     return this.agents.issueToken(body);
+  }
+
+  /**
+   * The Partner Connect bundle (a docker-compose.yml). Public and free of
+   * secrets, so a Partner can fetch it straight onto the server that will run
+   * the Agent:
+   *
+   *   curl -fsSLo docker-compose.yml <API_PUBLIC_URL>/agent/v1/compose
+   *
+   * Written to the reply rather than returned: the response envelope would
+   * turn the YAML into JSON.
+   */
+  @Public()
+  @Get('compose')
+  async compose(@Res() reply: FastifyReply): Promise<void> {
+    await reply
+      .header('Content-Type', 'text/yaml; charset=utf-8')
+      .header('Content-Disposition', 'attachment; filename="docker-compose.yml"')
+      .send(this.agents.composeBundle());
   }
 
   /** §52.4 heartbeat. Feeds the §78.2 staleness alerts. */

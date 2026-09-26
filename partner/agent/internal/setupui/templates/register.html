@@ -1,0 +1,26 @@
+{{define "content"}}
+<h1>Connect to Oolix</h1>
+{{with .Data.Identity}}
+<section class="card">
+  <p class="ok">This Agent is connected to Oolix.</p>
+  <dl class="facts">
+    <div><dt>Agent ID</dt><dd><code>{{.AgentID}}</code></dd></div>
+    <div><dt>Connected</dt><dd>{{when .RegisteredAt}}</dd></div>
+  </dl>
+  <p><a class="button" href="/source">Next: connect your database</a></p>
+</section>
+{{else}}
+<section class="card">
+  <p>In the Oolix portal, open <strong>Data Partner &rarr; Integrations &rarr; Connect your data</strong> and copy the
+    one-time code. It works once and expires after 15 minutes.</p>
+  <form method="post" action="/register" class="form">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label for="code">One-time code</label>
+    <input id="code" name="code" autocomplete="off" spellcheck="false" required autofocus>
+    <button type="submit">Connect</button>
+  </form>
+  <p class="muted">This creates a key pair on this server. Only the public half is sent to Oolix; the private key
+    never leaves this server.</p>
+</section>
+{{end}}
+{{end}}

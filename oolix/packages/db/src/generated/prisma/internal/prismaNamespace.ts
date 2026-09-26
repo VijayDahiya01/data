@@ -440,6 +440,7 @@ export const ModelName = {
   KillSwitch: 'KillSwitch',
   AttributeDefinition: 'AttributeDefinition',
   PartnerCapability: 'PartnerCapability',
+  PartnerDataQuality: 'PartnerDataQuality',
   AudienceGroup: 'AudienceGroup',
   AudienceGroupVersion: 'AudienceGroupVersion',
   PartnerMatchSnapshot: 'PartnerMatchSnapshot',
@@ -460,7 +461,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "authToken" | "authSession" | "organization" | "organizationMember" | "network" | "networkMembership" | "partnerProfile" | "partnerPolicy" | "buyerProfile" | "brand" | "billingProfile" | "segment" | "segmentOffer" | "placement" | "campaign" | "creative" | "creativeVersion" | "partnerRequest" | "channelRequest" | "approval" | "partnerCreativeDecision" | "activation" | "manifest" | "agent" | "agentBootstrapToken" | "channelConnection" | "externalResource" | "attributionToken" | "leadEvent" | "aggregateMetric" | "deliveryBatch" | "reconciliation" | "commercialTerms" | "financialEvent" | "invoice" | "payout" | "auditEvent" | "notification" | "idempotencyRecord" | "killSwitch" | "attributeDefinition" | "partnerCapability" | "audienceGroup" | "audienceGroupVersion" | "partnerMatchSnapshot" | "reachEstimate" | "campaignAudienceLink"
+    modelProps: "user" | "authToken" | "authSession" | "organization" | "organizationMember" | "network" | "networkMembership" | "partnerProfile" | "partnerPolicy" | "buyerProfile" | "brand" | "billingProfile" | "segment" | "segmentOffer" | "placement" | "campaign" | "creative" | "creativeVersion" | "partnerRequest" | "channelRequest" | "approval" | "partnerCreativeDecision" | "activation" | "manifest" | "agent" | "agentBootstrapToken" | "channelConnection" | "externalResource" | "attributionToken" | "leadEvent" | "aggregateMetric" | "deliveryBatch" | "reconciliation" | "commercialTerms" | "financialEvent" | "invoice" | "payout" | "auditEvent" | "notification" | "idempotencyRecord" | "killSwitch" | "attributeDefinition" | "partnerCapability" | "partnerDataQuality" | "audienceGroup" | "audienceGroupVersion" | "partnerMatchSnapshot" | "reachEstimate" | "campaignAudienceLink"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -3646,6 +3647,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    PartnerDataQuality: {
+      payload: Prisma.$PartnerDataQualityPayload<ExtArgs>
+      fields: Prisma.PartnerDataQualityFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.PartnerDataQualityFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PartnerDataQualityPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.PartnerDataQualityFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PartnerDataQualityPayload>
+        }
+        findFirst: {
+          args: Prisma.PartnerDataQualityFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PartnerDataQualityPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.PartnerDataQualityFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PartnerDataQualityPayload>
+        }
+        findMany: {
+          args: Prisma.PartnerDataQualityFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PartnerDataQualityPayload>[]
+        }
+        create: {
+          args: Prisma.PartnerDataQualityCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PartnerDataQualityPayload>
+        }
+        createMany: {
+          args: Prisma.PartnerDataQualityCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.PartnerDataQualityCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PartnerDataQualityPayload>[]
+        }
+        delete: {
+          args: Prisma.PartnerDataQualityDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PartnerDataQualityPayload>
+        }
+        update: {
+          args: Prisma.PartnerDataQualityUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PartnerDataQualityPayload>
+        }
+        deleteMany: {
+          args: Prisma.PartnerDataQualityDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.PartnerDataQualityUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.PartnerDataQualityUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PartnerDataQualityPayload>[]
+        }
+        upsert: {
+          args: Prisma.PartnerDataQualityUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PartnerDataQualityPayload>
+        }
+        aggregate: {
+          args: Prisma.PartnerDataQualityAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregatePartnerDataQuality>
+        }
+        groupBy: {
+          args: Prisma.PartnerDataQualityGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PartnerDataQualityGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.PartnerDataQualityCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PartnerDataQualityCountAggregateOutputType> | number
+        }
+      }
+    }
     AudienceGroup: {
       payload: Prisma.$AudienceGroupPayload<ExtArgs>
       fields: Prisma.AudienceGroupFieldRefs
@@ -4770,6 +4845,19 @@ export const PartnerCapabilityScalarFieldEnum = {
 export type PartnerCapabilityScalarFieldEnum = (typeof PartnerCapabilityScalarFieldEnum)[keyof typeof PartnerCapabilityScalarFieldEnum]
 
 
+export const PartnerDataQualityScalarFieldEnum = {
+  partnerOrgId: 'partnerOrgId',
+  agentId: 'agentId',
+  syncMode: 'syncMode',
+  syncedAt: 'syncedAt',
+  customersBucket: 'customersBucket',
+  attributesJson: 'attributesJson',
+  reportedAt: 'reportedAt'
+} as const
+
+export type PartnerDataQualityScalarFieldEnum = (typeof PartnerDataQualityScalarFieldEnum)[keyof typeof PartnerDataQualityScalarFieldEnum]
+
+
 export const AudienceGroupScalarFieldEnum = {
   id: 'id',
   buyerOrgId: 'buyerOrgId',
@@ -5858,6 +5946,7 @@ export type GlobalOmitConfig = {
   killSwitch?: Prisma.KillSwitchOmit
   attributeDefinition?: Prisma.AttributeDefinitionOmit
   partnerCapability?: Prisma.PartnerCapabilityOmit
+  partnerDataQuality?: Prisma.PartnerDataQualityOmit
   audienceGroup?: Prisma.AudienceGroupOmit
   audienceGroupVersion?: Prisma.AudienceGroupVersionOmit
   partnerMatchSnapshot?: Prisma.PartnerMatchSnapshotOmit

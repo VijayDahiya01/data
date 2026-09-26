@@ -39,6 +39,9 @@ ARG TARGETARCH=amd64
 # build reproducible, so a Partner's security team can rebuild this Dockerfile
 # and compare hashes rather than trusting the registry.
 ENV CGO_ENABLED=0
+# The state folder, made here because the runtime image has no shell to make
+# it with; see the runtime stage.
+RUN mkdir -p /out/state
 RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
       -trimpath \
       -buildvcs=false \
@@ -57,6 +60,11 @@ COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 COPY --from=build /out/oolix-agent /usr/local/bin/oolix-agent
 
+# Owned by the unprivileged user, so a fresh named volume mounted here starts
+# out writable by the Agent: Docker copies this ownership into it. The Partner
+# Connect bundle relies on it.
+COPY --from=build --chown=65532:65532 /out/state /var/lib/oolix-agent
+
 # 65532:65532 is distroless' `nonroot`. Declared explicitly so the container
 # still runs unprivileged if the base image default ever changes.
 USER 65532:65532
@@ -68,6 +76,11 @@ USER 65532:65532
 # NetworkPolicy in k8s-partner-agent.yaml is what actually enforces that;
 # EXPOSE is documentation.
 EXPOSE 8082
+
+# 8083 is the setup page in managed mode (`-managed`, the Partner Connect
+# bundle). It takes a database login, so the bundle publishes it on 127.0.0.1
+# only.
+EXPOSE 8083
 
 # §69.2 keeps liveness and readiness separate: readiness reports control-sync
 # staleness and identity validity, liveness only reports that the process is

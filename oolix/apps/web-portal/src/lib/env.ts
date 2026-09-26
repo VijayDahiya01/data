@@ -12,6 +12,10 @@ import { z } from 'zod';
 const EnvSchema = z.object({
   WEB_PUBLIC_URL: z.string().url().default('http://localhost:3000'),
   OOLIX_API_INTERNAL_URL: z.string().url().default('http://localhost:4000'),
+  // The API's public address. Shown to Partners in the command that fetches
+  // the Agent bundle onto their server, which reaches Oolix the way the Agent
+  // will -- not over the internal network.
+  API_PUBLIC_URL: z.string().url().default('http://localhost:4000'),
 
   // Seals the session cookie. A short secret here would make the cookie
   // forgeable, and the cookie carries the user's access token.

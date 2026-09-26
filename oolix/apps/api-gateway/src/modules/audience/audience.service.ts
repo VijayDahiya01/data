@@ -14,6 +14,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import {
   canonicalAudienceRules,
+  canSubmitOrPublish,
   matchPartner,
   OolixError,
   REACH_ESTIMATE_MIN_REFRESH_MINUTES,
@@ -23,12 +24,13 @@ import {
   type PartnerCapability,
   type RuleOperator,
 } from '@oolix/contracts';
-import type { UserPrincipal } from '@oolix/auth-rbac';
+import type { AgentPrincipal, UserPrincipal } from '@oolix/auth-rbac';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { AuditService } from '../../common/audit/audit.service.js';
 import { toWireBucket } from '../../common/reach.js';
 import type {
   CreateAudienceInput,
+  DataQualityReportInput,
   PublishCapabilitiesInput,
   UpdateAudienceInput,
 } from './audience.schema.js';
@@ -570,6 +572,42 @@ export class AudienceService {
    * rewriting one in place would change the meaning of a decision already made.
    */
   async publishCapabilities(principal: UserPrincipal, input: PublishCapabilitiesInput) {
+    return this.recordCapabilities(principal.orgId, { actor: principal.userId }, input);
+  }
+
+  /**
+   * A managed Agent publishing for its own Partner (Partner Connect).
+   *
+   * The Agent knows what its local copy can answer after each sync, so it
+   * publishes that itself instead of asking someone to repeat it in the
+   * portal. The same rules apply as for a person -- the organization must be
+   * a verified business (§66.3) -- and the same versioned record is written;
+   * only the audit trail differs, naming the Agent. §92.4: the organization is
+   * the Agent's own registered Partner, never one named in the body.
+   */
+  async publishCapabilitiesFromAgent(agent: AgentPrincipal, input: PublishCapabilitiesInput) {
+    const org = await this.prisma.organization.findUnique({
+      where: { id: agent.partnerOrgId },
+      select: { verificationStatus: true },
+    });
+    if (!org || !canSubmitOrPublish(org.verificationStatus as never)) {
+      throw new OolixError(
+        'PERM_001',
+        'Publishing capabilities requires a verified business (spec §66.3).',
+      );
+    }
+    return this.recordCapabilities(
+      agent.partnerOrgId,
+      { actor: agent.agentId, actorType: 'AGENT' },
+      input,
+    );
+  }
+
+  private async recordCapabilities(
+    orgId: string,
+    by: { actor: string; actorType?: 'AGENT' },
+    input: PublishCapabilitiesInput,
+  ) {
     const taxonomy = await this.loadTaxonomy();
 
     const unknown = input.attributes
@@ -601,7 +639,7 @@ export class AudienceService {
     }
 
     const current = await this.prisma.partnerCapability.findFirst({
-      where: { partnerOrgId: principal.orgId },
+      where: { partnerOrgId: orgId },
       orderBy: { capabilityVersion: 'desc' },
     });
     const nextVersion = (current?.capabilityVersion ?? 0) + 1;
@@ -615,7 +653,7 @@ export class AudienceService {
       }
       return tx.partnerCapability.create({
         data: {
-          partnerOrgId: principal.orgId,
+          partnerOrgId: orgId,
           capabilityVersion: nextVersion,
           attributesJson: input.attributes as never,
           geographiesJson: input.geographies,
@@ -630,8 +668,9 @@ export class AudienceService {
       action: 'PARTNER_CAPABILITIES_PUBLISHED',
       entityType: 'partner_capability',
       entityId: capability.id,
-      actor: principal.userId,
-      orgId: principal.orgId,
+      actor: by.actor,
+      ...(by.actorType ? { actorType: by.actorType } : {}),
+      orgId,
       metadata: {
         capability_version: nextVersion,
         attribute_count: input.attributes.length,
@@ -645,6 +684,53 @@ export class AudienceService {
       geographies: input.geographies,
       channels: input.channels,
       published_at: capability.publishedAt.toISOString(),
+    };
+  }
+
+  /**
+   * A managed Agent's report on how complete its copy is. One row per
+   * Partner, replaced by each report: only the latest matters, and a history
+   * of a Partner's data quality is not something Oolix needs to keep.
+   */
+  async recordDataQuality(agent: AgentPrincipal, input: DataQualityReportInput) {
+    const taxonomy = await this.loadTaxonomy();
+    const unknown = input.attributes
+      .map((a) => a.attribute_key)
+      .filter((key) => !taxonomy.has(key));
+    if (unknown.length > 0) {
+      throw new OolixError('VAL_001', 'Unknown attributes for this taxonomy version.', {
+        fieldErrors: unknown.map((key) => ({ field: 'attributes', message: `unknown: ${key}` })),
+      });
+    }
+    const data = {
+      agentId: agent.agentId,
+      syncMode: input.sync_mode,
+      syncedAt: new Date(input.synced_at),
+      customersBucket: input.customers_bucket,
+      attributesJson: input.attributes as never,
+      reportedAt: new Date(),
+    };
+    await this.prisma.partnerDataQuality.upsert({
+      where: { partnerOrgId: agent.partnerOrgId },
+      create: { partnerOrgId: agent.partnerOrgId, ...data },
+      update: data,
+    });
+    return { recorded: true };
+  }
+
+  async myDataQuality(principal: UserPrincipal) {
+    const row = await this.prisma.partnerDataQuality.findUnique({
+      where: { partnerOrgId: principal.orgId },
+    });
+    if (!row) {
+      return { reported_at: null, synced_at: null, attributes: [] };
+    }
+    return {
+      reported_at: row.reportedAt.toISOString(),
+      synced_at: row.syncedAt.toISOString(),
+      sync_mode: row.syncMode,
+      customers_bucket: row.customersBucket,
+      attributes: row.attributesJson,
     };
   }
 

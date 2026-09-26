@@ -1,0 +1,108 @@
+{{define "content"}}
+{{$d := .Data}}
+{{if not $d.Live}}
+<h1>Connect your customer data to Oolix</h1>
+<p class="lead">Six steps, one of them optional, about fifteen minutes. Nothing is created in your database, and your customers' details
+  never leave this server.</p>
+<p><a class="button" href="{{$d.Next}}">{{if $d.Identity}}Continue{{else}}Start{{end}}</a></p>
+{{else}}
+<h1>Overview</h1>
+
+<section class="card">
+  <h2>Your data</h2>
+  {{with $d.Running}}<p class="running" role="status">Copying your customer table now (started {{when .}}).
+    This page refreshes by itself.</p>{{end}}
+  {{with $d.Good}}
+  <dl class="stats">
+    <div><dt>Customers who can be shown ads</dt><dd>{{num .Customers}}</dd></div>
+    <div><dt>Left out: did not agree to marketing</dt><dd>{{num .NotConsented}}</dd></div>
+    <div><dt>Left out: under 18</dt><dd>{{num .UnderAge}}</dd></div>
+    <div><dt>Rows without a customer ID</dt><dd>{{num .WithoutID}}</dd></div>
+  </dl>
+  <p class="muted">Copied {{when .FinishedAt}}{{if eq .Mode "INCREMENTAL"}}: only the {{num .Changed}} customers
+    changed since the last refresh{{else}} from {{num .RowsRead}} rows of <code>{{$d.Live.Table}}</code>{{end}}.</p>
+  {{with $d.Activity}}
+  <table class="list">
+    <thead><tr><th></th><th class="num">Rows read</th><th class="num">Used</th><th class="num">Older than two years</th><th class="num">Unreadable date</th><th class="num">No customer ID</th></tr></thead>
+    <tbody>
+      {{range .}}
+      <tr><td>{{.Title}} <code>{{.Table}}</code></td><td class="num">{{num .RowsRead}}</td><td class="num">{{num .Used}}</td>
+        <td class="num">{{num .Older}}</td><td class="num">{{num .UnreadableDates}}</td><td class="num">{{num .WithoutCustomer}}</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{end}}
+  {{else}}
+  {{if not $d.Running}}<p>Nothing has been copied yet.</p>{{end}}
+  {{end}}
+  {{with $d.Last}}{{if .Error}}
+  <p class="error">The last refresh failed: {{.Error}}{{if $d.Good}} The previous copy is still in use.{{end}}</p>
+  {{end}}{{end}}
+  {{with $d.NextRun}}<p>Next refresh: {{when .}}.{{with $d.NextFull}} A full refresh, which also notices customers
+    deleted from your table, is due by {{when .}}.{{end}}</p>{{end}}
+  <form method="post" action="/sync" class="inline">
+    <input type="hidden" name="csrf" value="{{$.CSRF}}">
+    <button type="submit" class="secondary">Refresh now</button>
+  </form>
+  <a class="button secondary" href="/review">Change matches</a>
+</section>
+
+<section class="card">
+  <h2>What Oolix sees</h2>
+  {{with $d.Published}}
+    {{if .Error}}
+    <p class="error">Publishing to Oolix failed ({{when .At}}): {{.Error}}. It is tried again after the next refresh.</p>
+    {{else if .Withdrawn}}
+    <p>Your attributes were withdrawn from Oolix {{when .At}}.</p>
+    {{else}}
+    <p>Published {{when .At}}. Advertisers can target: <strong>{{join $d.Offered ", "}}</strong>.</p>
+    {{end}}
+  {{else}}
+  <p>Nothing has been published yet. It happens after the first copy finishes.</p>
+  {{end}}
+  <p class="muted">Oolix receives the names of these attributes and, for each campaign, a range for how many of your
+    customers match. Never names, contact details, customer IDs or any value from your database.</p>
+</section>
+
+{{if $d.Attributes}}
+<section class="card">
+  <h2>Attributes in the copy</h2>
+  <table class="list">
+    <thead><tr><th>Attribute</th><th class="num">Customers with a value</th><th class="num">Could not be read</th><th>Offered</th></tr></thead>
+    <tbody>
+      {{range $d.Attributes}}
+      <tr>
+        <td>{{.Label}}{{if .Unrecognised}} <a class="tag warn" href="{{.FixAt}}">{{.Unrecognised}} unknown value{{if gt .Unrecognised 1}}s{{end}}</a>{{end}}</td>
+        <td class="num">{{num .Filled}} <span class="muted">({{.Percent}}%)</span></td>
+        <td class="num">{{num .Unreadable}}</td>
+        <td>{{if .Published}}Yes{{else}}No{{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</section>
+{{end}}
+
+<section class="card">
+  <h2>What is stored on this server</h2>
+  <ul>
+    <li>A cleaned copy of the columns you chose, for customers who agreed to marketing. Nothing else from your
+      database is copied.</li>
+    <li>Customer IDs are scrambled with a key that never leaves this server.</li>
+    <li>Your database login is stored encrypted. The Agent only ever reads from your database.</li>
+  </ul>
+  <details class="danger">
+    <summary>Delete all copied data</summary>
+    <form method="post" action="/delete" class="form">
+      <input type="hidden" name="csrf" value="{{$.CSRF}}">
+      <p>This deletes the copy and the audience lists built from it, stops the nightly refresh, and withdraws your
+        attributes from Oolix. Your database is not touched.</p>
+      <label class="check"><input type="checkbox" name="forget"> Also forget the database login and my choices</label>
+      <label for="confirm">Type DELETE to confirm</label>
+      <input id="confirm" name="confirm" autocomplete="off" required pattern="DELETE">
+      <button type="submit" class="danger">Delete</button>
+    </form>
+  </details>
+</section>
+{{end}}
+{{end}}

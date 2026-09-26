@@ -1,0 +1,119 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1>Check the matches</h1>
+<p class="lead">The Agent read a sample of {{num $d.Sampled}} rows from <code>{{$d.Table}}</code> and matched what
+  it could. Check each match, fix any that are wrong, and answer the questions marked in yellow. The examples show
+  exactly how values will be cleaned.</p>
+
+{{if $d.Columns}}
+<form method="post" action="/review" class="form" id="review-form">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+
+  <section class="card">
+    <h2>Customer ID</h2>
+    <p>The ID your website or app sends when it asks for an ad. It is scrambled before it is stored.</p>
+    <select name="id_column" aria-label="Customer ID column">
+      <option value="">Choose a column</option>
+      {{range $d.Columns}}<option value="{{.Name}}"{{if eq .Name $d.IDColumn}} selected{{end}}>{{.Name}}</option>{{end}}
+    </select>
+    {{if $d.IDColumn}}
+    <p class="muted">{{$d.IDUnique}}% of the sampled IDs are different from each other.
+      {{if lt $d.IDUnique 100}}A customer listed more than once is copied once.{{end}}</p>
+    {{end}}
+
+    {{if $d.TimeColumns}}
+    <label for="updated_column">Changed-at column <span class="muted">(optional, for very large tables)</span></label>
+    <select id="updated_column" name="updated_column">
+      <option value="">None: read the whole table every night</option>
+      {{range $d.TimeColumns}}<option value="{{.}}"{{if eq . $d.UpdatedColumn}} selected{{end}}>{{.}}</option>{{end}}
+    </select>
+    <p class="muted">A date-time your system sets whenever a customer row changes. The nightly refresh then
+      reads only the customers changed since the last one, and a full refresh still runs once a week to
+      notice customers who were deleted. Only use it if withdrawing consent also updates this column.</p>
+    {{end}}
+  </section>
+
+  {{range $g := $d.Groups}}
+  <section class="card">
+    <h2>{{$g.Name}}</h2>
+    {{range $g.Rows}}
+    {{$key := .Key}}{{$col := .Column}}{{$codes := .Codes}}
+    <div class="attr{{if .Column}} mapped{{end}}">
+      <div class="attr-head">
+        <label for="col_{{.Key}}"><strong>{{.Label}}</strong></label>
+        <span class="muted">{{.Expects}}</span>
+      </div>
+      <div class="attr-body">
+        {{if .FromActivity}}
+        <p class="muted">Worked out from your {{.FromActivity}} table (next step).</p>
+        {{else}}
+        <select id="col_{{.Key}}" name="col_{{.Key}}" data-recheck>
+          <option value="">Not in this table</option>
+          {{range $d.Columns}}<option value="{{.Name}}"{{if eq .Name $col}} selected{{end}}>{{.Name}}</option>{{end}}
+        </select>
+        {{if .Column}}
+        <div class="score">
+          <meter min="0" max="100" low="50" high="90" optimum="100" value="{{.Percent}}"></meter>
+          <span>{{.Percent}}% of {{num .Measure.Sampled}} sampled values can be used</span>
+          {{if .Measure.UnderAge}}<span class="muted">&middot; {{num .Measure.UnderAge}} under 18, left out</span>{{end}}
+        </div>
+        {{if .Problem}}<p class="error">{{.Problem}}</p>{{end}}
+
+        {{if .AskOrder}}
+        <div class="question{{if .OrderNote}} ask{{end}}">
+          <label for="order_{{.Key}}">In this column, 03/04/1990 means</label>
+          <select id="order_{{.Key}}" name="order_{{.Key}}" data-recheck>
+            <option value="day"{{if eq .Order "day"}} selected{{end}}>3 April 1990 (day first)</option>
+            <option value="month"{{if eq .Order "month"}} selected{{end}}>March 4, 1990 (month first)</option>
+          </select>
+          {{if .OrderNote}}<p class="muted">{{.OrderNote}}</p>{{end}}
+        </div>
+        {{end}}
+
+        {{with .Measure.Examples}}
+        <table class="examples">
+          <thead><tr><th>In your table</th><th>Stored as</th></tr></thead>
+          <tbody>{{range .}}<tr><td><code>{{.Raw}}</code></td><td>{{.Clean}}</td></tr>{{end}}</tbody>
+        </table>
+        {{end}}
+
+        {{if .Answers}}
+        <div class="question ask">
+          <p>These values do not match a known {{lower .Label}}. What does each one mean?</p>
+          <table class="answers">
+            <tbody>
+              {{range $i, $a := .Answers}}
+              <tr>
+                <td><code>{{$a.Raw}}</code>{{if $a.Count}} <span class="muted">&times; {{$a.Count}}</span>{{end}}
+                  <input type="hidden" name="raw_{{$key}}_{{$i}}" value="{{$a.Raw}}"></td>
+                <td>
+                  <select name="code_{{$key}}_{{$i}}" aria-label="Meaning of {{$a.Raw}}">
+                    <option value="">Decide later (left empty)</option>
+                    <option value="-"{{if eq $a.Code "-"}} selected{{end}}>Ignore this value</option>
+                    {{range $codes}}<option value="{{.}}"{{if eq . $a.Code}} selected{{end}}>{{.}}</option>{{end}}
+                  </select>
+                </td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+        {{end}}
+
+        <label class="check"><input type="checkbox" name="publish_{{.Key}}"{{if .Publish}} checked{{end}}>
+          Offer to advertisers</label>
+        {{end}}
+        {{end}}
+      </div>
+    </div>
+    {{end}}
+  </section>
+  {{end}}
+
+  <div class="actions">
+    <button type="submit" name="action" value="check" class="secondary">Check again</button>
+    <button type="submit" name="action" value="next">Save and continue</button>
+  </div>
+</form>
+{{end}}
+{{end}}

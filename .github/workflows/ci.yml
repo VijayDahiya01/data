@@ -83,6 +83,47 @@ jobs:
   agent:
     name: Partner Agent (Go)
     runs-on: ubuntu-latest
+    # Real databases for Partner Connect: every source a Partner may run, and
+    # a PostgreSQL standing in for the Agent's local store. Each test skips
+    # when its variable is unset, so a laptop run stays self-contained.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: oolix
+          POSTGRES_PASSWORD: oolix
+          POSTGRES_DB: oolix
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U oolix" --health-interval 5s --health-timeout 5s
+          --health-retries 20
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: oolix
+          MYSQL_DATABASE: oolix_source_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -poolix" --health-interval 5s
+          --health-timeout 5s --health-retries 30
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          MSSQL_SA_PASSWORD: Oolix-test-Pass1
+        ports: ['1433:1433']
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P Oolix-test-Pass1 -C -Q 'SELECT 1'"
+          --health-interval 10s --health-timeout 10s --health-retries 30
+      mongodb:
+        image: mongo:7
+        env:
+          MONGO_INITDB_ROOT_USERNAME: oolix
+          MONGO_INITDB_ROOT_PASSWORD: oolix
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet -u oolix -p oolix --authenticationDatabase admin --eval 'db.runCommand({ping:1}).ok'"
+          --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
       - uses: actions/checkout@v5
 
@@ -111,6 +152,12 @@ jobs:
         # dev box may not, which is why the local gate runs without it.
         env:
           CGO_ENABLED: '1'
+          # The local store tests make one database per package from this.
+          OOLIX_TEST_LOCALSTORE_URL: postgres://oolix:oolix@localhost:5432/oolix?sslmode=disable
+          OOLIX_TEST_POSTGRES_URL: postgres://oolix:oolix@localhost:5432/oolix?sslmode=disable
+          OOLIX_TEST_MYSQL_URL: root:oolix@tcp(localhost:3306)/oolix_source_test?tls=preferred
+          OOLIX_TEST_SQLSERVER_URL: sqlserver://sa:Oolix-test-Pass1@localhost:1433?database=master&encrypt=disable
+          OOLIX_TEST_MONGODB_URL: mongodb://oolix:oolix@localhost:27017/?authSource=admin
         run: go test -race -count=1 ./...
 
       - name: Build

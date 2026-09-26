@@ -1,0 +1,65 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1>Consent and publish</h1>
+<p class="lead">Only customers who agreed to marketing are copied, and only they can be shown ads. Everyone else is
+  left out, as are customers under 18.</p>
+
+{{if $d.Columns}}
+<form method="post" action="/consent" class="form" id="consent-form">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+
+  <section class="card">
+    <h2>Agreement to marketing</h2>
+    <label for="consent_column">Which column records that a customer agreed?</label>
+    <select id="consent_column" name="consent_column" data-recheck>
+      <option value="">Choose a column</option>
+      {{range $d.Columns}}<option value="{{.Name}}"{{if eq .Name $d.Consent.Column}} selected{{end}}>{{.Name}}</option>{{end}}
+    </select>
+    <p class="muted">A yes/no column (yes, Y, true, 1...) or the date they agreed.</p>
+
+    <label for="withdrawal_column">Which column records that they took it back? (optional)</label>
+    <select id="withdrawal_column" name="withdrawal_column" data-recheck>
+      <option value="">None</option>
+      {{range $d.Columns}}<option value="{{.Name}}"{{if eq .Name $d.Consent.Withdrawal}} selected{{end}}>{{.Name}}</option>{{end}}
+    </select>
+
+    <label class="check"><input type="checkbox" name="everyone"{{if $d.Consent.Everyone}} checked{{end}} data-recheck>
+      Every customer in this table has agreed to marketing -- for example, it is an export of opted-in customers.
+      I confirm this.</label>
+
+    {{with $d.Measure}}{{if .Rows}}
+    <p class="summary">In a sample of {{num .Rows}} rows: <strong>{{num .Agreed}} agreed</strong>,
+      {{num .Declined}} did not, {{num .Withdrawn}} took it back.</p>
+    {{end}}{{end}}
+  </section>
+
+  <section class="card">
+    <h2>Where you show ads</h2>
+    <label class="check"><input type="checkbox" name="web"{{if $d.Web}} checked{{end}}> Your website</label>
+    <label class="check"><input type="checkbox" name="app"{{if $d.App}} checked{{end}}> Your app</label>
+
+    <label for="sync_hour">Refresh the copy every night at</label>
+    <select id="sync_hour" name="sync_hour">
+      {{range $d.Hours}}<option value="{{.}}"{{if eq . $d.SyncHour}} selected{{end}}>{{printf "%02d:00" .}}</option>{{end}}
+    </select>
+    <p class="muted">In the time zone chosen for your data. Customers who withdraw are removed at the next refresh.</p>
+  </section>
+
+  <section class="card">
+    <h2>What Oolix will see</h2>
+    {{if $d.Offered}}
+    <p>Advertisers will be able to target: <strong>{{join $d.Offered ", "}}</strong>.</p>
+    {{end}}
+    <p class="muted">Oolix receives these attribute names and, for each campaign, a range for how many of your
+      customers match. Never names, contact details, customer IDs or any value from your database.</p>
+  </section>
+
+  {{if not $d.Registered}}<p class="error">Connect this Agent to Oolix (step 1) before publishing.</p>{{end}}
+
+  <div class="actions">
+    <button type="submit" name="action" value="check" class="secondary">Check again</button>
+    <button type="submit" name="action" value="publish">Publish</button>
+  </div>
+</form>
+{{end}}
+{{end}}

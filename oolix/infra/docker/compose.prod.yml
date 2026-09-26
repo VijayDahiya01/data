@@ -121,6 +121,8 @@ services:
       REDIS_URL: redis://redis:6379
       # Also the issuer of every sign-in token.
       API_PUBLIC_URL: ${API_PUBLIC_URL:?set API_PUBLIC_URL}
+      # The Agent image the Partner Connect bundle runs. Pin the released tag.
+      PARTNER_AGENT_IMAGE: ${PARTNER_AGENT_IMAGE:-oolix/partner-agent:dev}
       # The base of the links in verification, invitation and reset emails.
       WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:?set WEB_PUBLIC_URL}
       # Sign-up, invitations and password resets all arrive by email, so
@@ -168,6 +170,8 @@ services:
       # the deployment.
       OOLIX_API_INTERNAL_URL: http://api:4000
       WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:?set WEB_PUBLIC_URL}
+      # Shown to Partners in the command that fetches the Agent bundle.
+      API_PUBLIC_URL: ${API_PUBLIC_URL:?set API_PUBLIC_URL}
       PORTAL_SESSION_SECRET: ${PORTAL_SESSION_SECRET:?set PORTAL_SESSION_SECRET}
     expose:
       - '3000'

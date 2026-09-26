@@ -298,6 +298,15 @@ export type AttributeDefinition = Prisma.AttributeDefinitionModel
  */
 export type PartnerCapability = Prisma.PartnerCapabilityModel
 /**
+ * Model PartnerDataQuality
+ * How complete a managed Agent's copy is (Partner Connect), from its last
+ * full sync: per published attribute, the share of customers with a usable
+ * value. Percentages and a size band only -- never a customer, a value, or an
+ * exact count. One row per Partner, replaced by each report; shown only to
+ * that Partner.
+ */
+export type PartnerDataQuality = Prisma.PartnerDataQualityModel
+/**
  * Model AudienceGroup
  * v6 §3: a reusable Buyer-defined audience intent.
  */

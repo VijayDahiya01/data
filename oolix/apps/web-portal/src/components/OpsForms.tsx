@@ -268,6 +268,36 @@ export function BootstrapTokenForm() {
   );
 }
 
+/**
+ * The same single-use token, worded for Partner Connect: it is pasted into the
+ * Agent's setup page rather than handed to a process on first start.
+ */
+export function OneTimeCodeForm() {
+  return (
+    <ActionForm action={createBootstrapToken}>
+      {(state: TokenState) => (
+        <>
+          {state.token ? (
+            <div className="notice notice-warn">
+              <strong>Paste this into the setup page now. It is shown once.</strong>
+              <div style={{ margin: '0.5rem 0' }}>
+                <code style={{ display: 'block', padding: '0.5rem', wordBreak: 'break-all' }}>
+                  {state.token}
+                </code>
+              </div>
+              It works once and expires in 15 minutes. Oolix keeps only its SHA-256, so it cannot be
+              shown again; get a new one if it runs out.
+            </div>
+          ) : null}
+          <div className="btn-row">
+            <SubmitButton pendingLabel="Creating…">Get a one-time code</SubmitButton>
+          </div>
+        </>
+      )}
+    </ActionForm>
+  );
+}
+
 export function RevokeBootstrapTokensForm() {
   return (
     <ActionForm action={revokeBootstrapTokens}>

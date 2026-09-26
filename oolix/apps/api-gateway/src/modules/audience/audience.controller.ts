@@ -169,6 +169,13 @@ export class PartnerCapabilityController {
     return this.audiences.myCapabilities(p);
   }
 
+  /** What this Partner's managed Agent last reported about its copy. */
+  @Get('quality')
+  @RequirePermissions('segment:manage')
+  async quality(@Principal() p: UserPrincipal) {
+    return this.audiences.myDataQuality(p);
+  }
+
   @Put()
   @RequirePermissions('segment:manage')
   @RequireVerifiedBusiness()

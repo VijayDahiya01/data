@@ -1,0 +1,131 @@
+/**
+ * The Partner Connect bundle: a Compose file that runs the Agent in managed
+ * mode next to its local store, on one server inside the Partner's network.
+ *
+ * The canonical copy is `partner/pack/docker-compose.partner.yml`, in the pack
+ * a Partner's engineers read before running anything. This is the same text --
+ * a test keeps the two identical -- served with this deployment's API address
+ * and Agent image filled in, so a Partner can fetch it straight onto the
+ * server that will run the Agent.
+ */
+export const PARTNER_COMPOSE_TEMPLATE = `# Oolix Partner Connect: the Oolix Agent and its local store, for one server
+# inside your network. Nothing in this file needs editing.
+#
+#   docker compose up -d
+#   docker compose logs agent | grep setup_password
+#
+# Then open the setup page on this server: http://localhost:8083
+# (From your laptop: ssh -L 8083:localhost:8083 you@this-server, then open
+# http://localhost:8083 in your browser.)
+#
+# The setup page connects the Agent to Oolix, takes a read-only login to your
+# database, and shows exactly what is copied and what Oolix sees. The Agent
+# only ever reads your database, and your customers' details stay on this
+# server.
+name: oolix-agent
+
+services:
+  # Runs once on first start: writes a random password for the local store
+  # (no password is ever typed or kept in this file) and prepares the Agent's
+  # state folder. Later starts keep both.
+  init:
+    image: alpine:3.22
+    restart: 'no'
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        if [ ! -s /secrets/store-password ]; then
+          tr -dc 'A-Za-z0-9' </dev/urandom | head -c 40 > /secrets/store-password
+        fi
+        # Read by the local store (uid 70) and the Agent (uid 65532); the
+        # volume is mounted into those two containers only.
+        chmod 0444 /secrets/store-password
+        touch /state/.created
+        chown -R 65532:65532 /state
+        chmod 0700 /state
+    volumes:
+      - secrets:/secrets
+      - agent-state:/state
+
+  # The Agent's own database: the cleaned copy of your customer table and the
+  # audience lists built from it. Reachable only from the Agent.
+  local-store:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: oolix_agent
+      POSTGRES_DB: oolix_agent
+      POSTGRES_PASSWORD_FILE: /run/oolix/store-password
+    volumes:
+      - local-store:/var/lib/postgresql/data
+      - secrets:/run/oolix:ro
+    networks: [internal]
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U oolix_agent -d oolix_agent']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  agent:
+    image: REPLACE_WITH_AGENT_IMAGE
+    restart: unless-stopped
+    command: ['-managed']
+    environment:
+      OOLIX_API_BASE_URL: REPLACE_WITH_API_URL
+      OOLIX_LOCAL_STORE_URL: postgres://oolix_agent@local-store:5432/oolix_agent?sslmode=disable
+      OOLIX_LOCAL_STORE_PASSWORD_FILE: /run/oolix/store-password
+      OOLIX_STATE_DIR: /var/lib/oolix-agent
+      OOLIX_IMPORT_FOLDER: /data/import
+      # Optional: choose the setup page password yourself (12+ characters).
+      OOLIX_SETUP_PASSWORD: \${OOLIX_SETUP_PASSWORD:-}
+    volumes:
+      - agent-state:/var/lib/oolix-agent
+      - secrets:/run/oolix:ro
+      # CSV or Excel exports of your customer list, if the Agent cannot
+      # connect to your database directly.
+      - ./import:/data/import:ro
+    ports:
+      # The ad-decision API your website or app backend calls. Keep this
+      # port off the internet: only your own servers should reach it.
+      - '8082:8082'
+      # The setup page, on this server only.
+      - '127.0.0.1:8083:8083'
+    extra_hosts:
+      # Lets the Agent reach a database running on this same machine, as
+      # host.docker.internal.
+      - 'host.docker.internal:host-gateway'
+    networks: [internal, outside]
+    depends_on:
+      local-store:
+        condition: service_healthy
+
+networks:
+  # No route out: the local store cannot reach, or be reached from, anything
+  # but the Agent.
+  internal:
+    internal: true
+  # The Agent's way out -- to Oolix, and to your database.
+  outside: {}
+
+volumes:
+  local-store:
+  agent-state:
+  secrets:
+`;
+
+/**
+ * Fills in the two values that differ per deployment. Both come from the
+ * operator's configuration, and both are validated there, so neither can
+ * break out of its YAML line.
+ */
+export function renderPartnerCompose(apiBaseUrl: string, agentImage: string): string {
+  return PARTNER_COMPOSE_TEMPLATE.replace(
+    'REPLACE_WITH_API_URL',
+    apiBaseUrl.replace(/\/+$/, ''),
+  ).replace('REPLACE_WITH_AGENT_IMAGE', agentImage);
+}

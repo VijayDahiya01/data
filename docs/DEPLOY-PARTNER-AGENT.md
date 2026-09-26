@@ -2,12 +2,20 @@
 
 **This document is for the Data Partner's engineers, not for Oolix.** The
 Agent runs inside your infrastructure, on hosts Oolix never touches and holds
-no credential to. Roughly **1 hour** once the prerequisites exist.
+no credential to.
 
-It covers **where to run it** and **what to give it**.
-`partner/pack/INTEGRATION-GUIDE.md` covers **how to configure it** —
-the attribute view, the mappings, the placements — and the two are meant to be
-read together, this one first.
+There are two ways to run it:
+
+- **[Partner Connect](#the-quick-way-partner-connect)** — recommended. One
+  Compose file and a setup page on your own server. About **15 minutes**, and
+  nothing is created in your database.
+- **[Your own configuration](#the-advanced-way-your-own-configuration)** — for
+  teams that want to build Oolix's tables in their own database and configure
+  the Agent by hand. Roughly **1 hour** once the prerequisites exist, with
+  `partner/pack/INTEGRATION-GUIDE.md` alongside.
+
+Both end the same way: your backend calls the Agent on port `8082`, and you
+define your ad slots in the portal.
 
 ## What you are actually deploying
 
@@ -35,6 +43,132 @@ That third row is the one most often got wrong. `listen_addr` defaults to
 balancer would expose an endpoint that takes a customer identifier as input.
 
 ---
+
+## The quick way: Partner Connect
+
+Nothing to create in your database, no mapping file to write and no SQL job to
+schedule. A setup page on your own server does the work, and the Agent keeps
+its own cleaned copy of your customer table up to date by itself.
+
+**You need**
+
+- One Linux server inside your network with Docker and Docker Compose. 2 vCPU,
+  4 GB of memory and 20 GB of disk are enough for a few million customers.
+- Outbound HTTPS from that server to the Oolix API. Nothing inbound.
+- A **read-only** login to the database that holds your customer list:
+  PostgreSQL, MySQL or MariaDB, Microsoft SQL Server, or MongoDB. No database
+  access? CSV or Excel exports work too.
+
+### 1. Start it
+
+On that server:
+
+```sh
+mkdir oolix-agent && cd oolix-agent
+curl -fsSLo docker-compose.yml https://<oolix-api>/agent/v1/compose
+docker compose up -d
+```
+
+The portal shows this command with your Oolix address filled in, under **Data
+Partner → Integrations → Connect your data**. The file starts the Agent and a
+small PostgreSQL of its own (the _local store_). Nothing in it needs editing,
+and you can read it first: it is
+[`partner/pack/docker-compose.partner.yml`](../partner/pack/docker-compose.partner.yml)
+with two values filled in, the Oolix address and the Agent image.
+
+### 2. Open the setup page
+
+```sh
+docker compose logs agent | grep setup_password
+```
+
+Then open `http://localhost:8083` on that server. From your laptop, tunnel to
+it first — `ssh -L 8083:localhost:8083 you@that-server` — and open the same
+address. The page listens on the server itself only, because it takes a
+database login. To choose the password yourself, set `OOLIX_SETUP_PASSWORD`
+(12 characters or more) before `docker compose up`.
+
+### 3. Follow the page
+
+1. **Connect to Oolix.** Paste a one-time code from the same portal page. It
+   works once and expires after 15 minutes.
+2. **Connect your database.** Give it a read-only login; the page shows the
+   statements that create one on each kind of database. Inside Docker,
+   `localhost` is the Agent itself — use the database server's address, or
+   `host.docker.internal` for a database on the same machine.
+3. **Choose the customer table** — the one with a row per customer.
+4. **Check the matches.** The page matches your columns to Oolix's standard
+   attributes (a date of birth becomes age, `sex` becomes gender, `City`
+   becomes city…) and shows, on a sample of your own rows, exactly how each
+   value will be stored: `14/04/1992`, `14-04-1993` and `1992-04-13T18:30:00Z`
+   all become 14 April 1992; `Bombay` becomes `MUMBAI`; `M`, `1` and `male`
+   become `MALE`. Whether `03/04/1990` is 3 April or March 4 is settled from
+   the rest of the column when it can be, and asked when it cannot. Values it
+   cannot place are listed for you to answer, never guessed.
+5. **Orders and bookings** (optional). If you keep a table with one row per
+   order, or per booking, pick it: the Agent works out per customer when they
+   last bought, how many orders in the last 90 days, what they buy most and
+   how they pay, whether they shop online — and when they last booked and
+   whether their latest trip was domestic or international. Nothing needs
+   preparing: no totals, no summary table. The orders themselves are never
+   kept, only those answers. Only the last two years are read.
+6. **Consent and publish.** Choose the column that records agreement to
+   marketing, then **Publish**.
+
+The Agent then copies the table, tells Oolix which attributes it can answer,
+and refreshes the copy every night at the hour you chose. Readiness in the
+portal turns green once the Agent has checked in and published. After each
+full refresh the portal's **Audience capabilities** page shows how complete
+your data is — per attribute, the share of customers with a value — so you
+can see what is worth fixing. Only those percentages reach Oolix, and only
+you see them.
+
+**Very large customer tables.** On the matches step you can name a
+_changed-at_ column: a date-time your system sets whenever a customer row
+changes. The nightly refresh then reads only the customers changed since the
+last one, and a full refresh still runs once a week — the only kind that
+notices customers deleted from your table. Use it only if withdrawing consent
+also updates that column; otherwise a withdrawal would wait for the weekly
+refresh. **Refresh now** on the setup page always refreshes in full.
+
+### What is kept, and where
+
+| | |
+| --- | --- |
+| **Your database** | Read once a night with the login you gave. Nothing is created or changed in it |
+| **The local store, on your server** | Only the columns you mapped, cleaned, and only for **adults who agreed to marketing** — nobody else could be shown an ad, so nobody else's data is copied. Customer IDs are scrambled (HMAC-SHA256, with a key that never leaves the server). Your database password is stored encrypted |
+| **Oolix** | The names of the attributes you can answer and, per campaign, a reach range. Never a name, contact detail, customer ID or any value from your database |
+
+The setup page shows the same and has **Delete all copied data**: it empties
+the local store, stops the nightly refresh and withdraws your attributes from
+Oolix. Customers who withdraw consent, or leave your table, drop out of the
+copy at the next refresh; **Refresh now** on the setup page does it at once.
+
+### 4. Point your backend at it
+
+Exactly as in [step 4 of the advanced way](#4-point-your-backend-at-it): your
+backend calls port `8082` on that server with the customer ID it already
+knows. The Agent scrambles it the same way before looking it up, so the raw ID
+is never stored.
+
+### Keeping it running
+
+- **Upgrade:** `docker compose pull && docker compose up -d`. The copy, your
+  choices and the Agent's identity live in Docker volumes and survive.
+- **Nothing to back up** that cannot be rebuilt — the copy is rebuilt every
+  night. Keep the `agent-state` volume to avoid registering again.
+- **Logs:** `docker compose logs -f agent`. They never contain a customer ID
+  or a value from your database.
+
+---
+
+## The advanced way: your own configuration
+
+The rest of this document. Choose it if you would rather build the attribute
+view in your own database and write the Agent's configuration yourself — see
+`partner/pack/INTEGRATION-GUIDE.md` for how to configure it: the attribute
+view, the mappings, the placements. The two are meant to be read together,
+this one first.
 
 ## What you must provide
 

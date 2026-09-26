@@ -17,6 +17,13 @@ import { RequireAgentScope } from '../../common/auth/auth.guard.js';
 import { Principal } from '../../common/auth/principal.decorator.js';
 import { ZodValidationPipe } from '../../common/validation/zod.pipe.js';
 import { AgentAudienceService } from './agent-audience.service.js';
+import { AudienceService } from './audience.service.js';
+import {
+  DataQualityReportSchema,
+  PublishCapabilitiesSchema,
+  type DataQualityReportInput,
+  type PublishCapabilitiesInput,
+} from './audience.schema.js';
 
 /**
  * v6 §8.2's return shape.
@@ -55,7 +62,10 @@ export type MaterializationReportInput = z.infer<typeof MaterializationReportSch
 
 @Controller('agent/v1/audience')
 export class AgentAudienceController {
-  constructor(@Inject(AgentAudienceService) private readonly service: AgentAudienceService) {}
+  constructor(
+    @Inject(AgentAudienceService) private readonly service: AgentAudienceService,
+    @Inject(AudienceService) private readonly audiences: AudienceService,
+  ) {}
 
   /**
    * §8.1: the work queue for this Agent.
@@ -102,5 +112,37 @@ export class AgentAudienceController {
     @Body(new ZodValidationPipe(MaterializationReportSchema)) body: MaterializationReportInput,
   ) {
     return this.service.recordMaterialization(p.partnerOrgId, p.agentId, body);
+  }
+
+  /**
+   * §5.1, published by the Agent itself (Partner Connect).
+   *
+   * A managed Agent keeps its own cleaned copy of the Partner's customer
+   * table, so after a sync it knows exactly which attributes it can answer. The
+   * body is the portal's own capability shape: attribute keys, operators,
+   * geographies and channels. Nothing in it can carry a local column name, a
+   * value or a customer (§17).
+   */
+  @Post('capabilities')
+  @RequireAgentScope('capabilities:write')
+  async publishCapabilities(
+    @Principal() p: AgentPrincipal,
+    @Body(new ZodValidationPipe(PublishCapabilitiesSchema)) body: PublishCapabilitiesInput,
+  ) {
+    return this.audiences.publishCapabilitiesFromAgent(p, body);
+  }
+
+  /**
+   * How complete the Agent's copy is, after a full sync (Partner Connect).
+   * Percentages and a size band, for the Partner's own portal -- never a count
+   * of anything, and never shown to a Buyer.
+   */
+  @Post('quality')
+  @RequireAgentScope('reporting:write')
+  async reportQuality(
+    @Principal() p: AgentPrincipal,
+    @Body(new ZodValidationPipe(DataQualityReportSchema)) body: DataQualityReportInput,
+  ) {
+    return this.audiences.recordDataQuality(p, body);
   }
 }

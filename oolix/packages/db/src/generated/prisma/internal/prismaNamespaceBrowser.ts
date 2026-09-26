@@ -94,6 +94,7 @@ export const ModelName = {
   KillSwitch: 'KillSwitch',
   AttributeDefinition: 'AttributeDefinition',
   PartnerCapability: 'PartnerCapability',
+  PartnerDataQuality: 'PartnerDataQuality',
   AudienceGroup: 'AudienceGroup',
   AudienceGroupVersion: 'AudienceGroupVersion',
   PartnerMatchSnapshot: 'PartnerMatchSnapshot',
@@ -830,6 +831,19 @@ export const PartnerCapabilityScalarFieldEnum = {
 } as const
 
 export type PartnerCapabilityScalarFieldEnum = (typeof PartnerCapabilityScalarFieldEnum)[keyof typeof PartnerCapabilityScalarFieldEnum]
+
+
+export const PartnerDataQualityScalarFieldEnum = {
+  partnerOrgId: 'partnerOrgId',
+  agentId: 'agentId',
+  syncMode: 'syncMode',
+  syncedAt: 'syncedAt',
+  customersBucket: 'customersBucket',
+  attributesJson: 'attributesJson',
+  reportedAt: 'reportedAt'
+} as const
+
+export type PartnerDataQualityScalarFieldEnum = (typeof PartnerDataQualityScalarFieldEnum)[keyof typeof PartnerDataQualityScalarFieldEnum]
 
 
 export const AudienceGroupScalarFieldEnum = {

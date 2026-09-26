@@ -64,6 +64,8 @@ export const AGENT_SCOPES = [
   'reporting:write',
   'channel_status:write',
   'heartbeat:write',
+  // A managed Agent publishing what its local copy can answer (Partner Connect).
+  'capabilities:write',
 ] as const;
 
 export type AgentScope = (typeof AGENT_SCOPES)[number];

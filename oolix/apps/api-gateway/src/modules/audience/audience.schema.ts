@@ -61,3 +61,34 @@ export const PublishCapabilitiesSchema = z.object({
   mapping_version: z.number().int().positive().optional(),
 });
 export type PublishCapabilitiesInput = z.infer<typeof PublishCapabilitiesSchema>;
+
+/**
+ * How complete a managed Agent's copy is, after a full sync (Partner Connect).
+ *
+ * Percentages and the reach size bands only. There is no field for a count, a
+ * customer or a value, and adding one would be a privacy change rather than a
+ * schema change. The Partner sees it in their own portal; no Buyer does.
+ */
+export const DataQualityReportSchema = z.object({
+  synced_at: z.string().refine((v) => !Number.isNaN(Date.parse(v)), 'ISO-8601 date-time'),
+  sync_mode: z.enum(['FULL', 'INCREMENTAL']),
+  customers_bucket: z.enum([
+    'UNDER_10K',
+    '10K_50K',
+    '50K_100K',
+    '100K_250K',
+    '250K_500K',
+    '500K_1M',
+    'OVER_1M',
+  ]),
+  attributes: z
+    .array(
+      z.object({
+        attribute_key: z.string().min(1).max(120),
+        coverage_pct: z.number().int().min(0).max(100),
+        unreadable_pct: z.number().int().min(0).max(100),
+      }),
+    )
+    .max(100),
+});
+export type DataQualityReportInput = z.infer<typeof DataQualityReportSchema>;
