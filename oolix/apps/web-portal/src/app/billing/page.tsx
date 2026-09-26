@@ -7,6 +7,7 @@
  * derivation, and the events it derives from are shown alongside it.
  */
 import Link from 'next/link';
+import { notFound } from 'next/navigation';
 import { requireContext, can } from '@/lib/nav-entry';
 import { apiOptional } from '@/lib/api';
 import { Shell } from '@/components/Shell';
@@ -32,6 +33,11 @@ interface InvoicePreview {
 }
 
 export default async function BillingPage() {
+  // Hidden for the starter set: the API switches billing off
+  // (FEATURE_BILLING_ENABLED) and money is settled outside Oolix for now.
+  // Kept until the starter set is settled, then deleted with the API side.
+  notFound();
+
   const ctx = await requireContext('/billing');
 
   if (!can(ctx, 'billing:manage') && !can(ctx, 'invoice:read')) {

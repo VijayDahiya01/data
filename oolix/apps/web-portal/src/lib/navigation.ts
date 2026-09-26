@@ -46,7 +46,8 @@ const BUYER: NavItem[] = [
   { label: 'Creatives', href: '/creatives', permissions: ['creative:upload'] },
   { label: 'Leads', href: '/leads', permissions: ['crm:connect', 'report:read'] },
   { label: 'Reports', href: '/reports', permissions: ['report:read'] },
-  { label: 'Billing', href: '/billing', permissions: ['billing:manage', 'invoice:read'] },
+  // No Billing entry: invoices and payouts are hidden for the starter set
+  // (FEATURE_BILLING_ENABLED on the API), and so is the page.
   { label: 'Connections', href: '/connections', permissions: ['crm:connect', 'channel:connect'] },
 ];
 
@@ -81,7 +82,7 @@ const PARTNER: NavItem[] = [
     permissions: ['agent:register', 'connector:manage'],
   },
   { label: 'Reports', href: '/partner/reports', permissions: ['report:read'] },
-  { label: 'Payouts', href: '/partner/payouts', permissions: ['payout:read'] },
+  // No Payouts entry: hidden with billing for the starter set.
   { label: 'Policies', href: '/partner/policies', permissions: ['partner:policy:manage'] },
 ];
 

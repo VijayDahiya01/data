@@ -46,6 +46,7 @@ async function bootstrap(): Promise<void> {
     // Surfaced at boot so nobody has to guess whether a connector is live.
     meta_enabled: config.FEATURE_META_ENABLED,
     google_enabled: config.FEATURE_GOOGLE_ENABLED,
+    billing_enabled: config.FEATURE_BILLING_ENABLED,
   });
 }
 

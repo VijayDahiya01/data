@@ -9,6 +9,7 @@
  * disputed and re-settled payout shows both the original accrual and the
  * adjustment, not one quietly-edited number.
  */
+import { notFound } from 'next/navigation';
 import { requireContext, can } from '@/lib/nav-entry';
 import { apiOptional } from '@/lib/api';
 import { Shell } from '@/components/Shell';
@@ -42,6 +43,10 @@ interface Payout {
 const LIFECYCLE = ['CALCULATED', 'REVIEWED', 'APPROVED', 'PAID'];
 
 export default async function PartnerPayoutsPage() {
+  // Hidden with billing for the starter set (FEATURE_BILLING_ENABLED on the
+  // API). Kept until the starter set is settled, then deleted.
+  notFound();
+
   const ctx = await requireContext('/partner/payouts');
   const data = await apiOptional<{ items: Payout[] }>('/v1/billing/payouts');
   const items = data?.items ?? [];

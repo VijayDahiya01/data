@@ -78,7 +78,10 @@ tags:
   - name: Reporting
     description: Delivery, dashboards and reconciliation (§49, §77.3).
   - name: Billing
-    description: Settlement, payout and disputes (§19, §83.1, §102).
+    description: >-
+      Settlement, payout and disputes (§19, §83.1, §102). Switched off for now:
+      every route here answers 404 unless the deployment sets
+      FEATURE_BILLING_ENABLED=true, and settlement happens outside Oolix.
   - name: Agent
     description: Partner Agent registration and control sync (§52.4, §92).
   - name: Admin

@@ -152,9 +152,9 @@ What you can do end to end, in a browser:
 | `demo@example.test`             | **Everything.** One login, four organizations — switch between Buyer, Data Partner, Network sponsor and Oolix admin from the sidebar. No second account, no re-login (§34) |
 | `buyer.admin@example.test`      | Build an audience from the attribute taxonomy, see which Data Partners can evaluate it, then run §9's ten-step campaign through approval, delivery and outcomes            |
 | `partner.approver@example.test` | Review a request against §41's checklist and approve, request a change, reject or extend                                                                                   |
-| `partner.admin@example.test`    | Publish audience **capabilities** (which attributes you can evaluate — never your field names), publish prebuilt segments, manage placements, kill switches and payouts    |
+| `partner.admin@example.test`    | Publish audience **capabilities** (which attributes you can evaluate — never your field names), publish prebuilt segments, manage placements and kill switches             |
 | `partner.security@example.test` | Register and revoke Partner Agents (§92) — deliberately a different role from the commercial admin                                                                         |
-| `finance@example.test`          | Approve and settle payouts, raise and resolve disputes (§83.1)                                                                                                             |
+| `finance@example.test`          | Nothing yet: invoices and payouts are hidden for the starter set. With `FEATURE_BILLING_ENABLED=true` on the API — approve and settle payouts, resolve disputes (§83.1)    |
 | `oolix.admin@example.test`      | Platform operations — aggregates and Agent health only (§98)                                                                                                               |
 
 `pnpm test:e2e:portal` drives all of that in Chromium — 20 tests covering the
@@ -312,7 +312,7 @@ The owned-media path must remain fully functional with both disabled.
 | 4     | Owned web MVP: connector, membership, ad-decision, web SDK, NO_AD fallback              | exit criteria met                   |
 | 5     | Attribution + reporting                                                                 | exit criteria met                   |
 | 6     | Multi-partner hardening                                                                 | exit criteria met                   |
-| 7     | Billing / payout                                                                        | exit criteria met                   |
+| 7     | Billing / payout                                                                        | met; hidden for the starter set     |
 | 8     | Mobile (first design Partner's stack only)                                              | blocked: no pilot Partner stack     |
 | 9     | Meta pilot (feature-flagged)                                                            | blocked: needs an eligible account  |
 | 10    | Google pilot (feature-flagged)                                                          | blocked: needs an eligible account  |

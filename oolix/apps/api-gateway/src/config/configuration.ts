@@ -97,6 +97,11 @@ export const ConfigSchema = z
     // §15, §16, §84: external channels stay off until eligibility is proven.
     FEATURE_META_ENABLED: bool.default(false),
     FEATURE_GOOGLE_ENABLED: bool.default(false),
+
+    // Invoices and Partner payouts, hidden for the starter set: the price a
+    // Partner agrees at approval is still recorded, and money is settled
+    // outside Oolix for now. Off, every /v1/billing route answers 404.
+    FEATURE_BILLING_ENABLED: bool.default(false),
   })
   .superRefine((c, ctx) => {
     // A deployment that cannot send email cannot let anyone sign up, verify an

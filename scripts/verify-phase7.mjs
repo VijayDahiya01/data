@@ -83,6 +83,16 @@ try {
   const finance = await seedToken('finance@example.test');
   const partnerAdmin = await seedToken('partner.admin@example.test');
 
+  // Billing is hidden for the starter set and answers 404 unless the API runs
+  // with FEATURE_BILLING_ENABLED=true. Say so and stop, rather than report a
+  // wall of failures about a feature that is deliberately off.
+  const billing = await api('/v1/billing/payouts', { token: finance });
+  if (billing.status === 404) {
+    console.log('  SKIPPED  billing is switched off (FEATURE_BILLING_ENABLED=false on the API)\n');
+    await oolix.end();
+    process.exit(0);
+  }
+
   const r = await api('/v1/partner/readiness', {
     token: await seedToken('partner.security@example.test'),
     orgId: PARTNER_A_ORG,

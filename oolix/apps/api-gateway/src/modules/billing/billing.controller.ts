@@ -1,9 +1,14 @@
 /**
  * Billing and payout endpoints -- spec v5 §19, §50, §83.1, §102.
+ *
+ * Switched off for the starter set (FEATURE_BILLING_ENABLED): every route
+ * here answers 404 until it is turned on. Settlement happens outside Oolix
+ * for now; the price agreed at approval is still recorded with the campaign.
  */
-import { Body, Controller, Get, Inject, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Post, UseGuards } from '@nestjs/common';
 import type { UserPrincipal } from '@oolix/auth-rbac';
 import { RequirePermissions } from '../../common/auth/auth.guard.js';
+import { FeatureGuard, RequireFeature } from '../../common/feature/feature.guard.js';
 import { Principal } from '../../common/auth/principal.decorator.js';
 import { ZodValidationPipe } from '../../common/validation/zod.pipe.js';
 import { Idempotent } from '../../common/idempotency/idempotency.interceptor.js';
@@ -18,6 +23,8 @@ import {
 } from './billing.service.js';
 
 @Controller('v1/billing')
+@RequireFeature('billing')
+@UseGuards(FeatureGuard)
 export class BillingController {
   constructor(@Inject(BillingService) private readonly billing: BillingService) {}
 
