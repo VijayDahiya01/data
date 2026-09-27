@@ -339,6 +339,15 @@ materialization third. It is implemented and verified:
 
 `pnpm verify` runs both after the seven phases.
 
+### Partner Connect
+
+A Data Partner connects in about fifteen minutes: one Compose file on a server
+in their network and a setup page there, instead of SQL jobs and a mapping
+file. [`docs/PARTNER-CONNECT.md`](docs/PARTNER-CONNECT.md) explains how the
+Partner side works; [`docs/DEPLOY-PARTNER-AGENT.md`](docs/DEPLOY-PARTNER-AGENT.md)
+is the engineer's guide. `pnpm verify:partner-connect` checks it end to end;
+add `-- --agent <path to oolix-agent>` to also drive a live managed Agent.
+
 "Exit criteria met" means `pnpm verify` asserts that phase's §85 exit criterion
 against a running stack and passes. Phases 8-10 depend on facts that do not
 exist yet -- a chosen pilot Partner's mobile stack, and real Meta/Google account
