@@ -408,14 +408,16 @@ func (s *Server) saveSource(w http.ResponseWriter, r *http.Request, sess *sessio
 		Database: strings.TrimSpace(f("database")), User: strings.TrimSpace(f("user")),
 		Password: f("password"), TLS: f("tls"), URI: strings.TrimSpace(f("uri")), Location: f("location"),
 		Bucket: strings.TrimSpace(f("bucket")), Path: strings.TrimSpace(f("path")),
-		Region: strings.TrimSpace(f("region")),
+		Region: strings.TrimSpace(f("region")), Warehouse: strings.TrimSpace(f("warehouse")),
+		Role: strings.TrimSpace(f("role")),
 	}
 	// A private key or a service-account key is the secret, in place of a
 	// password, and is sealed the same way.
-	if k := strings.TrimSpace(f("private_key")); k != "" && cfg.Kind == source.SFTP {
+	if k := strings.TrimSpace(f("private_key")); k != "" && (cfg.Kind == source.SFTP || cfg.Kind == source.Snowflake) {
 		cfg.Password = k
 	}
-	if k := strings.TrimSpace(f("service_account")); k != "" && cfg.Kind == source.GCS {
+	if k := strings.TrimSpace(f("service_account")); k != "" &&
+		(cfg.Kind == source.GCS || cfg.Kind == source.BigQuery || cfg.Kind == source.GoogleSheets) {
 		cfg.Password = k
 	}
 	v := s.view(r, sess, st, "Connect your database", "/source")
@@ -490,6 +492,26 @@ func (s *Server) saveSource(w http.ResponseWriter, r *http.Request, sess *sessio
 	case source.AzureBlob:
 		if cfg.URI == "" {
 			show("Paste the container's SAS URL.")
+			return
+		}
+	case source.BigQuery:
+		if cfg.Database == "" || cfg.Path == "" || cfg.Password == "" {
+			show("Fill in the project ID and the dataset, and paste the service account's JSON key.")
+			return
+		}
+	case source.Snowflake:
+		if cfg.Host == "" || cfg.User == "" || cfg.Password == "" || cfg.Database == "" {
+			show("Fill in the account, the database and the user, and paste the user's private key.")
+			return
+		}
+	case source.Shopify:
+		if cfg.Host == "" || cfg.Password == "" {
+			show("Fill in the store's address and paste the app's Admin API access token.")
+			return
+		}
+	case source.GoogleSheets:
+		if cfg.Database == "" || cfg.Password == "" {
+			show("Paste the spreadsheet's link and the service account's JSON key.")
 			return
 		}
 	default:

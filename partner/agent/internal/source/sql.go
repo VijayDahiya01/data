@@ -183,7 +183,7 @@ var dialects = map[Kind]dialect{
 		first: func(cols, from string, n int) string {
 			return fmt.Sprintf("SELECT %s FROM %s FETCH FIRST %d ROWS ONLY", cols, from, n)
 		},
-		naive:       map[string]bool{"DATE": true, "TIMESTAMP": true, "TIMESTAMPDTY": true, "DATEDTY": true},
+		naive:       map[string]bool{"DATE": true, "OCIDATE": true, "TIMESTAMP": true, "TIMESTAMPDTY": true},
 		readOnlySQL: "SET TRANSACTION READ ONLY",
 		ping:        "SELECT 1 FROM dual",
 		page: func(cols, from, where, key string, after bool, n int) string {

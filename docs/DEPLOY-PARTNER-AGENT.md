@@ -96,7 +96,22 @@ database login. To choose the password yourself, set `OOLIX_SETUP_PASSWORD`
    statements that create one on each kind of database. Inside Docker,
    `localhost` is the Agent itself — use the database server's address, or
    `host.docker.internal` for a database on the same machine.
-3. **Choose the customer table** — the one with a row per customer.
+
+   | Where your customers are | What the Agent needs |
+   | --- | --- |
+   | PostgreSQL (and RDS, Aurora, Cloud SQL, AlloyDB, Supabase, Neon), MySQL / MariaDB, SQL Server, Oracle 12c+ | A login that can only SELECT the tables |
+   | MongoDB (and Atlas, DocumentDB) | A user with the `read` role |
+   | BigQuery | A service-account key with BigQuery Data Viewer on the dataset; tables are read without running queries |
+   | Snowflake | A user with key-pair sign-in whose role can only SELECT |
+   | Shopify | A custom app's Admin API token with `read_customers`, `read_orders` |
+   | Google Sheets | A service-account key; share the sheet with it as a viewer |
+   | Exports in a folder, on SFTP, in S3 (or MinIO, R2, Wasabi), Cloud Storage or Azure Blob | Read and list rights on that folder. CSV, Excel and JSON lines; daily exports with the date in the name are read as one table, newest first. SFTP pins the server's key on first connection |
+
+   Every password, key and token is stored encrypted on this server.
+3. **Choose the customer table** — the one with a row per customer. If some
+   details are in other tables (profiles, addresses, WordPress-style
+   `wp_usermeta`), add them on the matches step with **Add more tables**: the
+   Agent joins them itself, in a read-only query.
 4. **Check the matches.** The page matches your columns to Oolix's standard
    attributes (a date of birth becomes age, `sex` becomes gender, `City`
    becomes city…) and shows, on a sample of your own rows, exactly how each

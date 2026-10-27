@@ -2,12 +2,8 @@ package source
 
 import (
 	"context"
-	"crypto"
-	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -16,7 +12,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -27,12 +22,8 @@ import (
 type gcsStore struct {
 	bucket, prefix string
 	api            string // https://storage.googleapis.com, or a test server
-	key            serviceAccount
+	auth           *googleAuth
 	http           *http.Client
-
-	mu      sync.Mutex
-	token   string
-	expires time.Time
 }
 
 type serviceAccount struct {
@@ -81,57 +72,13 @@ func openGCS(_ context.Context, cfg Config) (*gcsStore, error) {
 	if cfg.Host != "" {
 		api = strings.TrimRight(cfg.Host, "/")
 	}
-	return &gcsStore{bucket: cfg.Bucket, prefix: strings.Trim(cfg.Path, "/"), api: api, key: sa,
-		http: &http.Client{Timeout: 10 * time.Minute}}, nil
-}
-
-// accessToken exchanges a signed JWT for a short-lived token, kept until a
-// minute before it expires.
-func (s *gcsStore) accessToken(ctx context.Context) (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.token != "" && time.Now().Before(s.expires.Add(-time.Minute)) {
-		return s.token, nil
-	}
-	now := time.Now()
-	enc := base64.RawURLEncoding
-	header := enc.EncodeToString([]byte(`{"alg":"RS256","typ":"JWT"}`))
-	claims, _ := json.Marshal(map[string]any{
-		"iss": s.key.ClientEmail, "scope": googleReadOnly, "aud": s.key.TokenURI,
-		"iat": now.Unix(), "exp": now.Add(time.Hour).Unix(),
-	})
-	unsigned := header + "." + enc.EncodeToString(claims)
-	sum := sha256.Sum256([]byte(unsigned))
-	sig, err := rsa.SignPKCS1v15(rand.Reader, s.key.rsa, crypto.SHA256, sum[:])
-	if err != nil {
-		return "", err
-	}
-	form := url.Values{"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"},
-		"assertion": {unsigned + "." + enc.EncodeToString(sig)}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.key.TokenURI, strings.NewReader(form.Encode()))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	res, err := s.http.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer res.Body.Close()
-	var tok struct {
-		AccessToken string `json:"access_token"`
-		ExpiresIn   int    `json:"expires_in"`
-		Error       string `json:"error_description"`
-	}
-	if err := json.NewDecoder(res.Body).Decode(&tok); err != nil || tok.AccessToken == "" {
-		return "", fmt.Errorf("Google refused the service account (%d): %s", res.StatusCode, tok.Error)
-	}
-	s.token, s.expires = tok.AccessToken, now.Add(time.Duration(tok.ExpiresIn)*time.Second)
-	return s.token, nil
+	client := &http.Client{Timeout: 10 * time.Minute}
+	return &gcsStore{bucket: cfg.Bucket, prefix: strings.Trim(cfg.Path, "/"), api: api,
+		auth: newGoogleAuth(sa, googleReadOnly, client), http: client}, nil
 }
 
 func (s *gcsStore) get(ctx context.Context, u string) (*http.Response, error) {
-	token, err := s.accessToken(ctx)
+	token, err := s.auth.token(ctx)
 	if err != nil {
 		return nil, err
 	}

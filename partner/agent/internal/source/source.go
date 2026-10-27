@@ -37,7 +37,7 @@ const (
 )
 
 // Kinds lists every supported source, in the order the setup page offers them.
-var Kinds = []Kind{Postgres, MySQL, SQLServer, Oracle, MongoDB, File, SFTP, S3, GCS, AzureBlob}
+var Kinds = []Kind{Postgres, MySQL, SQLServer, Oracle, MongoDB, BigQuery, Snowflake, GoogleSheets, Shopify, File, SFTP, S3, GCS, AzureBlob}
 
 // Label is how the setup page names a kind.
 func (k Kind) Label() string {
@@ -50,6 +50,14 @@ func (k Kind) Label() string {
 		return "Microsoft SQL Server"
 	case Oracle:
 		return "Oracle Database"
+	case BigQuery:
+		return "Google BigQuery"
+	case Snowflake:
+		return "Snowflake"
+	case Shopify:
+		return "Shopify store"
+	case GoogleSheets:
+		return "Google Sheets"
 	case MongoDB:
 		return "MongoDB"
 	case File:
@@ -116,6 +124,10 @@ type Config struct {
 	// HostKey is the SFTP server's key fingerprint, recorded the first time
 	// the Agent connects and required from then on.
 	HostKey string `json:"host_key,omitempty"`
+	// Warehouse and Role are Snowflake's: the compute that runs the reads,
+	// and a role with SELECT on the customer table only.
+	Warehouse string `json:"warehouse,omitempty"`
+	Role      string `json:"role,omitempty"`
 }
 
 // Table is one table, view, collection, file or sheet.
@@ -178,6 +190,14 @@ func Open(ctx context.Context, cfg Config) (Source, error) {
 		return openFile(cfg)
 	case SFTP, S3, GCS, AzureBlob:
 		return openRemote(ctx, cfg)
+	case BigQuery:
+		return openBigQuery(ctx, cfg)
+	case Snowflake:
+		return openSnowflake(ctx, cfg)
+	case Shopify:
+		return openShopify(ctx, cfg)
+	case GoogleSheets:
+		return openSheets(ctx, cfg)
 	default:
 		return nil, fmt.Errorf("unsupported source %q", cfg.Kind)
 	}

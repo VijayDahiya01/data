@@ -218,7 +218,7 @@ var Attributes = []Attribute{
 		Expr:      "date_part('day', now() - last_seen_at)",
 		Operators: []string{"LTE"},
 		Hints: []string{"last_seen_at", "last_login_at", "last_login", "last_active_at",
-			"last_activity", "last_seen", "last_visit", "last_login_date"},
+			"last_activity", "last_seen", "last_visit", "last_login_date", "date_last_active"},
 		Forms: map[Form][]string{
 			FormDaysSince: {"days_since_login", "days_since_last_login", "days_since_last_seen",
 				"days_since_active", "days_since_last_active", "inactive_days", "days_inactive"},
@@ -314,7 +314,7 @@ var (
 	CategoryHints = []string{"category", "product_category", "category_name", "purchase_category",
 		"department", "dept", "vertical", "product_type"}
 	PaymentHints = []string{"payment_method", "payment_mode", "pay_mode", "payment_type",
-		"mode_of_payment", "tender_type", "payment_channel", "pay_method"}
+		"mode_of_payment", "tender_type", "payment_channel", "pay_method", "payment_gateway", "gateway"}
 	TripHints = []string{"trip_type", "domestic_international", "trip_scope", "travel_type",
 		"sector", "route_type", "journey_type", "is_international"}
 )

@@ -51,6 +51,83 @@
     </details>
   </fieldset>
 
+  <fieldset data-kinds="bigquery">
+    <legend>BigQuery dataset</legend>
+    <div class="row">
+      <div class="grow">
+        <label for="bq_project">Project ID</label>
+        <input id="bq_project" name="database" value="{{$d.Config.Database}}" spellcheck="false">
+      </div>
+      <div class="grow">
+        <label for="bq_dataset">Dataset</label>
+        <input id="bq_dataset" name="path" value="{{$d.Config.Path}}" spellcheck="false">
+      </div>
+    </div>
+    <label for="bq_key">Service account key (JSON)</label>
+    <textarea id="bq_key" name="service_account" rows="4" spellcheck="false"
+      placeholder="{{if $d.HasPassword}}saved -- leave blank to keep it{{else}}{&quot;type&quot;: &quot;service_account&quot;, ...}{{end}}"></textarea>
+    <p class="muted">Give the service account the BigQuery Data Viewer role on this dataset only. Tables are read
+      through BigQuery's own reader, which runs no query and costs nothing; a view is read with a query.</p>
+  </fieldset>
+
+  <fieldset data-kinds="snowflake">
+    <legend>Snowflake</legend>
+    <label for="sf_account">Account</label>
+    <input id="sf_account" name="host" value="{{$d.Config.Host}}" placeholder="myorg-myaccount" spellcheck="false">
+    <div class="row">
+      <div class="grow">
+        <label for="sf_database">Database</label>
+        <input id="sf_database" name="database" value="{{$d.Config.Database}}" spellcheck="false">
+      </div>
+      <div class="grow">
+        <label for="sf_schema">Schema <span class="muted">(optional)</span></label>
+        <input id="sf_schema" name="path" value="{{$d.Config.Path}}" spellcheck="false">
+      </div>
+    </div>
+    <div class="row">
+      <div class="grow">
+        <label for="sf_warehouse">Warehouse</label>
+        <input id="sf_warehouse" name="warehouse" value="{{$d.Config.Warehouse}}" spellcheck="false">
+      </div>
+      <div class="grow">
+        <label for="sf_role">Role</label>
+        <input id="sf_role" name="role" value="{{$d.Config.Role}}" spellcheck="false">
+      </div>
+    </div>
+    <label for="sf_user">User</label>
+    <input id="sf_user" name="user" value="{{$d.Config.User}}" autocomplete="off" spellcheck="false">
+    <label for="sf_key">The user's private key</label>
+    <textarea id="sf_key" name="private_key" rows="3" spellcheck="false"
+      placeholder="{{if $d.HasPassword}}saved -- leave blank to keep it{{else}}-----BEGIN PRIVATE KEY-----{{end}}"></textarea>
+    <p class="muted">Key-pair sign-in: register the matching public key on the user (ALTER USER ... SET
+      RSA_PUBLIC_KEY), and give its role SELECT on the customer table only.</p>
+  </fieldset>
+
+  <fieldset data-kinds="shopify">
+    <legend>Shopify store</legend>
+    <label for="shop">Store address</label>
+    <input id="shop" name="host" value="{{$d.Config.Host}}" placeholder="mystore.myshopify.com" spellcheck="false">
+    <label for="shop_token">Admin API access token</label>
+    <input id="shop_token" name="password" type="password" autocomplete="new-password"
+      placeholder="{{if $d.HasPassword}}saved -- leave blank to keep it{{else}}shpat_...{{end}}">
+    <p class="muted">In your Shopify admin: Settings &rarr; Apps &rarr; Develop apps &rarr; Create an app. Give it the
+      Admin API scopes <code>read_customers</code> and <code>read_orders</code> (and <code>read_all_orders</code> for
+      orders older than 60 days), install it, and paste its access token. The Agent offers two tables: customers,
+      with Shopify's own marketing consent, and orders.</p>
+  </fieldset>
+
+  <fieldset data-kinds="google_sheets">
+    <legend>Google Sheets</legend>
+    <label for="sheet_link">Spreadsheet link</label>
+    <input id="sheet_link" name="database" value="{{$d.Config.Database}}" spellcheck="false"
+      placeholder="https://docs.google.com/spreadsheets/d/...">
+    <label for="sheet_key">Service account key (JSON)</label>
+    <textarea id="sheet_key" name="service_account" rows="4" spellcheck="false"
+      placeholder="{{if $d.HasPassword}}saved -- leave blank to keep it{{else}}{&quot;type&quot;: &quot;service_account&quot;, ...}{{end}}"></textarea>
+    <p class="muted">Share the spreadsheet with the service account's email, as a viewer. Each sheet is a table;
+      its first row names the columns.</p>
+  </fieldset>
+
   <fieldset data-kinds="sftp">
     <legend>SFTP server</legend>
     <div class="row">
