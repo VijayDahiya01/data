@@ -34,6 +34,16 @@ export const PartnerProfileSchema = z.object({
 });
 export type PartnerProfileInput = z.infer<typeof PartnerProfileSchema>;
 
+export const MarketplaceListingSchema = z.object({ listed: z.boolean() }).strict();
+export type MarketplaceListingInput = z.infer<typeof MarketplaceListingSchema>;
+
+export interface MarketplaceListing {
+  listed: boolean;
+  listed_at: string | null;
+  /** A listing shows Buyers the published capabilities; without them there is nothing to find. */
+  capabilities_published: boolean;
+}
+
 export interface ReadinessReport {
   readiness: PartnerReadiness;
   checks: Array<{ step: string; complete: boolean; detail: string }>;
@@ -74,6 +84,52 @@ export class PartnerProfileService {
 
     await this.refreshReadiness(partnerOrgId);
     return profile;
+  }
+
+  /** §66.2 marketplace listing, as the Partner sees it. */
+  async marketplaceListing(partnerOrgId: string): Promise<MarketplaceListing> {
+    const [profile, capability] = await Promise.all([
+      this.prisma.partnerProfile.findUnique({
+        where: { orgId: partnerOrgId },
+        select: { marketplaceListed: true, marketplaceListedAt: true },
+      }),
+      this.prisma.partnerCapability.findFirst({
+        where: { partnerOrgId, status: 'ACTIVE' },
+        select: { id: true },
+      }),
+    ]);
+    return {
+      listed: profile?.marketplaceListed ?? false,
+      listed_at: profile?.marketplaceListedAt?.toISOString() ?? null,
+      capabilities_published: Boolean(capability),
+    };
+  }
+
+  /**
+   * List or unlist this Partner on the marketplace.
+   *
+   * Listed, every verified Buyer can find the Partner through its published
+   * capabilities -- the only way a Partner Connect Partner, who publishes
+   * capabilities rather than segments, can be found outside a Network. What a
+   * Buyer then sees is unchanged: attribute names and reach ranges, never data.
+   */
+  async setMarketplaceListing(partnerOrgId: string, listed: boolean): Promise<MarketplaceListing> {
+    const listedAt = listed ? new Date() : null;
+    await this.prisma.partnerProfile.upsert({
+      where: { orgId: partnerOrgId },
+      create: { orgId: partnerOrgId, marketplaceListed: listed, marketplaceListedAt: listedAt },
+      update: { marketplaceListed: listed, marketplaceListedAt: listedAt },
+    });
+
+    await this.audit.record({
+      action: listed ? 'PARTNER_MARKETPLACE_LISTED' : 'PARTNER_MARKETPLACE_UNLISTED',
+      entityType: 'partner_profile',
+      entityId: partnerOrgId,
+      orgId: partnerOrgId,
+      metadata: { listed },
+    });
+
+    return this.marketplaceListing(partnerOrgId);
   }
 
   /**

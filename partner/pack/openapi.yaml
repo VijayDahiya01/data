@@ -519,6 +519,57 @@ paths:
 
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner/listing:
+    get:
+      operationId: getMarketplaceListing
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Partner supply]
+      summary: Whether every verified Buyer can find this Partner
+      description: |
+        §66.2. A Buyer finds a Partner through a shared Network, a marketplace
+        segment offer, or this listing. Listing is how a Partner that publishes
+        capabilities rather than segments (Partner Connect) is found outside a
+        Network.
+      responses:
+        '200':
+          description: Listing state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MarketplaceListing' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    put:
+      operationId: setMarketplaceListing
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [Partner supply]
+      summary: List or unlist this Partner on the marketplace
+      description: |
+        §66.2. Only a verified business can list. Listed, every verified Buyer
+        can match audiences against this Partner's published capabilities and
+        ask for reach ranges; Buyers still never see data.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [listed]
+              properties:
+                listed: { type: boolean }
+      responses:
+        '200':
+          description: Listing state after the change
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MarketplaceListing' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /v1/partner/segments:
     get:
       operationId: listPartnerSegments
@@ -3597,6 +3648,15 @@ components:
           type: [string, 'null']
           description: '§77.3: a difference beyond tolerance does NOT alter payout.'
 
+    MarketplaceListing:
+      type: object
+      required: [listed, listed_at, capabilities_published]
+      properties:
+        listed: { type: boolean }
+        listed_at: { type: [string, 'null'], format: date-time }
+        capabilities_published:
+          type: boolean
+          description: A listing shows Buyers the published capabilities; without them there is nothing to find.
     ReadinessReport:
       type: object
       properties:

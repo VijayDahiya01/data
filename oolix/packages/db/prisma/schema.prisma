@@ -642,6 +642,11 @@ model PartnerProfile {
   approvalSlaDays     Int              @default(7) @map("approval_sla_days")
   /// §72: a Partner may raise, never lower, the publishable cohort floor.
   minPublishableReach Int              @default(1000) @map("min_publishable_reach")
+  /// §66.2 marketplace listing: every verified Buyer can find this Partner by
+  /// its published capabilities, without sharing a Network. Off until the
+  /// Partner turns it on.
+  marketplaceListed   Boolean          @default(false) @map("marketplace_listed")
+  marketplaceListedAt DateTime?        @map("marketplace_listed_at") @db.Timestamptz(6)
   createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
 

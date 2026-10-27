@@ -254,6 +254,28 @@ export async function unlinkCampaignAudience(
  * customer records or Partner local field names". Ticking a box here says "we
  * can answer questions about payment method" — never how.
  */
+/**
+ * §66.2 marketplace listing: let every verified Buyer find this Partner by its
+ * published capabilities, or stop. The API checks the permission and that the
+ * business is verified; this only carries the choice.
+ */
+export async function setMarketplaceListing(
+  _prev: ActionState,
+  fd: FormData,
+): Promise<ActionState> {
+  try {
+    await api('/v1/partner/listing', {
+      method: 'PUT',
+      body: { listed: str(fd, 'listed') === 'true' },
+    });
+  } catch (err) {
+    return toState(err);
+  }
+
+  revalidatePath('/partner/capabilities');
+  return { ok: true };
+}
+
 export async function publishCapabilities(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const selected = fd.getAll('attributes').map(String).filter(Boolean);
   if (selected.length === 0) {

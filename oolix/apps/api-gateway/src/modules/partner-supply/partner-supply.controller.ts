@@ -8,7 +8,7 @@
  * So every route below acts on the caller's own organization. A Partner
  * cannot address another Partner's supply even by guessing an id.
  */
-import { Body, Controller, Get, Inject, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Patch, Post, Put } from '@nestjs/common';
 import { OolixError } from '@oolix/contracts';
 import {
   RequirePermissions,
@@ -27,9 +27,11 @@ import {
   type UpdatePlacementInput,
 } from './placement.service.js';
 import {
+  MarketplaceListingSchema,
   PartnerProfileService,
   PartnerPolicySchema,
   PartnerProfileSchema,
+  type MarketplaceListingInput,
   type PartnerPolicyInput,
   type PartnerProfileInput,
 } from './partner-profile.service.js';
@@ -68,6 +70,27 @@ export class PartnerSupplyController {
     @Body(new ZodValidationPipe(PartnerPolicySchema)) body: PartnerPolicyInput,
   ) {
     return this.profiles.publishPolicy(p.orgId, body);
+  }
+
+  /** §66.2: whether every verified Buyer can find this Partner. */
+  @Get('listing')
+  @RequirePermissions('report:read')
+  async marketplaceListing(@Principal() p: UserPrincipal) {
+    return this.profiles.marketplaceListing(p.orgId);
+  }
+
+  /**
+   * List or unlist on the marketplace. Only a verified business can list:
+   * a listing is open to every Buyer, so it must be someone Oolix has checked.
+   */
+  @Put('listing')
+  @RequirePermissions('partner:policy:manage')
+  @RequireVerifiedBusiness()
+  async setMarketplaceListing(
+    @Principal() p: UserPrincipal,
+    @Body(new ZodValidationPipe(MarketplaceListingSchema)) body: MarketplaceListingInput,
+  ) {
+    return this.profiles.setMarketplaceListing(p.orgId, body.listed);
   }
 
   /**

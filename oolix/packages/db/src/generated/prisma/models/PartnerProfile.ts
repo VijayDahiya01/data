@@ -43,6 +43,8 @@ export type PartnerProfileMinAggregateOutputType = {
   payoutProfileId: string | null
   approvalSlaDays: number | null
   minPublishableReach: number | null
+  marketplaceListed: boolean | null
+  marketplaceListedAt: Date | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -54,6 +56,8 @@ export type PartnerProfileMaxAggregateOutputType = {
   payoutProfileId: string | null
   approvalSlaDays: number | null
   minPublishableReach: number | null
+  marketplaceListed: boolean | null
+  marketplaceListedAt: Date | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -65,6 +69,8 @@ export type PartnerProfileCountAggregateOutputType = {
   payoutProfileId: number
   approvalSlaDays: number
   minPublishableReach: number
+  marketplaceListed: number
+  marketplaceListedAt: number
   createdAt: number
   updatedAt: number
   _all: number
@@ -88,6 +94,8 @@ export type PartnerProfileMinAggregateInputType = {
   payoutProfileId?: true
   approvalSlaDays?: true
   minPublishableReach?: true
+  marketplaceListed?: true
+  marketplaceListedAt?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -99,6 +107,8 @@ export type PartnerProfileMaxAggregateInputType = {
   payoutProfileId?: true
   approvalSlaDays?: true
   minPublishableReach?: true
+  marketplaceListed?: true
+  marketplaceListedAt?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -110,6 +120,8 @@ export type PartnerProfileCountAggregateInputType = {
   payoutProfileId?: true
   approvalSlaDays?: true
   minPublishableReach?: true
+  marketplaceListed?: true
+  marketplaceListedAt?: true
   createdAt?: true
   updatedAt?: true
   _all?: true
@@ -208,6 +220,8 @@ export type PartnerProfileGroupByOutputType = {
   payoutProfileId: string | null
   approvalSlaDays: number
   minPublishableReach: number
+  marketplaceListed: boolean
+  marketplaceListedAt: Date | null
   createdAt: Date
   updatedAt: Date
   _count: PartnerProfileCountAggregateOutputType | null
@@ -242,6 +256,8 @@ export type PartnerProfileWhereInput = {
   payoutProfileId?: Prisma.UuidNullableFilter<"PartnerProfile"> | string | null
   approvalSlaDays?: Prisma.IntFilter<"PartnerProfile"> | number
   minPublishableReach?: Prisma.IntFilter<"PartnerProfile"> | number
+  marketplaceListed?: Prisma.BoolFilter<"PartnerProfile"> | boolean
+  marketplaceListedAt?: Prisma.DateTimeNullableFilter<"PartnerProfile"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"PartnerProfile"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"PartnerProfile"> | Date | string
   organization?: Prisma.XOR<Prisma.OrganizationScalarRelationFilter, Prisma.OrganizationWhereInput>
@@ -254,6 +270,8 @@ export type PartnerProfileOrderByWithRelationInput = {
   payoutProfileId?: Prisma.SortOrderInput | Prisma.SortOrder
   approvalSlaDays?: Prisma.SortOrder
   minPublishableReach?: Prisma.SortOrder
+  marketplaceListed?: Prisma.SortOrder
+  marketplaceListedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   organization?: Prisma.OrganizationOrderByWithRelationInput
@@ -269,6 +287,8 @@ export type PartnerProfileWhereUniqueInput = Prisma.AtLeast<{
   payoutProfileId?: Prisma.UuidNullableFilter<"PartnerProfile"> | string | null
   approvalSlaDays?: Prisma.IntFilter<"PartnerProfile"> | number
   minPublishableReach?: Prisma.IntFilter<"PartnerProfile"> | number
+  marketplaceListed?: Prisma.BoolFilter<"PartnerProfile"> | boolean
+  marketplaceListedAt?: Prisma.DateTimeNullableFilter<"PartnerProfile"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"PartnerProfile"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"PartnerProfile"> | Date | string
   organization?: Prisma.XOR<Prisma.OrganizationScalarRelationFilter, Prisma.OrganizationWhereInput>
@@ -281,6 +301,8 @@ export type PartnerProfileOrderByWithAggregationInput = {
   payoutProfileId?: Prisma.SortOrderInput | Prisma.SortOrder
   approvalSlaDays?: Prisma.SortOrder
   minPublishableReach?: Prisma.SortOrder
+  marketplaceListed?: Prisma.SortOrder
+  marketplaceListedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   _count?: Prisma.PartnerProfileCountOrderByAggregateInput
@@ -300,6 +322,8 @@ export type PartnerProfileScalarWhereWithAggregatesInput = {
   payoutProfileId?: Prisma.UuidNullableWithAggregatesFilter<"PartnerProfile"> | string | null
   approvalSlaDays?: Prisma.IntWithAggregatesFilter<"PartnerProfile"> | number
   minPublishableReach?: Prisma.IntWithAggregatesFilter<"PartnerProfile"> | number
+  marketplaceListed?: Prisma.BoolWithAggregatesFilter<"PartnerProfile"> | boolean
+  marketplaceListedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"PartnerProfile"> | Date | string | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"PartnerProfile"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"PartnerProfile"> | Date | string
 }
@@ -310,6 +334,8 @@ export type PartnerProfileCreateInput = {
   payoutProfileId?: string | null
   approvalSlaDays?: number
   minPublishableReach?: number
+  marketplaceListed?: boolean
+  marketplaceListedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   organization: Prisma.OrganizationCreateNestedOneWithoutPartnerProfileInput
@@ -322,6 +348,8 @@ export type PartnerProfileUncheckedCreateInput = {
   payoutProfileId?: string | null
   approvalSlaDays?: number
   minPublishableReach?: number
+  marketplaceListed?: boolean
+  marketplaceListedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -332,6 +360,8 @@ export type PartnerProfileUpdateInput = {
   payoutProfileId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   approvalSlaDays?: Prisma.IntFieldUpdateOperationsInput | number
   minPublishableReach?: Prisma.IntFieldUpdateOperationsInput | number
+  marketplaceListed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  marketplaceListedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   organization?: Prisma.OrganizationUpdateOneRequiredWithoutPartnerProfileNestedInput
@@ -344,6 +374,8 @@ export type PartnerProfileUncheckedUpdateInput = {
   payoutProfileId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   approvalSlaDays?: Prisma.IntFieldUpdateOperationsInput | number
   minPublishableReach?: Prisma.IntFieldUpdateOperationsInput | number
+  marketplaceListed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  marketplaceListedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -355,6 +387,8 @@ export type PartnerProfileCreateManyInput = {
   payoutProfileId?: string | null
   approvalSlaDays?: number
   minPublishableReach?: number
+  marketplaceListed?: boolean
+  marketplaceListedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -365,6 +399,8 @@ export type PartnerProfileUpdateManyMutationInput = {
   payoutProfileId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   approvalSlaDays?: Prisma.IntFieldUpdateOperationsInput | number
   minPublishableReach?: Prisma.IntFieldUpdateOperationsInput | number
+  marketplaceListed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  marketplaceListedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -376,6 +412,8 @@ export type PartnerProfileUncheckedUpdateManyInput = {
   payoutProfileId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   approvalSlaDays?: Prisma.IntFieldUpdateOperationsInput | number
   minPublishableReach?: Prisma.IntFieldUpdateOperationsInput | number
+  marketplaceListed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  marketplaceListedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -392,6 +430,8 @@ export type PartnerProfileCountOrderByAggregateInput = {
   payoutProfileId?: Prisma.SortOrder
   approvalSlaDays?: Prisma.SortOrder
   minPublishableReach?: Prisma.SortOrder
+  marketplaceListed?: Prisma.SortOrder
+  marketplaceListedAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -408,6 +448,8 @@ export type PartnerProfileMaxOrderByAggregateInput = {
   payoutProfileId?: Prisma.SortOrder
   approvalSlaDays?: Prisma.SortOrder
   minPublishableReach?: Prisma.SortOrder
+  marketplaceListed?: Prisma.SortOrder
+  marketplaceListedAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -419,6 +461,8 @@ export type PartnerProfileMinOrderByAggregateInput = {
   payoutProfileId?: Prisma.SortOrder
   approvalSlaDays?: Prisma.SortOrder
   minPublishableReach?: Prisma.SortOrder
+  marketplaceListed?: Prisma.SortOrder
+  marketplaceListedAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -470,6 +514,8 @@ export type PartnerProfileCreateWithoutOrganizationInput = {
   payoutProfileId?: string | null
   approvalSlaDays?: number
   minPublishableReach?: number
+  marketplaceListed?: boolean
+  marketplaceListedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -480,6 +526,8 @@ export type PartnerProfileUncheckedCreateWithoutOrganizationInput = {
   payoutProfileId?: string | null
   approvalSlaDays?: number
   minPublishableReach?: number
+  marketplaceListed?: boolean
+  marketplaceListedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -506,6 +554,8 @@ export type PartnerProfileUpdateWithoutOrganizationInput = {
   payoutProfileId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   approvalSlaDays?: Prisma.IntFieldUpdateOperationsInput | number
   minPublishableReach?: Prisma.IntFieldUpdateOperationsInput | number
+  marketplaceListed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  marketplaceListedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -516,6 +566,8 @@ export type PartnerProfileUncheckedUpdateWithoutOrganizationInput = {
   payoutProfileId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   approvalSlaDays?: Prisma.IntFieldUpdateOperationsInput | number
   minPublishableReach?: Prisma.IntFieldUpdateOperationsInput | number
+  marketplaceListed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  marketplaceListedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -529,6 +581,8 @@ export type PartnerProfileSelect<ExtArgs extends runtime.Types.Extensions.Intern
   payoutProfileId?: boolean
   approvalSlaDays?: boolean
   minPublishableReach?: boolean
+  marketplaceListed?: boolean
+  marketplaceListedAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
@@ -541,6 +595,8 @@ export type PartnerProfileSelectCreateManyAndReturn<ExtArgs extends runtime.Type
   payoutProfileId?: boolean
   approvalSlaDays?: boolean
   minPublishableReach?: boolean
+  marketplaceListed?: boolean
+  marketplaceListedAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
@@ -553,6 +609,8 @@ export type PartnerProfileSelectUpdateManyAndReturn<ExtArgs extends runtime.Type
   payoutProfileId?: boolean
   approvalSlaDays?: boolean
   minPublishableReach?: boolean
+  marketplaceListed?: boolean
+  marketplaceListedAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
@@ -565,11 +623,13 @@ export type PartnerProfileSelectScalar = {
   payoutProfileId?: boolean
   approvalSlaDays?: boolean
   minPublishableReach?: boolean
+  marketplaceListed?: boolean
+  marketplaceListedAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type PartnerProfileOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"orgId" | "readinessStatus" | "activePolicyId" | "payoutProfileId" | "approvalSlaDays" | "minPublishableReach" | "createdAt" | "updatedAt", ExtArgs["result"]["partnerProfile"]>
+export type PartnerProfileOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"orgId" | "readinessStatus" | "activePolicyId" | "payoutProfileId" | "approvalSlaDays" | "minPublishableReach" | "marketplaceListed" | "marketplaceListedAt" | "createdAt" | "updatedAt", ExtArgs["result"]["partnerProfile"]>
 export type PartnerProfileInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
 }
@@ -598,6 +658,13 @@ export type $PartnerProfilePayload<ExtArgs extends runtime.Types.Extensions.Inte
      * §72: a Partner may raise, never lower, the publishable cohort floor.
      */
     minPublishableReach: number
+    /**
+     * §66.2 marketplace listing: every verified Buyer can find this Partner by
+     * its published capabilities, without sharing a Network. Off until the
+     * Partner turns it on.
+     */
+    marketplaceListed: boolean
+    marketplaceListedAt: Date | null
     createdAt: Date
     updatedAt: Date
   }, ExtArgs["result"]["partnerProfile"]>
@@ -1030,6 +1097,8 @@ export interface PartnerProfileFieldRefs {
   readonly payoutProfileId: Prisma.FieldRef<"PartnerProfile", 'String'>
   readonly approvalSlaDays: Prisma.FieldRef<"PartnerProfile", 'Int'>
   readonly minPublishableReach: Prisma.FieldRef<"PartnerProfile", 'Int'>
+  readonly marketplaceListed: Prisma.FieldRef<"PartnerProfile", 'Boolean'>
+  readonly marketplaceListedAt: Prisma.FieldRef<"PartnerProfile", 'DateTime'>
   readonly createdAt: Prisma.FieldRef<"PartnerProfile", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"PartnerProfile", 'DateTime'>
 }

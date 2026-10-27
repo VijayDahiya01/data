@@ -25,6 +25,7 @@ import {
 } from '@oolix/contracts';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { CONFIG, type OolixConfig } from '../../config/configuration.js';
+import { canSeePartner, VERIFIED_STATUSES } from '../../common/partner-visibility.js';
 import {
   buildPage,
   clampLimit,
@@ -103,9 +104,7 @@ export class CatalogueService {
     const where: Record<string, unknown> = {
       // §39: only Partner-PUBLISHED supply is discoverable.
       status: 'PUBLISHED',
-      organization: {
-        verificationStatus: { in: ['BUSINESS_VERIFIED', 'ROLE_ONBOARDING', 'ACTIVE'] },
-      },
+      organization: { verificationStatus: { in: [...VERIFIED_STATUSES] } },
       offers: {
         some: {
           OR: [
@@ -268,22 +267,8 @@ export class CatalogueService {
     if (!visible) return null;
 
     // The Buyer must share a network with this Partner, or the Partner must
-    // offer marketplace supply. Same rule the segment catalogue applies —
-    // stated here rather than inherited, because this route does not pass
-    // through a SegmentOffer.
-    const reachable = await this.prisma.networkMembership.findFirst({
-      where: {
-        orgId: partnerOrgId,
-        status: 'ACTIVE',
-        networkId: { in: principal.networkIds },
-      },
-      select: { orgId: true },
-    });
-    const marketplace = await this.prisma.segmentOffer.findFirst({
-      where: { segment: { partnerOrgId }, visibility: 'MARKETPLACE' },
-      select: { id: true },
-    });
-    if (!reachable && !marketplace) return null;
+    // be on the marketplace: the one §66.2 rule the capability match uses.
+    if (!(await canSeePartner(this.prisma, principal, partnerOrgId))) return null;
 
     const placements = await this.prisma.placement.findMany({
       where: { partnerOrgId, status: 'ACTIVE' },

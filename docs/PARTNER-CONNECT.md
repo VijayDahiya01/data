@@ -73,7 +73,11 @@ refresh once a week to notice customers deleted from the table.
 1. The advertiser builds an audience in Oolix — for example, women aged 25–40
    in Mumbai who bought in the last 30 days.
 2. Oolix finds the Partners whose attribute list fits. It uses the list only,
-   never the data.
+   never the data, and only Partners this advertiser may see: those in a
+   Network with them, and those who chose **List me for all verified
+   advertisers** in the portal (**Audience capabilities → Who can find you**).
+   A Partner who connected through the setup page and is in no Network must
+   turn that on to be found.
 3. Oolix asks the Agent how many customers match. The Agent counts on the
    Partner's server and answers with a **range** such as 10K–50K, never an
    exact number.

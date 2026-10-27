@@ -412,6 +412,14 @@ jobs:
           exit-code: '1'
           ignore-unfixed: true
 
+      # What a Partner actually runs is this image, its local store and an init
+      # container, wired together by the Compose bundle. Run that for real, so
+      # a volume permission or a start-up order that breaks fails here rather
+      # than on a Partner's server.
+      - name: Run the Partner Connect bundle
+        if: matrix.service == 'partner-agent'
+        run: bash scripts/verify-compose-bundle.sh oolix/partner-agent:${{ github.sha }}
+
       # A registry path must be all lowercase, and github.repository keeps the
       # owner's casing -- VijayDahiya01/data -- which buildx rejects outright:
       # "repository name must be lowercase". Expressions have no lower(), so

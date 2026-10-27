@@ -4240,6 +4240,8 @@ export const PartnerProfileScalarFieldEnum = {
   payoutProfileId: 'payoutProfileId',
   approvalSlaDays: 'approvalSlaDays',
   minPublishableReach: 'minPublishableReach',
+  marketplaceListed: 'marketplaceListed',
+  marketplaceListedAt: 'marketplaceListedAt',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const

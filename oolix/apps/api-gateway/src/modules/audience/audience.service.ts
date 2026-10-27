@@ -28,6 +28,7 @@ import type { AgentPrincipal, UserPrincipal } from '@oolix/auth-rbac';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { AuditService } from '../../common/audit/audit.service.js';
 import { toWireBucket } from '../../common/reach.js';
+import { canSeePartner, visiblePartnerIds } from '../../common/partner-visibility.js';
 import type {
   CreateAudienceInput,
   DataQualityReportInput,
@@ -781,10 +782,10 @@ export class AudienceService {
     // §66.2: only Partners in a network this Buyer belongs to, or offering
     // marketplace supply. A Buyer must not discover Partners they have no
     // relationship with.
-    const visiblePartnerIds = await this.visiblePartnerIds(principal);
+    const visible = await visiblePartnerIds(this.prisma, principal);
 
     const capabilities = await this.prisma.partnerCapability.findMany({
-      where: { partnerOrgId: { in: visiblePartnerIds }, status: 'ACTIVE' },
+      where: { partnerOrgId: { in: visible }, status: 'ACTIVE' },
       include: { organization: { select: { id: true, name: true, industry: true } } },
     });
 
@@ -890,26 +891,6 @@ export class AudienceService {
     };
   }
 
-  /** §66.2: Partners this Buyer may transact with at all. */
-  private async visiblePartnerIds(principal: UserPrincipal): Promise<string[]> {
-    const networkPartners = await this.prisma.networkMembership.findMany({
-      where: { networkId: { in: principal.networkIds }, status: 'ACTIVE' },
-      select: { orgId: true },
-    });
-
-    const marketplace = await this.prisma.segmentOffer.findMany({
-      where: { visibility: 'MARKETPLACE' },
-      select: { segment: { select: { partnerOrgId: true } } },
-    });
-
-    return [
-      ...new Set([
-        ...networkPartners.map((n) => n.orgId),
-        ...marketplace.map((m) => m.segment.partnerOrgId),
-      ]),
-    ].filter((orgId) => orgId !== principal.orgId);
-  }
-
   /* --- reach estimates (§8) ------------------------------------------------- */
 
   /**
@@ -946,13 +927,17 @@ export class AudienceService {
     }[] = [];
 
     for (const partnerOrgId of partnerOrgIds) {
+      // §66.2: a Partner this Buyer cannot see gets the same answer as one
+      // with nothing published, so the request cannot confirm it exists.
+      const capability = (await canSeePartner(this.prisma, principal, partnerOrgId))
+        ? await this.prisma.partnerCapability.findFirst({
+            where: { partnerOrgId, status: 'ACTIVE' },
+            orderBy: { capabilityVersion: 'desc' },
+          })
+        : null;
       // A Partner that cannot evaluate every REQUIRED rule cannot produce a
       // meaningful estimate, so asking would waste their query and mislead the
       // Buyer (§7).
-      const capability = await this.prisma.partnerCapability.findFirst({
-        where: { partnerOrgId, status: 'ACTIVE' },
-        orderBy: { capabilityVersion: 'desc' },
-      });
       if (!capability) {
         throw new OolixError('PART_002', 'That Partner has published no capabilities.');
       }

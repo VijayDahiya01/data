@@ -17,6 +17,7 @@ import { apiOptional } from '@/lib/api';
 import { Shell } from '@/components/Shell';
 import { Card, Empty, Notice, PageHeader, StatusBadge, relative } from '@/components/ui';
 import { CapabilitiesForm } from '@/components/CapabilitiesForm';
+import { MarketplaceListingForm } from '@/components/MarketplaceListingForm';
 import type { TaxonomyAttribute } from '@/components/AudienceBuilder';
 
 interface Capabilities {
@@ -48,6 +49,13 @@ const BUCKET_LABELS: Record<string, string> = {
   OVER_1M: 'over 10 lakh',
 };
 
+/** §66.2: whether every verified Buyer can find this Partner. */
+interface Listing {
+  listed: boolean;
+  listed_at: string | null;
+  capabilities_published: boolean;
+}
+
 interface AgentRow {
   agent_id: string;
   status: string;
@@ -59,11 +67,12 @@ interface AgentRow {
 export default async function CapabilitiesPage() {
   const ctx = await requireContext('/partner/capabilities');
 
-  const [capabilities, taxonomy, agents, quality] = await Promise.all([
+  const [capabilities, taxonomy, agents, quality, listing] = await Promise.all([
     apiOptional<Capabilities>('/v1/partner/capabilities'),
     apiOptional<{ items: TaxonomyAttribute[] }>('/v1/audiences/taxonomy'),
     apiOptional<{ items: AgentRow[] }>('/v1/partner/agents'),
     apiOptional<DataQuality>('/v1/partner/capabilities/quality'),
+    apiOptional<Listing>('/v1/partner/listing'),
   ]);
 
   const attributes = taxonomy?.items ?? [];
@@ -157,6 +166,15 @@ export default async function CapabilitiesPage() {
           <p className="faint small" style={{ marginBottom: 0 }}>
             To raise these, answer the unknown values on your Agent&rsquo;s setup page.
           </p>
+        </Card>
+      ) : null}
+
+      {listing ? (
+        <Card title="Who can find you">
+          <MarketplaceListingForm
+            listed={listing.listed}
+            capabilitiesPublished={listing.capabilities_published}
+          />
         </Card>
       ) : null}
 
