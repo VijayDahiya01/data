@@ -394,10 +394,14 @@ func run(ctx context.Context, src source.Source, store *localstore.Store, m Mapp
 		return nil
 	}
 
-	if changes != nil {
+	switch {
+	case changes != nil:
 		err = changes.StreamSince(ctx, m.Table, columns, m.UpdatedColumn, *since, each)
-	} else {
+	case opts.pushed:
+		// Pushed rows carry joined columns already, by their joined names.
 		err = src.Stream(ctx, m.Table, columns, each)
+	default:
+		err = source.StreamJoined(ctx, src, m.Table, m.IDColumn, columns, m.Joins, each)
 	}
 	if err == nil {
 		err = flush()

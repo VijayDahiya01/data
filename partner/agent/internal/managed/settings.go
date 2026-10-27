@@ -129,6 +129,10 @@ type Mapping struct {
 	// Orders and Bookings are optional tables with one row per order or per
 	// booking. The attributes they provide are not read from the customer
 	// table.
+	// Joins are other tables with more about the same customers -- profiles,
+	// addresses, key-value fields -- read with the customer table. Their
+	// columns are named "<table>.<column>" in Attributes.
+	Joins    []source.Join    `json:"joins,omitempty"`
 	Orders   *ActivityMapping `json:"orders,omitempty"`
 	Bookings *ActivityMapping `json:"bookings,omitempty"`
 	// UpdatedColumn is a date-time column the Partner's system sets whenever a

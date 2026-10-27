@@ -51,14 +51,15 @@ func (s *fileSource) Tables(context.Context) ([]Table, error) {
 		return nil, err
 	}
 	var out []Table
+	var plain []string
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
 		}
 		name := e.Name()
 		switch strings.ToLower(filepath.Ext(name)) {
-		case ".csv", ".tsv", ".txt":
-			out = append(out, Table{Name: name, Rows: -1})
+		case ".csv", ".tsv", ".txt", ".jsonl", ".ndjson":
+			plain = append(plain, name)
 		case ".xlsx", ".xlsm":
 			f, err := excelize.OpenFile(filepath.Join(s.folder, name))
 			if err != nil {
@@ -70,8 +71,34 @@ func (s *fileSource) Tables(context.Context) ([]Table, error) {
 			_ = f.Close()
 		}
 	}
+	// Daily exports of one table are listed once, as their series.
+	series, _ := groupSeries(plain)
+	for _, name := range series {
+		out = append(out, Table{Name: name, Rows: -1})
+	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
+}
+
+// resolve is the file a listed table reads: itself, or a series' newest.
+func (s *fileSource) resolve(table string) (string, error) {
+	if !strings.Contains(table, "*") {
+		return filepath.Base(table), nil
+	}
+	entries, err := os.ReadDir(s.folder)
+	if err != nil {
+		return "", err
+	}
+	var files []string
+	for _, e := range entries {
+		if series, _, ok := seriesOf(e.Name()); ok && !e.IsDir() && series == table {
+			files = append(files, e.Name())
+		}
+	}
+	if latest := newest(files); latest != "" {
+		return latest, nil
+	}
+	return "", fmt.Errorf("%w: no file in the series %s", ErrUnknownTable, table)
 }
 
 // each reads a table row by row. The name must be one Tables lists, and the
@@ -94,9 +121,17 @@ func (s *fileSource) each(ctx context.Context, table string, fn func(header []st
 	}
 
 	file, sheet, isSheet := strings.Cut(table, ":")
-	path := filepath.Join(s.folder, filepath.Base(file))
 	if isSheet {
-		return eachSheet(ctx, path, sheet, fn)
+		return eachSheet(ctx, filepath.Join(s.folder, filepath.Base(file)), sheet, fn)
+	}
+	name, err := s.resolve(file)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(s.folder, name)
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".jsonl", ".ndjson":
+		return eachJSONLines(ctx, path, fn)
 	}
 	return eachCSV(ctx, path, fn)
 }
@@ -211,14 +246,21 @@ func toRow(header, rec []string, keep map[string]bool) Row {
 }
 
 func (s *fileSource) Columns(ctx context.Context, table string) ([]detect.Column, error) {
+	// The first row names a CSV's columns; JSON lines may each have
+	// different fields, so the first thousand are looked at.
 	var cols []detect.Column
+	seen, rows := map[string]bool{}, 0
 	err := s.each(ctx, table, func(header, _ []string) error {
 		for _, h := range header {
-			if h != "" {
+			if h != "" && !seen[h] {
+				seen[h] = true
 				cols = append(cols, detect.Column{Name: h, Type: "text"})
 			}
 		}
-		return errStop
+		if rows++; rows >= 1000 {
+			return errStop
+		}
+		return nil
 	})
 	if errors.Is(err, errStop) {
 		err = nil

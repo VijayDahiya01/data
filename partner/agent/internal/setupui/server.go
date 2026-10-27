@@ -168,6 +168,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /table", s.auth(s.chooseTable))
 	mux.HandleFunc("GET /review", s.auth(s.reviewPage))
 	mux.HandleFunc("POST /review", s.auth(s.saveReview))
+	mux.HandleFunc("GET /joins", s.auth(s.joinsPage))
+	mux.HandleFunc("POST /joins", s.auth(s.saveJoins))
 	mux.HandleFunc("GET /activity", s.auth(s.activityPage))
 	mux.HandleFunc("POST /activity", s.auth(s.saveActivity))
 	mux.HandleFunc("GET /consent", s.auth(s.consentPage))

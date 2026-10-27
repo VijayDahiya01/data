@@ -19,6 +19,8 @@
     {{if $d.IDColumn}}
     <p class="muted">{{$d.IDUnique}}% of the sampled IDs are different from each other.
       {{if lt $d.IDUnique 100}}A customer listed more than once is copied once.{{end}}</p>
+    <p>Something kept in another table, such as a profiles or addresses table?
+      <a href="/joins">Add more tables</a>{{with $d.Joins}} ({{len .}} added){{end}}.</p>
     {{end}}
 
     {{if $d.TimeColumns}}

@@ -280,11 +280,72 @@ func flatten(prefix string, doc bson.D, out Row) {
 			}
 			flatten(key, d, out)
 		case bson.A:
-			// Skipped: a list has no single value to copy.
+			flattenList(key, v, out)
 		default:
 			out[key] = mongoValue(v)
 		}
 	}
+}
+
+// primaryMarks are the fields that mark one element of a list of documents
+// as the one that counts: the default address, the primary phone.
+var primaryMarks = []string{"default", "is_default", "isDefault", "primary", "is_primary", "isPrimary",
+	"preferred", "is_preferred", "isPreferred", "main"}
+
+// flattenList reads a list, which has no single value, in the two shapes
+// common enough to mean something. A list of documents -- addresses, say --
+// is read as its primary element, the one marked default or primary, else the
+// first: "addresses.city" is the city of the address that counts. A list of
+// plain values -- favourite categories -- is read as its first value, under
+// the field's own name.
+func flattenList(key string, list bson.A, out Row) {
+	var docs []bson.D
+	for _, item := range list {
+		switch d := item.(type) {
+		case bson.D:
+			docs = append(docs, d)
+		case bson.M:
+			doc := bson.D{}
+			for k, x := range d {
+				doc = append(doc, bson.E{Key: k, Value: x})
+			}
+			docs = append(docs, doc)
+		}
+	}
+	if len(docs) > 0 {
+		chosen := docs[0]
+		for _, d := range docs {
+			if marked(d) {
+				chosen = d
+				break
+			}
+		}
+		flatten(key, chosen, out)
+		return
+	}
+	for _, item := range list {
+		switch item.(type) {
+		case bson.A, bson.D, bson.M:
+			continue
+		}
+		if v := mongoValue(item); v != nil {
+			out[key] = v
+			return
+		}
+	}
+}
+
+func marked(d bson.D) bool {
+	for _, e := range d {
+		for _, m := range primaryMarks {
+			if e.Key == m {
+				if b, ok := e.Value.(bool); ok && b {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func mongoValue(v any) any {

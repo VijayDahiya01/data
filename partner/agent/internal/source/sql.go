@@ -404,9 +404,14 @@ func (s *sqlSource) stream(ctx context.Context, table string, columns []string, 
 	for i, c := range cols {
 		quoted[i] = s.d.quote(c)
 	}
-	list, ordered := strings.Join(quoted, ", "), s.d.quote(key)
+	return s.pages(ctx, strings.Join(quoted, ", "), from, where, s.d.quote(key), key, fn)
+}
 
+// pages reads SELECT list FROM from in slices ordered by the expression
+// ordered, which comes back as the column key.
+func (s *sqlSource) pages(ctx context.Context, list, from, where, ordered, key string, fn func(Row) error) error {
 	var last any
+	var err error
 	started, total := time.Now(), 0
 	for {
 		var got int

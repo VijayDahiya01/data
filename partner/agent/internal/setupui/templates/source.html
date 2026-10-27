@@ -53,10 +53,11 @@
 
   <fieldset data-kinds="file">
     <legend>Files</legend>
-    <p>Put CSV or Excel exports of your customer list in the <code>import</code> folder next to
+    <p>Put CSV, Excel or JSON-lines exports of your customer list in the <code>import</code> folder next to
       <code>docker-compose.yml</code> (inside the Agent it is <code>{{$d.ImportFolder}}</code>).
       Replace the file with a fresh export, under the same name, whenever you like: the Agent reads it again
-      every night.</p>
+      every night. Daily exports with the date in the name -- <code>customers_2026-10-27.csv</code> -- are one
+      table, and the newest is read.</p>
     {{if $d.Files}}
     <p>Found: {{range $i, $f := $d.Files}}{{if $i}}, {{end}}<code>{{$f}}</code>{{end}}</p>
     {{else}}

@@ -1,0 +1,94 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1>More tables</h1>
+<p class="lead">If <code>{{$d.Table}}</code> does not hold everything -- dates of birth in a profiles table, cities
+  in an addresses table, fields in a table with one row per field -- add those tables here. The Agent joins them on
+  the customer ID in its own read-only query. Nothing is created in your database.</p>
+
+{{if $d.Joins}}
+<section class="card">
+  <h2>Added</h2>
+  <table class="list">
+    <thead><tr><th>Table</th><th>Customer ID column</th><th>Holds</th><th></th></tr></thead>
+    <tbody>
+      {{range $d.Joins}}
+      <tr>
+        <td><code>{{.Table}}</code></td><td><code>{{.Key}}</code></td><td>{{.Kind}}</td>
+        <td>
+          <form method="post" action="/joins" class="inline">
+            <input type="hidden" name="csrf" value="{{$.CSRF}}">
+            <input type="hidden" name="table" value="{{.Table}}">
+            <button type="submit" name="action" value="remove" class="secondary">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</section>
+{{end}}
+
+<section class="card">
+  <h2>Add a table</h2>
+  {{if $d.Adding}}
+  <form method="post" action="/joins" class="form">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <input type="hidden" name="table" value="{{$d.Adding}}">
+    <p>Adding <code>{{$d.Adding}}</code> to <code>{{$d.Table}}</code>, joined on <code>{{$d.IDColumn}}</code>.</p>
+
+    <label for="key">Its column with the customer ID</label>
+    <select id="key" name="key" required>
+      <option value="">Choose a column</option>
+      {{range $d.Columns}}<option value="{{.}}"{{if eq . $d.Key}} selected{{end}}>{{.}}</option>{{end}}
+    </select>
+
+    <fieldset>
+      <legend>This table has</legend>
+      <label class="check"><input type="radio" name="kind" value="one"{{if not $d.NameColumn}} checked{{end}}>
+        One row per customer</label>
+      <label class="check"><input type="radio" name="kind" value="latest"> Several rows per customer -- use the one
+        with the latest</label>
+      <select name="latest" aria-label="Column that says which row is latest">
+        {{range $d.Columns}}<option value="{{.}}">{{.}}</option>{{end}}
+      </select>
+      <label class="check"><input type="radio" name="kind" value="kv"{{if $d.NameColumn}} checked{{end}}> One row per
+        customer and field, such as <code>meta_key</code> and <code>meta_value</code></label>
+      <div class="question">
+        <label for="name_column">Field name column</label>
+        <select id="name_column" name="name_column">
+          <option value=""></option>
+          {{range $d.Columns}}<option value="{{.}}"{{if eq . $d.NameColumn}} selected{{end}}>{{.}}</option>{{end}}
+        </select>
+        <label for="value_column">Value column</label>
+        <select id="value_column" name="value_column">
+          <option value=""></option>
+          {{range $d.Columns}}<option value="{{.}}"{{if eq . $d.ValueColumn}} selected{{end}}>{{.}}</option>{{end}}
+        </select>
+        {{if $d.Names}}
+        <p>Fields to read (from a sample):</p>
+        {{range $d.Names}}<label class="check"><input type="checkbox" name="fields" value="{{.Name}}"> <code>{{.Name}}</code>
+          <span class="muted">&times; {{.Count}}</span></label>{{end}}
+        {{end}}
+      </div>
+    </fieldset>
+    <div class="actions">
+      <a class="button secondary" href="/joins">Cancel</a>
+      <button type="submit" name="action" value="add">Add this table</button>
+    </div>
+  </form>
+  {{else if $d.Tables}}
+  <form method="post" action="/joins" class="form">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label for="table">Table</label>
+    <select id="table" name="table" required>
+      {{range $d.Tables}}<option value="{{.}}">{{.}}</option>{{end}}
+    </select>
+    <button type="submit" name="action" value="choose">Next</button>
+  </form>
+  {{else}}
+  <p class="muted">There are no other tables to add.</p>
+  {{end}}
+</section>
+
+<p><a href="/review">Back to the matches</a></p>
+{{end}}

@@ -186,7 +186,9 @@ func (r *Runner) SyncOnce(ctx context.Context) (*Report, error) {
 // column, a full sync in the last week made with the same choices, and a
 // watermark to start from.
 func (r *Runner) incrementalSince(ctx context.Context, m Mapping) (time.Time, bool) {
-	if m.UpdatedColumn == "" {
+	// A changed-at column on the customer table says nothing about the
+	// tables joined to it: with joins, every refresh reads everything.
+	if m.UpdatedColumn == "" || len(m.Joins) > 0 {
 		return time.Time{}, false
 	}
 	s := Settings{r.Store}

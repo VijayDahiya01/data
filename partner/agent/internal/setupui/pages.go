@@ -372,7 +372,7 @@ func (s *Server) sourceData(cfg source.Config) sourceData {
 	if entries, err := os.ReadDir(s.opts.ImportFolder); err == nil {
 		for _, e := range entries {
 			ext := strings.ToLower(filepath.Ext(e.Name()))
-			if !e.IsDir() && slices.Contains([]string{".csv", ".tsv", ".txt", ".xlsx", ".xlsm"}, ext) {
+			if !e.IsDir() && slices.Contains([]string{".csv", ".tsv", ".txt", ".jsonl", ".ndjson", ".xlsx", ".xlsm"}, ext) {
 				d.Files = append(d.Files, e.Name())
 			}
 		}
@@ -694,6 +694,9 @@ func (s *Server) previewOf(ctx context.Context, st state, table string) (*previe
 
 // currentPreview is the sample of the draft's customer table.
 func (s *Server) currentPreview(ctx context.Context, st state) (*preview, error) {
+	if len(st.draft.Joins) > 0 {
+		return s.joinedPreview(ctx, st)
+	}
 	return s.previewOf(ctx, st, st.draft.Table)
 }
 
@@ -816,7 +819,9 @@ type columnOption struct {
 }
 
 type reviewData struct {
-	Table    string
+	Table string
+	// Joins are the other tables read with this one.
+	Joins    []source.Join
 	Columns  []columnOption
 	IDColumn string
 	IDUnique int
@@ -873,7 +878,7 @@ func uniqueShare(values []any) int {
 
 func (s *Server) reviewData(p *preview, m *managed.Mapping) reviewData {
 	now := s.opts.Now()
-	d := reviewData{Table: p.table, IDColumn: m.IDColumn, UpdatedColumn: m.UpdatedColumn}
+	d := reviewData{Table: p.table, IDColumn: m.IDColumn, UpdatedColumn: m.UpdatedColumn, Joins: m.Joins}
 	for _, c := range p.columns {
 		d.Columns = append(d.Columns, columnOption{Name: c.Name, Type: c.Type})
 		d.Sampled = max(d.Sampled, len(p.sample[c.Name]))
