@@ -2,6 +2,7 @@ package source
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -23,6 +24,8 @@ import (
 type mongoSource struct {
 	client *mongo.Client
 	db     *mongo.Database
+	// pageSize and rowsPerSecond as for SQL: see stream in sql.go.
+	pageSize, rowsPerSecond int
 }
 
 func openMongo(ctx context.Context, cfg Config) (Source, error) {
@@ -58,7 +61,8 @@ func openMongo(ctx context.Context, cfg Config) (Source, error) {
 		_ = client.Disconnect(ctx)
 		return nil, fmt.Errorf("a database name is required for MongoDB")
 	}
-	s := &mongoSource{client: client, db: client.Database(cfg.Database)}
+	s := &mongoSource{client: client, db: client.Database(cfg.Database), pageSize: pageSize,
+		rowsPerSecond: cfg.RowsPerSecond}
 	if err := s.Test(ctx); err != nil {
 		_ = client.Disconnect(ctx)
 		return nil, err
@@ -160,21 +164,83 @@ func (s *mongoSource) find(ctx context.Context, table string, columns []string, 
 		return err
 	}
 	// Only the chosen fields cross the wire: a projection, not a filter
-	// applied after the whole document has been read.
+	// applied after the whole document has been read. _id comes too: the
+	// collection is read in slices in _id order, as SQL tables are read in key
+	// order, each slice a short query that is tried again from the last
+	// document read if it fails.
 	proj := bson.D{}
 	for _, c := range columns {
 		proj = append(proj, bson.E{Key: c, Value: 1})
 	}
-	cur, err := s.db.Collection(table).Find(ctx, filter,
-		options.Find().SetProjection(proj).SetBatchSize(1000))
+	var last any
+	started, total := time.Now(), 0
+	for {
+		var got int
+		var err error
+		for attempt := 1; ; attempt++ {
+			got, err = s.page(ctx, table, columns, proj, filter, &last, func(row Row) error {
+				total++
+				return fn(row)
+			})
+			var cbErr callbackError
+			if err == nil || errors.As(err, &cbErr) || ctx.Err() != nil || attempt == pageAttempts {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Duration(attempt) * 2 * time.Second):
+			}
+		}
+		var cbErr callbackError
+		if errors.As(err, &cbErr) {
+			return cbErr.err
+		}
+		if err != nil {
+			return fmt.Errorf("reading documents after %d: %w", total, err)
+		}
+		if got < s.pageSize {
+			return nil
+		}
+		if s.rowsPerSecond > 0 {
+			due := time.Duration(float64(total) / float64(s.rowsPerSecond) * float64(time.Second))
+			if wait := due - time.Since(started); wait > 0 {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(wait):
+				}
+			}
+		}
+	}
+}
+
+// page reads one slice: up to pageSize documents after *last, in _id order.
+func (s *mongoSource) page(ctx context.Context, table string, columns []string, proj, filter bson.D,
+	last *any, fn func(Row) error) (int, error) {
+	ctx, cancel := context.WithTimeout(ctx, pageTimeout)
+	defer cancel()
+	if *last != nil {
+		filter = bson.D{{Key: "$and", Value: bson.A{filter,
+			bson.D{{Key: "_id", Value: bson.D{{Key: "$gt", Value: *last}}}}}}}
+	}
+	cur, err := s.db.Collection(table).Find(ctx, filter, options.Find().SetProjection(proj).
+		SetSort(bson.D{{Key: "_id", Value: 1}}).SetLimit(int64(s.pageSize)).SetBatchSize(1000))
 	if err != nil {
-		return fmt.Errorf("reading: %w", err)
+		return 0, fmt.Errorf("reading: %w", err)
 	}
 	defer cur.Close(ctx)
+	got := 0
 	for cur.Next(ctx) {
 		var doc bson.D
 		if err := cur.Decode(&doc); err != nil {
-			return err
+			return got, err
+		}
+		var id any
+		for _, e := range doc {
+			if e.Key == "_id" {
+				id = e.Value
+			}
 		}
 		all := Row{}
 		flatten("", doc, all)
@@ -183,10 +249,12 @@ func (s *mongoSource) find(ctx context.Context, table string, columns []string, 
 			row[c] = all[c]
 		}
 		if err := fn(row); err != nil {
-			return err
+			return got, callbackError{err}
 		}
+		*last = id
+		got++
 	}
-	return cur.Err()
+	return got, cur.Err()
 }
 
 func (s *mongoSource) Close() error {

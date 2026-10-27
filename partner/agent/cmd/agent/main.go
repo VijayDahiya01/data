@@ -254,6 +254,8 @@ type serving struct {
 	audiencePool *pgxpool.Pool
 	// onSyncer is told the control-plane client once it exists.
 	onSyncer func(*controlsync.Syncer)
+	// pusher serves the push routes; nil outside managed mode.
+	pusher httpapi.Pusher
 }
 
 // serve runs the parts both modes share: the decision engine, the private
@@ -334,6 +336,7 @@ func serve(ctx context.Context, cfg *config.Config, logger *slog.Logger, parts s
 		Timeout:    cfg.Agent.DecisionTimeout,
 		StaleGrace: cfg.Agent.StaleGrace,
 		Metrics:    recorder,
+		Pusher:     parts.pusher,
 	}
 
 	httpServer := &http.Server{
@@ -807,6 +810,7 @@ func runManaged(ctx context.Context, cfg *config.Config, logger *slog.Logger) er
 		conn:      managed.ScrambledConnector{Connector: view, Scramble: store.ScrambleID},
 		evaluator: evaluator,
 		index:     managed.ScrambledAudience{AudienceIndex: evaluator, Scramble: store.ScrambleID},
+		pusher:    pushAPI{store: store, runner: runner},
 		onSyncer: func(s *controlsync.Syncer) {
 			runner.SetQualityReporter(func(ctx context.Context, q managed.Quality) error {
 				return s.ReportQuality(ctx, q)

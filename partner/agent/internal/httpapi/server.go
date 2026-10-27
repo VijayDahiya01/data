@@ -41,6 +41,8 @@ type Server struct {
 	// Metrics may be nil: an Agent that was built before this existed, or a
 	// test that does not care, must still serve decisions.
 	Metrics *metrics.Recorder
+	// Pusher serves the push routes; nil outside managed mode.
+	Pusher Pusher
 }
 
 type decisionRequest struct {
@@ -60,6 +62,7 @@ func (s *Server) Handler() http.Handler {
 	// The Partner's own collector scrapes this. Oolix cannot: the Agent is
 	// inside the Partner's network and nothing from outside reaches it.
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
+	s.pushRoutes(mux)
 	return mux
 }
 

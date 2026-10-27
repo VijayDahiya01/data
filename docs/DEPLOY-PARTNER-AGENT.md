@@ -162,6 +162,31 @@ backend calls port `8082` on that server with the customer ID it already
 knows. The Agent scrambles it the same way before looking it up, so the raw ID
 is never stored.
 
+### 5. Optional: tell the Agent about changes directly
+
+Between nightly refreshes your system can call the Agent on the same port,
+with the push token from the setup page's overview
+(`Authorization: Bearer oxp_...`):
+
+| Call                                                       | What happens                                                                                                                                                                                  |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /private/v1/consent/withdraw` `{"partner_user_id"}`  | The customer is out of the copy and every audience at once, and stays out -- even if your table still says yes -- until the table records consent given after the withdrawal, or you restore it |
+| `POST /private/v1/consent/restore` `{"partner_user_id"}`   | Forgets the withdrawal; the customer is copied again at the next refresh if the table says they agreed                                                                                       |
+| `POST /private/v1/customers` `{"rows": [...]}`             | Up to 1,000 whole rows, keyed by your table's own column names, cleaned exactly as the nightly refresh cleans them and applied at once. Refused with 503 while a refresh is running            |
+
+The setup page shows the token, ready-made examples, and the columns a pushed
+row must carry. Without the token these calls are refused.
+
+### Reading a large table
+
+The Agent reads tables with a single-column primary key in slices of 10,000
+rows, in key order, each a short read-only query with a two-minute limit; a
+slice that fails on a dropped connection is read again from the last row, not
+from the start. A table without such a key (a view) is read in one query. If
+the database is busy at night too, set a reading speed on the setup page's
+connection step, point the Agent at a read replica, or choose a changed-at
+column so the nightly read covers only the customers who changed.
+
 ### Keeping it running
 
 - **Upgrade:** `docker compose pull && docker compose up -d`. The copy, your

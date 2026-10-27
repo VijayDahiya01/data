@@ -89,6 +89,9 @@ type Config struct {
 	// Location is the time zone wall-clock times are written in, such as
 	// "Asia/Kolkata"; see package clean. Used to render naive times correctly.
 	Location string `json:"location,omitempty"`
+	// RowsPerSecond caps how fast tables are read, for a database that is
+	// busy at night too. 0 means no cap.
+	RowsPerSecond int `json:"rows_per_second,omitempty"`
 }
 
 // Table is one table, view, collection, file or sheet.

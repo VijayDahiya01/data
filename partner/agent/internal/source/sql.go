@@ -3,9 +3,11 @@ package source
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -37,6 +39,36 @@ type dialect struct {
 	// readOnlyTx says reads run inside a READ ONLY transaction, so even a
 	// login that could write cannot, through this Agent.
 	readOnlyTx bool
+	// timeout, when set, is run first in the read-only transaction to stop a
+	// slow query on the server itself, not only in the Agent.
+	timeout string
+	// page is one slice of a table in key order: up to n rows, after the key
+	// bound as the one parameter when after is true.
+	page func(cols, from, where, key string, after bool, n int) string
+}
+
+// pageWhere joins a slice's conditions.
+func pageWhere(where, keyAfter string) string {
+	switch {
+	case where != "" && keyAfter != "":
+		return " WHERE " + where + " AND " + keyAfter
+	case where != "":
+		return " WHERE " + where
+	case keyAfter != "":
+		return " WHERE " + keyAfter
+	}
+	return ""
+}
+
+// limitPage is the slice query for databases with LIMIT.
+func limitPage(placeholder string) func(cols, from, where, key string, after bool, n int) string {
+	return func(cols, from, where, key string, after bool, n int) string {
+		keyAfter := ""
+		if after {
+			keyAfter = key + " > " + placeholder
+		}
+		return fmt.Sprintf("SELECT %s FROM %s%s ORDER BY %s LIMIT %d", cols, from, pageWhere(where, keyAfter), key, n)
+	}
 }
 
 func doubleQuote(s string) string { return `"` + strings.ReplaceAll(s, `"`, `""`) + `"` }
@@ -68,6 +100,8 @@ var dialects = map[Kind]dialect{
 		defaultSchema: "public", hideSchema: "public",
 		naive:      map[string]bool{"DATE": true, "TIMESTAMP": true},
 		readOnlyTx: true,
+		timeout:    "SET LOCAL statement_timeout = '" + strconv.Itoa(int(pageTimeout/time.Millisecond)) + "'",
+		page:       limitPage("$1"),
 	},
 	MySQL: {
 		quote: backtick,
@@ -84,6 +118,7 @@ var dialects = map[Kind]dialect{
 		// the session runs in the Partner's zone; nothing needs converting.
 		naive:      map[string]bool{},
 		readOnlyTx: true,
+		page:       limitPage("?"),
 	},
 	SQLServer: {
 		quote: bracket,
@@ -111,6 +146,13 @@ var dialects = map[Kind]dialect{
 		// SQL Server's driver has no read-only transactions; the Partner's
 		// login is the guard there (db_datareader), and only SELECTs are sent.
 		readOnlyTx: false,
+		page: func(cols, from, where, key string, after bool, n int) string {
+			keyAfter := ""
+			if after {
+				keyAfter = key + " > @p1"
+			}
+			return fmt.Sprintf("SELECT TOP (%d) %s FROM %s%s ORDER BY %s", n, cols, from, pageWhere(where, keyAfter), key)
+		},
 	},
 }
 
@@ -119,6 +161,9 @@ type sqlSource struct {
 	db   *sql.DB
 	d    dialect
 	loc  *time.Location
+	// pageSize is the rows per slice; rowsPerSecond caps the read rate (0:
+	// no cap).
+	pageSize, rowsPerSecond int
 }
 
 func openSQL(ctx context.Context, cfg Config) (Source, error) {
@@ -178,7 +223,8 @@ func openSQL(ctx context.Context, cfg Config) (Source, error) {
 	}
 	db.SetMaxOpenConns(2)
 	db.SetConnMaxIdleTime(time.Minute)
-	s := &sqlSource{kind: cfg.Kind, db: db, d: dialects[cfg.Kind], loc: loc}
+	s := &sqlSource{kind: cfg.Kind, db: db, d: dialects[cfg.Kind], loc: loc,
+		pageSize: pageSize, rowsPerSecond: cfg.RowsPerSecond}
 	if err := s.Test(ctx); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -298,11 +344,7 @@ func (s *sqlSource) Sample(ctx context.Context, table string, n int) (map[string
 }
 
 func (s *sqlSource) Stream(ctx context.Context, table string, columns []string, fn func(Row) error) error {
-	query, err := s.selectFrom(ctx, table, columns)
-	if err != nil {
-		return err
-	}
-	return s.read(ctx, query, fn)
+	return s.stream(ctx, table, columns, "", fn)
 }
 
 // StreamSince reads the rows whose date column is on or after since. The
@@ -312,12 +354,138 @@ func (s *sqlSource) Stream(ctx context.Context, table string, columns []string, 
 // necessarily the Agent's. Callers filter exactly on the parsed dates.
 func (s *sqlSource) StreamSince(ctx context.Context, table string, columns []string, dateColumn string,
 	since time.Time, fn func(Row) error) error {
+	bound := since.AddDate(0, 0, -2).Format("20060102")
+	return s.stream(ctx, table, columns, s.d.quote(dateColumn)+" >= '"+bound+"'", fn)
+}
+
+// Reading a large table from a Partner's production database must not hurt
+// it. A table with a single-column primary key is read in slices of pageSize
+// rows, in key order (`WHERE key > last ORDER BY key`), each slice its own
+// short query with a time limit -- never one transaction held open for hours.
+// A slice that fails, say on a dropped connection, is tried again from the
+// last row read, so a sync does not start over. A Partner may also cap the
+// rows read per second. A table without such a key -- a view, usually -- is
+// read in one query, as before.
+const (
+	pageSize     = 10000
+	pageTimeout  = 2 * time.Minute
+	pageAttempts = 3
+)
+
+// callbackError marks an error from the caller's row function, which is not
+// the database's and is never retried.
+type callbackError struct{ err error }
+
+func (e callbackError) Error() string { return e.err.Error() }
+func (e callbackError) Unwrap() error { return e.err }
+
+func (s *sqlSource) stream(ctx context.Context, table string, columns []string, where string, fn func(Row) error) error {
 	query, err := s.selectFrom(ctx, table, columns)
 	if err != nil {
 		return err
 	}
-	bound := since.AddDate(0, 0, -2).Format("20060102")
-	return s.read(ctx, query+" WHERE "+s.d.quote(dateColumn)+" >= '"+bound+"'", fn)
+	key, err := s.pagingKey(ctx, table)
+	if err != nil {
+		return err
+	}
+	if key == "" {
+		if where != "" {
+			query += " WHERE " + where
+		}
+		return s.read(ctx, query, fn)
+	}
+	from, _ := s.from(ctx, table)
+	cols := columns
+	if !slices.Contains(cols, key) {
+		// The key is read too, to know where the next slice starts.
+		cols = append(slices.Clone(cols), key)
+	}
+	quoted := make([]string, len(cols))
+	for i, c := range cols {
+		quoted[i] = s.d.quote(c)
+	}
+	list, ordered := strings.Join(quoted, ", "), s.d.quote(key)
+
+	var last any
+	started, total := time.Now(), 0
+	for {
+		var got int
+		for attempt := 1; ; attempt++ {
+			query := s.d.page(list, from, where, ordered, last != nil, s.pageSize)
+			var args []any
+			if last != nil {
+				args = []any{last}
+			}
+			got = 0
+			err = s.readRaw(ctx, query, args, pageTimeout, func(row Row, raw map[string]any) error {
+				if err := fn(row); err != nil {
+					return callbackError{err}
+				}
+				last = raw[key]
+				got++
+				total++
+				return nil
+			})
+			var cbErr callbackError
+			if err == nil || errors.As(err, &cbErr) || ctx.Err() != nil || attempt == pageAttempts {
+				break
+			}
+			// Carry on from the last row read, after a pause.
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Duration(attempt) * 2 * time.Second):
+			}
+		}
+		var cbErr callbackError
+		if errors.As(err, &cbErr) {
+			return cbErr.err
+		}
+		if err != nil {
+			return fmt.Errorf("reading rows after %d: %w", total, err)
+		}
+		if got < s.pageSize {
+			return nil
+		}
+		if err := s.pace(ctx, started, total); err != nil {
+			return err
+		}
+	}
+}
+
+// pace waits, when the Partner set a limit, until reading total rows has
+// taken at least total/rowsPerSecond seconds.
+func (s *sqlSource) pace(ctx context.Context, started time.Time, total int) error {
+	if s.rowsPerSecond <= 0 {
+		return nil
+	}
+	due := time.Duration(float64(total) / float64(s.rowsPerSecond) * float64(time.Second))
+	if wait := due - time.Since(started); wait > 0 {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(wait):
+		}
+	}
+	return nil
+}
+
+// pagingKey is the table's primary key when it is a single column, or "".
+func (s *sqlSource) pagingKey(ctx context.Context, table string) (string, error) {
+	cols, err := s.Columns(ctx, table)
+	if err != nil {
+		return "", err
+	}
+	key := ""
+	for _, c := range cols {
+		if c.PrimaryKey {
+			if key != "" {
+				return "", nil
+			}
+			key = c.Name
+		}
+	}
+	return key, nil
 }
 
 func (s *sqlSource) selectFrom(ctx context.Context, table string, columns []string) (string, error) {
@@ -338,6 +506,20 @@ func (s *sqlSource) selectFrom(ctx context.Context, table string, columns []stri
 // read runs one SELECT, inside a read-only transaction where the database
 // supports one, and hands back each row with its values made plain.
 func (s *sqlSource) read(ctx context.Context, query string, fn func(Row) error) error {
+	return s.readRaw(ctx, query, nil, 0, func(row Row, _ map[string]any) error { return fn(row) })
+}
+
+// readRaw runs one SELECT with bound arguments and, when timeout is set, a
+// time limit -- in the Agent, and on the server where the database has one.
+// fn also gets each value as the driver returned it, before plain() made it
+// readable: a slice's key must go back to the database exactly as it came.
+func (s *sqlSource) readRaw(ctx context.Context, query string, args []any, timeout time.Duration,
+	fn func(Row, map[string]any) error) error {
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
 	var q interface {
 		QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 	} = s.db
@@ -347,9 +529,14 @@ func (s *sqlSource) read(ctx context.Context, query string, fn func(Row) error) 
 			return fmt.Errorf("starting a read-only transaction: %w", err)
 		}
 		defer func() { _ = tx.Rollback() }()
+		if timeout > 0 && s.d.timeout != "" {
+			if _, err := tx.ExecContext(ctx, s.d.timeout); err != nil {
+				return fmt.Errorf("setting a time limit: %w", err)
+			}
+		}
 		q = tx
 	}
-	rows, err := q.QueryContext(ctx, query)
+	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("reading: %w", err)
 	}
@@ -368,10 +555,12 @@ func (s *sqlSource) read(ctx context.Context, query string, fn func(Row) error) 
 			return err
 		}
 		row := make(Row, len(types))
+		raw := make(map[string]any, len(types))
 		for i, t := range types {
 			row[t.Name()] = plain(values[i], s.d.naive[strings.ToUpper(t.DatabaseTypeName())], s.loc)
+			raw[t.Name()] = values[i]
 		}
-		if err := fn(row); err != nil {
+		if err := fn(row, raw); err != nil {
 			return err
 		}
 	}

@@ -228,7 +228,7 @@ func MeasureConsent(c ConsentMapping, loc string, sample map[string][]any, now t
 	var out ConsentMeasurement
 	for _, row := range Rows(sample) {
 		out.Rows++
-		eligible, withdrawn := consentOf(row, c, location(loc), now)
+		eligible, withdrawn, _ := consentOf(row, c, location(loc), now)
 		switch {
 		case withdrawn != nil:
 			out.Withdrawn++

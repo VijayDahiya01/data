@@ -83,6 +83,33 @@
 </section>
 {{end}}
 
+{{with $d.PushToken}}
+<section class="card">
+  <h2>Tell the Agent directly <span class="muted">(optional)</span></h2>
+  <p>Your own system can tell this Agent about changes between nightly refreshes, through the same port as ad
+    decisions (8082). Most useful: when a customer withdraws consent, they are out of every audience at once, and
+    stay out until your table records consent given again.</p>
+  <details>
+    <summary>Push token and examples</summary>
+    <p>Send this token with every call. Anyone who has it can change the copy, so keep it with your other
+      secrets.</p>
+    <pre><code>{{.}}</code></pre>
+    <h3>A customer withdrew consent</h3>
+    <pre><code>curl -X POST http://THIS-SERVER:8082/private/v1/consent/withdraw \
+  -H "Authorization: Bearer {{.}}" -H "Content-Type: application/json" \
+  -d '{"partner_user_id": "C123"}'</code></pre>
+    <p class="muted"><code>/private/v1/consent/restore</code>, with the same body, undoes it when they agree
+      again.</p>
+    <h3>Customers changed</h3>
+    <pre><code>curl -X POST http://THIS-SERVER:8082/private/v1/customers \
+  -H "Authorization: Bearer {{.}}" -H "Content-Type: application/json" \
+  -d '{"rows": [{ {{- range $i, $c := $d.PushColumns}}{{if $i}}, {{end}}"{{$c}}": "..."{{end -}} }]}'</code></pre>
+    <p class="muted">Whole rows, as in your table, up to 1,000 a call: <code>{{$d.IDColumn}}</code> and every
+      column the matches step uses. Each is cleaned exactly as the nightly refresh would clean it.</p>
+  </details>
+</section>
+{{end}}
+
 <section class="card">
   <h2>What is stored on this server</h2>
   <ul>

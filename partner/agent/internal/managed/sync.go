@@ -179,7 +179,18 @@ func (c cleaner) value(raw any, asOf, now time.Time) (v any, present, ok bool) {
 // yesterday's copy exactly as it was. Customers removed at the source, or who
 // withdrew consent, disappear from the copy at the next sync.
 func Sync(ctx context.Context, src source.Source, store *localstore.Store, m Mapping, now time.Time) (Report, error) {
-	return run(ctx, src, store, m, now, nil)
+	return run(ctx, src, store, m, now, runOptions{})
+}
+
+// ModePushed marks rows the Partner's own system sent.
+const ModePushed = "PUSHED"
+
+type runOptions struct {
+	// since reads only the rows changed since then: an incremental sync.
+	since *time.Time
+	// pushed applies rows the Partner's system sent, as an incremental sync
+	// does, without reading orders and bookings again.
+	pushed bool
 }
 
 // SyncChanges reads only the customers changed since `since`, through the
@@ -189,13 +200,19 @@ func Sync(ctx context.Context, src source.Source, store *localstore.Store, m Map
 // notice a customer deleted from the table; the weekly full sync does.
 func SyncChanges(ctx context.Context, src source.Source, store *localstore.Store, m Mapping,
 	since, now time.Time) (Report, error) {
-	return run(ctx, src, store, m, now, &since)
+	return run(ctx, src, store, m, now, runOptions{since: &since})
 }
 
 func run(ctx context.Context, src source.Source, store *localstore.Store, m Mapping, now time.Time,
-	since *time.Time) (Report, error) {
+	opts runOptions) (Report, error) {
+	since := opts.since
+	// Changes go into the live copy; a full sync builds a new one beside it.
+	incremental := since != nil || opts.pushed
 	rep := Report{StartedAt: now.UTC(), Mode: ModeFull, Attributes: map[string]AttributeReport{}}
-	if since != nil {
+	switch {
+	case opts.pushed:
+		rep.Mode = ModePushed
+	case since != nil:
 		rep.Mode = ModeIncremental
 	}
 	if m.Table == "" || m.IDColumn == "" {
@@ -248,6 +265,12 @@ func run(ctx context.Context, src source.Source, store *localstore.Store, m Mapp
 	want(m.Consent.Withdrawal)
 	want(m.UpdatedColumn)
 
+	// Customers who withdrew through the Partner's own system stay out while
+	// the table still says yes -- unless it records consent given since.
+	withdrawn, err := withdrawals(ctx, store)
+	if err != nil {
+		return rep, err
+	}
 	if err := prepareStaging(ctx, store); err != nil {
 		return rep, err
 	}
@@ -324,14 +347,17 @@ func run(ctx context.Context, src source.Source, store *localstore.Store, m Mapp
 		// be judged.
 		if spanUnderAge(span{hi: values[index["dob_hi"]]}, now) {
 			rep.UnderAge++
-			if since != nil {
+			if incremental {
 				// Already in the copy, perhaps, with a birth date since corrected.
 				consentBatch = append(consentBatch, []any{scrambled, localstore.AnyPurpose, false, policyVersion, now.UTC(), nil})
 			}
 			return nil
 		}
 
-		eligible, withdrawnAt := consentOf(row, m.Consent, loc, now)
+		eligible, withdrawnAt, givenAt := consentOf(row, m.Consent, loc, now)
+		if at, ok := withdrawn[scrambled]; ok && eligible && !givenAt.After(at) {
+			eligible, withdrawnAt = false, at
+		}
 		// Recorded for everyone, so a customer listed twice with conflicting
 		// answers can be left out rather than guessed about.
 		consentBatch = append(consentBatch, []any{scrambled, localstore.AnyPurpose, eligible, policyVersion, now.UTC(), withdrawnAt})
@@ -368,7 +394,6 @@ func run(ctx context.Context, src source.Source, store *localstore.Store, m Mapp
 		return nil
 	}
 
-	var err error
 	if changes != nil {
 		err = changes.StreamSince(ctx, m.Table, columns, m.UpdatedColumn, *since, each)
 	} else {
@@ -381,7 +406,7 @@ func run(ctx context.Context, src source.Source, store *localstore.Store, m Mapp
 		kind string
 		am   *ActivityMapping
 	}{{kindOrders, m.Orders}, {kindBookings, m.Bookings}} {
-		if err == nil && act.am != nil && act.am.Table != "" {
+		if err == nil && act.am != nil && act.am.Table != "" && !opts.pushed {
 			err = stageActivity(ctx, src, store, act.kind, *act.am, loc, now, &rep, unrecognised)
 		}
 	}
@@ -401,8 +426,8 @@ func run(ctx context.Context, src source.Source, store *localstore.Store, m Mapp
 		rep.Attributes[key] = ar
 	}
 
-	if since != nil {
-		err = applyChanges(ctx, store, attrCols, provides, now, &rep)
+	if incremental {
+		err = applyChanges(ctx, store, attrCols, provides, !opts.pushed, now, &rep)
 	} else {
 		err = swapIn(ctx, store, attrCols, provides, now, &rep)
 	}
@@ -411,8 +436,9 @@ func run(ctx context.Context, src source.Source, store *localstore.Store, m Mapp
 }
 
 // consentOf reads marketing consent for one row. Unknown means no: a customer
-// is eligible only when the data says so.
-func consentOf(row source.Row, c ConsentMapping, loc *time.Location, now time.Time) (bool, any) {
+// is eligible only when the data says so. givenAt is when consent was given,
+// when the table records a date rather than a yes/no.
+func consentOf(row source.Row, c ConsentMapping, loc *time.Location, now time.Time) (bool, any, time.Time) {
 	opts := clean.DateOptions{Order: clean.DayFirst, Location: loc}
 	given := c.Everyone
 	var givenAt time.Time
@@ -440,7 +466,15 @@ func consentOf(row source.Row, c ConsentMapping, loc *time.Location, now time.Ti
 			}
 		}
 	}
-	return given && withdrawnAt == nil, withdrawnAt
+	return given && withdrawnAt == nil, withdrawnAt, givenAt
+}
+
+// notWithdrawnSince keeps out customers withdrawn through a push after a sync
+// began: the sync read them before the withdrawal and would bring them back.
+// $1 is the sync's start; id is the column holding the scrambled id.
+func notWithdrawnSince(id string) string {
+	return `NOT EXISTS (SELECT 1 FROM ` + localstore.WithdrawalsTable + ` w
+	                     WHERE w.partner_user_id = ` + id + ` AND w.withdrawn_at >= $1)`
 }
 
 // yearsBetween is someone's age on day `to` if born on `from`. Month and day
@@ -528,8 +562,9 @@ func swapIn(ctx context.Context, store *localstore.Store, attrCols []string, pro
 		// for them says yes: when duplicates disagree, the answer is no.
 		{sql: `INSERT INTO ` + nextConsent + ` (partner_user_id, purpose_id, eligible, policy_version, updated_at)
 		   SELECT partner_user_id, '` + localstore.AnyPurpose + `', true, '` + policyVersion + `', max(updated_at)
-		   FROM ` + stagingConsent + ` GROUP BY partner_user_id
-		   HAVING bool_and(eligible AND withdrawn_at IS NULL)`},
+		   FROM ` + stagingConsent + ` s GROUP BY partner_user_id
+		   HAVING bool_and(eligible AND withdrawn_at IS NULL) AND ` + notWithdrawnSince("s.partner_user_id"),
+			args: []any{rep.StartedAt}},
 		{sql: localstore.AttributeDDL(nextAttributes)},
 		{sql: insert, args: args},
 		{sql: `CREATE UNIQUE INDEX oolix_attributes_pkey_idx_next ON ` + nextAttributes + ` (partner_user_id)`},
@@ -590,10 +625,10 @@ func swapIn(ctx context.Context, store *localstore.Store, attrCols []string, pro
 }
 
 // applyChanges applies an incremental sync's staged customers to the live
-// copy in one transaction, then brings every customer's order and booking
-// sums up to date.
+// copy in one transaction, then, with sums set, brings every customer's order
+// and booking sums up to date.
 func applyChanges(ctx context.Context, store *localstore.Store, attrCols []string, provides map[string]bool,
-	now time.Time, rep *Report) error {
+	sums bool, now time.Time, rep *Report) error {
 	fromActivity := activityColumns(provides)
 	// The customer table's own columns: an update must not blank what orders
 	// and bookings supply.
@@ -617,8 +652,10 @@ func applyChanges(ctx context.Context, store *localstore.Store, attrCols []strin
 				args []any
 			}{
 				{sql: `CREATE TEMP TABLE oolix_changed ON COMMIT DROP AS
-				   SELECT partner_user_id, bool_and(eligible AND withdrawn_at IS NULL) AS ok, count(*) AS n
-				   FROM ` + stagingConsent + ` GROUP BY partner_user_id`},
+				   SELECT partner_user_id,
+				          bool_and(eligible AND withdrawn_at IS NULL) AND ` + notWithdrawnSince("s.partner_user_id") + ` AS ok,
+				          count(*) AS n
+				   FROM ` + stagingConsent + ` s GROUP BY partner_user_id`, args: []any{rep.StartedAt}},
 				// Withdrawn, or now known to be under 18: out of the copy.
 				{sql: `DELETE FROM ` + attrs + ` t USING oolix_changed c
 				   WHERE t.partner_user_id = c.partner_user_id AND NOT c.ok`},
@@ -637,7 +674,7 @@ func applyChanges(ctx context.Context, store *localstore.Store, attrCols []strin
 				   ORDER BY a.partner_user_id, a.ctid DESC
 				   ON CONFLICT (partner_user_id) DO UPDATE SET ` + strings.Join(set, ", ")},
 			}
-			if len(fromActivity) > 0 {
+			if len(fromActivity) > 0 && sums {
 				// The windows move every day, so every customer's sums are
 				// recomputed; only rows whose sums changed are written.
 				var cols, values, fresh []string

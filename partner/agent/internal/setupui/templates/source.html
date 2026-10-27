@@ -69,6 +69,15 @@
     {{range $d.Locations}}<option value="{{.Value}}"{{if eq .Value $d.Config.Location}} selected{{end}}>{{.Label}}</option>{{end}}
   </select>
 
+  <details>
+    <summary>Reading speed <span class="muted">(optional)</span></summary>
+    <label for="rows_per_second">Read at most this many rows a second</label>
+    <input id="rows_per_second" name="rows_per_second" type="number" min="0" step="1000"
+      value="{{if $d.Config.RowsPerSecond}}{{$d.Config.RowsPerSecond}}{{end}}" placeholder="No limit">
+    <p class="muted">The Agent reads at night, 10,000 rows at a time, each a short read-only query. If your
+      database is busy at night too, set a limit here, or point the Agent at a read replica.</p>
+  </details>
+
   <button type="submit">Test and save</button>
 </form>
 

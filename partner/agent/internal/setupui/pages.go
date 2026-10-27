@@ -180,6 +180,11 @@ type overviewData struct {
 	// refresh.
 	NextFull *time.Time
 	Activity []activityStatus
+	// PushToken lets the Partner's system tell the Agent about changes
+	// directly; PushColumns are what a pushed row must carry.
+	PushToken   string
+	IDColumn    string
+	PushColumns []string
 }
 
 type activityStatus struct {
@@ -246,6 +251,16 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request, sess *session)
 			next := full.FinishedAt.Add(managed.FullSyncEvery)
 			d.NextFull = &next
 		}
+	}
+	if st.published() {
+		// Made the first time it is shown; the page is behind the setup
+		// password, like everything else here.
+		if d.PushToken, err = managed.PushToken(ctx, s.opts.Store); err != nil {
+			s.fail(w, err)
+			return
+		}
+		d.IDColumn = st.live.IDColumn
+		d.PushColumns = st.live.PushColumns()
 	}
 	v := s.view(r, sess, st, "Overview", "/")
 	v.Data = d
@@ -417,10 +432,19 @@ func (s *Server) saveSource(w http.ResponseWriter, r *http.Request, sess *sessio
 		}
 		cfg.Port = port
 	}
+	if p := strings.TrimSpace(f("rows_per_second")); p != "" {
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 0 {
+			show("The reading speed must be a number of rows a second, or empty for no limit.")
+			return
+		}
+		cfg.RowsPerSecond = n
+	}
 	if cfg.Kind == source.File {
 		// Always the import folder: the page cannot be used to read files
 		// anywhere else on this server.
-		cfg = source.Config{Kind: source.File, Folder: s.opts.ImportFolder, Location: cfg.Location}
+		cfg = source.Config{Kind: source.File, Folder: s.opts.ImportFolder, Location: cfg.Location,
+			RowsPerSecond: cfg.RowsPerSecond}
 	} else if saved := st.source; saved != nil && saved.Kind == cfg.Kind {
 		// A blank secret keeps the saved one, so correcting a host name does
 		// not mean typing the password again.
@@ -555,7 +579,9 @@ func (s *Server) tablePage(w http.ResponseWriter, r *http.Request, sess *session
 	if current == "" && len(rows) > 0 && rows[0].Likely {
 		rows[0].Selected = true
 	}
-	v.Data = map[string]any{"Tables": rows, "Kind": st.source.Kind.Label()}
+	// Past ten million rows a read replica is worth suggesting.
+	large := slices.ContainsFunc(rows, func(t tableRow) bool { return t.Rows > 10_000_000 })
+	v.Data = map[string]any{"Tables": rows, "Kind": st.source.Kind.Label(), "Large": large}
 	s.render(w, "table.html", v)
 }
 

@@ -35,7 +35,7 @@ func localStore(t *testing.T) *localstore.Store {
 		t.Fatal(err)
 	}
 	// Each test starts from an Agent nobody has set up.
-	if _, err := s.Pool.Exec(ctx, `DELETE FROM oolix_agent_settings; DELETE FROM oolix_sync_runs`); err != nil {
+	if _, err := s.Pool.Exec(ctx, `DELETE FROM oolix_agent_settings; DELETE FROM oolix_sync_runs; DELETE FROM oolix_consent_withdrawals`); err != nil {
 		t.Fatal(err)
 	}
 	return s

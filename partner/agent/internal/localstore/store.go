@@ -39,6 +39,10 @@ import (
 const (
 	AttributesTable = "oolix_audience_attributes"
 	ConsentTable    = "oolix_user_consent"
+	// WithdrawalsTable remembers customers who withdrew consent through the
+	// Partner's own system, so a refresh cannot copy them again before the
+	// table catches up. Scrambled ids and times only.
+	WithdrawalsTable = "oolix_consent_withdrawals"
 )
 
 // AnyPurpose marks consent that covers every advertising purpose: in managed
@@ -273,6 +277,11 @@ func (s *Store) migrate(ctx context.Context) error {
 		   PRIMARY KEY (activation_id, partner_user_id))`,
 		`CREATE INDEX IF NOT EXISTS idx_audience_members_lookup
 		   ON oolix_audience_members (partner_user_id, activation_id, expires_at)`,
+		// Not emptied by "Delete all copied data": a withdrawal must outlive
+		// the copy, or publishing again would bring the customer back.
+		`CREATE TABLE IF NOT EXISTS ` + WithdrawalsTable + ` (
+		   partner_user_id TEXT        PRIMARY KEY,
+		   withdrawn_at    TIMESTAMPTZ NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS oolix_audience_materialization (
 		   activation_id           UUID PRIMARY KEY,
 		   audience_group_id       VARCHAR(64)  NOT NULL,

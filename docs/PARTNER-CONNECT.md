@@ -125,6 +125,12 @@ The Partner does almost nothing:
 
 - The copy refreshes every night by itself. **Refresh now** on the setup page
   refreshes it at once — for example after customers withdraw consent.
+- Optionally, their system tells the Agent directly: a customer who withdraws
+  consent is out of every audience within a second, and stays out until the
+  table records consent given again. The setup page shows the token and the
+  two lines of code.
+- Large tables are read in small slices, each a short read-only query, so
+  the nightly read never holds their database for hours.
 - They approve or reject campaigns in the portal, and can stop any campaign
   instantly.
 - The setup page shows exactly what is stored, and has **Delete all copied

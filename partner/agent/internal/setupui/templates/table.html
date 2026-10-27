@@ -17,6 +17,12 @@
       {{end}}
     </tbody>
   </table>
+  {{if $.Data.Large}}
+  <p class="muted">Some of these tables have more than ten million rows. The Agent reads them at night, 10,000
+    rows at a time, each a short read-only query -- but if this database also serves your website, consider
+    <a href="/source">connecting to a read replica</a> instead, or setting a reading speed there. A changed-at
+    column, on the next step, makes the nightly read cover only the customers who changed.</p>
+  {{end}}
   <button type="submit">Use this table</button>
 </form>
 {{else}}
