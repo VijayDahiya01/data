@@ -33,10 +33,11 @@ const (
 	SQLServer Kind = "sqlserver"
 	MongoDB   Kind = "mongodb"
 	File      Kind = "file"
+	Oracle    Kind = "oracle"
 )
 
 // Kinds lists every supported source, in the order the setup page offers them.
-var Kinds = []Kind{Postgres, MySQL, SQLServer, MongoDB, File}
+var Kinds = []Kind{Postgres, MySQL, SQLServer, Oracle, MongoDB, File, SFTP, S3, GCS, AzureBlob}
 
 // Label is how the setup page names a kind.
 func (k Kind) Label() string {
@@ -47,10 +48,20 @@ func (k Kind) Label() string {
 		return "MySQL / MariaDB"
 	case SQLServer:
 		return "Microsoft SQL Server"
+	case Oracle:
+		return "Oracle Database"
 	case MongoDB:
 		return "MongoDB"
 	case File:
-		return "CSV or Excel files"
+		return "CSV, Excel or JSON-lines files"
+	case SFTP:
+		return "Files on an SFTP server"
+	case S3:
+		return "Files in Amazon S3 (or S3-compatible)"
+	case GCS:
+		return "Files in Google Cloud Storage"
+	case AzureBlob:
+		return "Files in Azure Blob Storage"
 	}
 	return string(k)
 }
@@ -64,6 +75,8 @@ func (k Kind) DefaultPort() int {
 		return 3306
 	case SQLServer:
 		return 1433
+	case Oracle:
+		return 1521
 	case MongoDB:
 		return 27017
 	}
@@ -92,6 +105,17 @@ type Config struct {
 	// RowsPerSecond caps how fast tables are read, for a database that is
 	// busy at night too. 0 means no cap.
 	RowsPerSecond int `json:"rows_per_second,omitempty"`
+
+	// For files in a remote folder (SFTP, S3, Google Cloud Storage, Azure
+	// Blob): the bucket, the folder inside it, and the region. User holds
+	// the access key ID; Password the secret, the SFTP password or private
+	// key, or the service-account key; URI an Azure container SAS link.
+	Bucket string `json:"bucket,omitempty"`
+	Path   string `json:"path,omitempty"`
+	Region string `json:"region,omitempty"`
+	// HostKey is the SFTP server's key fingerprint, recorded the first time
+	// the Agent connects and required from then on.
+	HostKey string `json:"host_key,omitempty"`
 }
 
 // Table is one table, view, collection, file or sheet.
@@ -146,12 +170,14 @@ func TimeType(typ string) bool {
 // Open connects to a source.
 func Open(ctx context.Context, cfg Config) (Source, error) {
 	switch cfg.Kind {
-	case Postgres, MySQL, SQLServer:
+	case Postgres, MySQL, SQLServer, Oracle:
 		return openSQL(ctx, cfg)
 	case MongoDB:
 		return openMongo(ctx, cfg)
 	case File:
 		return openFile(cfg)
+	case SFTP, S3, GCS, AzureBlob:
+		return openRemote(ctx, cfg)
 	default:
 		return nil, fmt.Errorf("unsupported source %q", cfg.Kind)
 	}

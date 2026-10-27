@@ -12,7 +12,7 @@
     {{range $d.Kinds}}<option value="{{.Value}}"{{if eq .Value (print $d.Config.Kind)}} selected{{end}}>{{.Label}}</option>{{end}}
   </select>
 
-  <fieldset data-kinds="postgres mysql sqlserver mongodb">
+  <fieldset data-kinds="postgres mysql sqlserver oracle mongodb">
     <legend>Server</legend>
     <div class="row">
       <div class="grow">
@@ -49,6 +49,93 @@
       {{if $d.HasURI}}<label class="check"><input type="checkbox" name="keep_uri" checked> Keep the saved connection string</label>{{end}}
       <p class="muted">It is stored encrypted, like the password.</p>
     </details>
+  </fieldset>
+
+  <fieldset data-kinds="sftp">
+    <legend>SFTP server</legend>
+    <div class="row">
+      <div class="grow">
+        <label for="sftp_host">Server address</label>
+        <input id="sftp_host" name="host" value="{{$d.Config.Host}}" placeholder="sftp.example.com" spellcheck="false">
+      </div>
+      <div>
+        <label for="sftp_port">Port</label>
+        <input id="sftp_port" name="port" value="{{$d.Port}}" inputmode="numeric" size="6" placeholder="22">
+      </div>
+    </div>
+    <label for="sftp_user">Username</label>
+    <input id="sftp_user" name="user" value="{{$d.Config.User}}" autocomplete="off" spellcheck="false">
+    <label for="sftp_password">Password</label>
+    <input id="sftp_password" name="password" type="password" autocomplete="new-password"
+      placeholder="{{if $d.HasPassword}}saved -- leave blank to keep it{{end}}">
+    <label for="private_key">Or a private key <span class="muted">(instead of a password)</span></label>
+    <textarea id="private_key" name="private_key" rows="3" spellcheck="false"
+      placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea>
+    <label for="sftp_path">Folder with the exports</label>
+    <input id="sftp_path" name="path" value="{{$d.Config.Path}}" placeholder="/exports" spellcheck="false">
+    {{with $d.Config.HostKey}}
+    <p class="muted">Server key, recorded on first connection: <code>{{.}}</code>. A server presenting another key
+      is refused.</p>
+    <label class="check"><input type="checkbox" name="forget_host_key"> The server's key changed on purpose: record
+      the new one</label>
+    {{end}}
+  </fieldset>
+
+  <fieldset data-kinds="s3">
+    <legend>S3 bucket</legend>
+    <div class="row">
+      <div class="grow">
+        <label for="s3_bucket">Bucket</label>
+        <input id="s3_bucket" name="bucket" value="{{$d.Config.Bucket}}" spellcheck="false">
+      </div>
+      <div>
+        <label for="s3_region">Region</label>
+        <input id="s3_region" name="region" value="{{$d.Config.Region}}" placeholder="ap-south-1" size="12">
+      </div>
+    </div>
+    <label for="s3_path">Folder with the exports</label>
+    <input id="s3_path" name="path" value="{{$d.Config.Path}}" placeholder="exports/customers" spellcheck="false">
+    <div class="row">
+      <div class="grow">
+        <label for="s3_key">Access key ID</label>
+        <input id="s3_key" name="user" value="{{$d.Config.User}}" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="grow">
+        <label for="s3_secret">Secret access key</label>
+        <input id="s3_secret" name="password" type="password" autocomplete="new-password"
+          placeholder="{{if $d.HasPassword}}saved -- leave blank to keep it{{end}}">
+      </div>
+    </div>
+    <p class="muted">Give the key read and list rights on this folder only (s3:GetObject, s3:ListBucket).</p>
+    <details>
+      <summary>Not Amazon? (MinIO, Cloudflare R2, Wasabi)</summary>
+      <label for="s3_endpoint">Endpoint</label>
+      <input id="s3_endpoint" name="host" value="{{$d.Config.Host}}" placeholder="https://storage.example.com" spellcheck="false">
+    </details>
+  </fieldset>
+
+  <fieldset data-kinds="gcs">
+    <legend>Cloud Storage bucket</legend>
+    <label for="gcs_bucket">Bucket</label>
+    <input id="gcs_bucket" name="bucket" value="{{$d.Config.Bucket}}" spellcheck="false">
+    <label for="gcs_path">Folder with the exports</label>
+    <input id="gcs_path" name="path" value="{{$d.Config.Path}}" placeholder="exports/customers" spellcheck="false">
+    <label for="service_account">Service account key (JSON)</label>
+    <textarea id="service_account" name="service_account" rows="4" spellcheck="false"
+      placeholder="{{if $d.HasPassword}}saved -- leave blank to keep it{{else}}{&quot;type&quot;: &quot;service_account&quot;, ...}{{end}}"></textarea>
+    <p class="muted">Give the service account the Storage Object Viewer role on this bucket only. The key is
+      stored encrypted.</p>
+  </fieldset>
+
+  <fieldset data-kinds="azure_blob">
+    <legend>Azure Blob container</legend>
+    <label for="azure_uri">Container SAS URL</label>
+    <input id="azure_uri" name="uri" autocomplete="off" spellcheck="false"
+      placeholder="{{if $d.HasURI}}saved -- leave blank to keep it{{else}}https://ACCOUNT.blob.core.windows.net/CONTAINER?sv=...&amp;sig=...{{end}}">
+    {{if $d.HasURI}}<input type="hidden" name="keep_uri" value="on">{{end}}
+    <label for="azure_path">Folder with the exports</label>
+    <input id="azure_path" name="path" value="{{$d.Config.Path}}" placeholder="exports/customers" spellcheck="false">
+    <p class="muted">Create the link with Read and List rights only. It is stored encrypted, like a password.</p>
   </fieldset>
 
   <fieldset data-kinds="file">
@@ -98,6 +185,11 @@ GRANT SELECT ON shop.customers TO 'oolix_reader'@'%';</code></pre>
 USE shop;
 CREATE USER oolix_reader FOR LOGIN oolix_reader;
 GRANT SELECT ON dbo.customers TO oolix_reader;</code></pre>
+  <h3>Oracle Database</h3>
+  <p>Use the service name (such as <code>ORCLPDB1</code>) as the database name.</p>
+  <pre><code>CREATE USER oolix_reader IDENTIFIED BY "choose-a-strong-password";
+GRANT CREATE SESSION TO oolix_reader;
+GRANT SELECT ON shop.customers TO oolix_reader;</code></pre>
   <h3>MongoDB</h3>
   <pre><code>use admin
 db.createUser({ user: "oolix_reader", pwd: "choose-a-strong-password",

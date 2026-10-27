@@ -124,6 +124,16 @@ jobs:
         options: >-
           --health-cmd "mongosh --quiet -u oolix -p oolix --authenticationDatabase admin --eval 'db.runCommand({ping:1}).ok'"
           --health-interval 5s --health-timeout 5s --health-retries 20
+      # Oracle Database Free: banks and insurers keep customers in Oracle.
+      oracle:
+        image: gvenzl/oracle-free:23-slim-faststart
+        env:
+          ORACLE_PASSWORD: Oolix-test-Pass1
+          APP_USER: oolix
+          APP_USER_PASSWORD: oolix
+        ports: ['1521:1521']
+        options: >-
+          --health-cmd healthcheck.sh --health-interval 10s --health-timeout 10s --health-retries 40
     steps:
       - uses: actions/checkout@v5
 
@@ -158,6 +168,7 @@ jobs:
           OOLIX_TEST_MYSQL_URL: root:oolix@tcp(localhost:3306)/oolix_source_test?tls=preferred
           OOLIX_TEST_SQLSERVER_URL: sqlserver://sa:Oolix-test-Pass1@localhost:1433?database=master&encrypt=disable
           OOLIX_TEST_MONGODB_URL: mongodb://oolix:oolix@localhost:27017/?authSource=admin
+          OOLIX_TEST_ORACLE_URL: oracle://oolix:oolix@localhost:1521/FREEPDB1
         run: go test -race -count=1 ./...
 
       - name: Build

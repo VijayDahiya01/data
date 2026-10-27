@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/microsoft/go-mssqldb" // registers the "sqlserver" driver
+	goora "github.com/sijms/go-ora/v2"
 
 	"github.com/oolix/partner-agent/internal/detect"
 )
@@ -39,6 +40,11 @@ type dialect struct {
 	// readOnlyTx says reads run inside a READ ONLY transaction, so even a
 	// login that could write cannot, through this Agent.
 	readOnlyTx bool
+	// readOnlySQL, for a driver that cannot begin a read-only transaction
+	// itself, makes one read-only as its first statement.
+	readOnlySQL string
+	// ping is the cheapest query: SELECT 1, or Oracle's SELECT 1 FROM dual.
+	ping string
 	// timeout, when set, is run first in the read-only transaction to stop a
 	// slow query on the server itself, not only in the Agent.
 	timeout string
@@ -154,6 +160,41 @@ var dialects = map[Kind]dialect{
 			return fmt.Sprintf("SELECT TOP (%d) %s FROM %s%s ORDER BY %s", n, cols, from, pageWhere(where, keyAfter), key)
 		},
 	},
+	// Oracle Database 12c and later. Tables in every schema the login can
+	// see, except Oracle's own; names come back as SCHEMA.TABLE.
+	Oracle: {
+		quote: doubleQuote,
+		tables: `SELECT owner, table_name, NVL(num_rows, -1) FROM all_tables
+		          WHERE owner IN (SELECT username FROM all_users WHERE oracle_maintained = 'N')
+		         UNION ALL
+		         SELECT owner, view_name, -1 FROM all_views
+		          WHERE owner IN (SELECT username FROM all_users WHERE oracle_maintained = 'N')
+		         ORDER BY 1, 2`,
+		columns: `SELECT c.column_name, c.data_type,
+		                 CASE WHEN EXISTS (SELECT 1 FROM all_constraints k
+		                                    JOIN all_cons_columns cc
+		                                      ON cc.owner = k.owner AND cc.constraint_name = k.constraint_name
+		                                   WHERE k.constraint_type = 'P' AND k.owner = c.owner
+		                                     AND k.table_name = c.table_name AND cc.column_name = c.column_name)
+		                      THEN 1 ELSE 0 END
+		            FROM all_tab_columns c
+		           WHERE c.owner = :1 AND c.table_name = :2
+		           ORDER BY c.column_id`,
+		first: func(cols, from string, n int) string {
+			return fmt.Sprintf("SELECT %s FROM %s FETCH FIRST %d ROWS ONLY", cols, from, n)
+		},
+		naive:       map[string]bool{"DATE": true, "TIMESTAMP": true, "TIMESTAMPDTY": true, "DATEDTY": true},
+		readOnlySQL: "SET TRANSACTION READ ONLY",
+		ping:        "SELECT 1 FROM dual",
+		page: func(cols, from, where, key string, after bool, n int) string {
+			keyAfter := ""
+			if after {
+				keyAfter = key + " > :1"
+			}
+			return fmt.Sprintf("SELECT %s FROM %s%s ORDER BY %s FETCH FIRST %d ROWS ONLY", cols, from,
+				pageWhere(where, keyAfter), key, n)
+		},
+	},
 }
 
 type sqlSource struct {
@@ -220,6 +261,12 @@ func openSQL(ctx context.Context, cfg Config) (Source, error) {
 		if err != nil {
 			return nil, fmt.Errorf("sql server settings: %w", err)
 		}
+	case Oracle:
+		var err error
+		db, err = sql.Open("oracle", oracleURL(cfg))
+		if err != nil {
+			return nil, fmt.Errorf("oracle settings: %w", err)
+		}
 	}
 	db.SetMaxOpenConns(2)
 	db.SetConnMaxIdleTime(time.Minute)
@@ -236,7 +283,11 @@ func (s *sqlSource) Test(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	var one int
-	if err := s.db.QueryRowContext(ctx, "SELECT 1").Scan(&one); err != nil {
+	ping := s.d.ping
+	if ping == "" {
+		ping = "SELECT 1"
+	}
+	if err := s.db.QueryRowContext(ctx, ping).Scan(&one); err != nil {
 		return fmt.Errorf("could not connect: %w", err)
 	}
 	return nil
@@ -354,8 +405,13 @@ func (s *sqlSource) Stream(ctx context.Context, table string, columns []string, 
 // necessarily the Agent's. Callers filter exactly on the parsed dates.
 func (s *sqlSource) StreamSince(ctx context.Context, table string, columns []string, dateColumn string,
 	since time.Time, fn func(Row) error) error {
-	bound := since.AddDate(0, 0, -2).Format("20060102")
-	return s.stream(ctx, table, columns, s.d.quote(dateColumn)+" >= '"+bound+"'", fn)
+	bound := "'" + since.AddDate(0, 0, -2).Format("20060102") + "'"
+	if s.kind == Oracle {
+		// Oracle reads a bare string by the session's date format; a DATE
+		// literal it reads the same way everywhere.
+		bound = "DATE '" + since.AddDate(0, 0, -2).Format("2006-01-02") + "'"
+	}
+	return s.stream(ctx, table, columns, s.d.quote(dateColumn)+" >= "+bound, fn)
 }
 
 // Reading a large table from a Partner's production database must not hurt
@@ -528,12 +584,17 @@ func (s *sqlSource) readRaw(ctx context.Context, query string, args []any, timeo
 	var q interface {
 		QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 	} = s.db
-	if s.d.readOnlyTx {
-		tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if s.d.readOnlyTx || s.d.readOnlySQL != "" {
+		tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: s.d.readOnlyTx})
 		if err != nil {
 			return fmt.Errorf("starting a read-only transaction: %w", err)
 		}
 		defer func() { _ = tx.Rollback() }()
+		if s.d.readOnlySQL != "" {
+			if _, err := tx.ExecContext(ctx, s.d.readOnlySQL); err != nil {
+				return fmt.Errorf("making the transaction read-only: %w", err)
+			}
+		}
 		if timeout > 0 && s.d.timeout != "" {
 			if _, err := tx.ExecContext(ctx, s.d.timeout); err != nil {
 				return fmt.Errorf("setting a time limit: %w", err)
@@ -704,4 +765,17 @@ func offset(loc *time.Location) string {
 		sign, secs = "-", -secs
 	}
 	return fmt.Sprintf("%s%02d:%02d", sign, secs/3600, secs%3600/60)
+}
+
+// oracleURL connects to an Oracle service: Database is the service name
+// (FREEPDB1, ORCLPDB1...). TLS "require" uses TCPS.
+func oracleURL(cfg Config) string {
+	if cfg.URI != "" {
+		return cfg.URI
+	}
+	opts := map[string]string{}
+	if cfg.TLS == "require" {
+		opts["SSL"] = "true"
+	}
+	return goora.BuildUrl(cfg.Host, portOr(cfg.Port, Oracle), cfg.Database, cfg.User, cfg.Password, opts)
 }

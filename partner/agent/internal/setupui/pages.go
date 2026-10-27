@@ -407,6 +407,16 @@ func (s *Server) saveSource(w http.ResponseWriter, r *http.Request, sess *sessio
 		Kind: source.Kind(f("kind")), Host: strings.TrimSpace(f("host")),
 		Database: strings.TrimSpace(f("database")), User: strings.TrimSpace(f("user")),
 		Password: f("password"), TLS: f("tls"), URI: strings.TrimSpace(f("uri")), Location: f("location"),
+		Bucket: strings.TrimSpace(f("bucket")), Path: strings.TrimSpace(f("path")),
+		Region: strings.TrimSpace(f("region")),
+	}
+	// A private key or a service-account key is the secret, in place of a
+	// password, and is sealed the same way.
+	if k := strings.TrimSpace(f("private_key")); k != "" && cfg.Kind == source.SFTP {
+		cfg.Password = k
+	}
+	if k := strings.TrimSpace(f("service_account")); k != "" && cfg.Kind == source.GCS {
+		cfg.Password = k
 	}
 	v := s.view(r, sess, st, "Connect your database", "/source")
 	show := func(msg string) {
@@ -454,10 +464,39 @@ func (s *Server) saveSource(w http.ResponseWriter, r *http.Request, sess *sessio
 		if cfg.URI == "" && f("keep_uri") == "on" {
 			cfg.URI = saved.URI
 		}
+		// The SFTP server's key stays pinned unless the Partner says it
+		// changed on purpose.
+		if cfg.Kind == source.SFTP && saved.Host == cfg.Host && saved.Port == cfg.Port && f("forget_host_key") != "on" {
+			cfg.HostKey = saved.HostKey
+		}
 	}
-	if cfg.Kind != source.File && cfg.URI == "" && (cfg.Host == "" || cfg.Database == "" && cfg.Kind != source.MongoDB) {
-		show("Fill in the server address and the database name, or paste a connection string.")
-		return
+	switch cfg.Kind {
+	case source.File:
+	case source.SFTP:
+		if cfg.Host == "" || cfg.User == "" {
+			show("Fill in the SFTP server's address and the username.")
+			return
+		}
+	case source.S3:
+		if cfg.Bucket == "" || cfg.User == "" || cfg.Password == "" {
+			show("Fill in the bucket, the access key ID and the secret access key.")
+			return
+		}
+	case source.GCS:
+		if cfg.Bucket == "" || cfg.Password == "" {
+			show("Fill in the bucket and paste the service account's JSON key.")
+			return
+		}
+	case source.AzureBlob:
+		if cfg.URI == "" {
+			show("Paste the container's SAS URL.")
+			return
+		}
+	default:
+		if cfg.URI == "" && (cfg.Host == "" || cfg.Database == "" && cfg.Kind != source.MongoDB) {
+			show("Fill in the server address and the database name, or paste a connection string.")
+			return
+		}
 	}
 
 	testCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -467,6 +506,10 @@ func (s *Server) saveSource(w http.ResponseWriter, r *http.Request, sess *sessio
 		err = src.Test(testCtx)
 		if err == nil {
 			_, err = src.Tables(testCtx)
+		}
+		if cfg.Kind == source.SFTP && cfg.HostKey == "" {
+			// First connection: pin the key the server presented.
+			cfg.HostKey = source.HostKeyOf(src)
 		}
 		_ = src.Close()
 	}
