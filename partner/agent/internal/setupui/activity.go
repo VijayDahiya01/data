@@ -177,7 +177,7 @@ func (s *Server) activityCard(ctx context.Context, st state, kind string, tables
 			c.Order = "month"
 		}
 		ms, _ := managed.Measure(activityDate, managed.AttributeMapping{Column: am.DateColumn, Order: order},
-			"", values, now)
+			"", p.sample, now)
 		c.DateMeasure, c.DatePercent = ms, ms.Percent()
 		oldest, inWindow := now.AddDate(0, 0, -standard.HistoryDays), 0
 		for _, raw := range values {
@@ -198,7 +198,7 @@ func (s *Server) activityCard(ctx context.Context, st state, kind string, tables
 		if f.Column != "" {
 			overrides := am.Overrides[def.key]
 			ms, err := managed.Measure(a, managed.AttributeMapping{Column: f.Column, Overrides: overrides},
-				"", p.sample[f.Column], now)
+				"", p.sample, now)
 			if err == nil {
 				f.Measure, f.Percent = ms, ms.Percent()
 				f.Answers = answersFor(overrides, ms)

@@ -105,6 +105,17 @@ database login. To choose the password yourself, set `OOLIX_SETUP_PASSWORD`
    become `MALE`. Whether `03/04/1990` is 3 April or March 4 is settled from
    the rest of the column when it can be, and asked when it cannot. Values it
    cannot place are listed for you to answer, never guessed.
+
+   Age may be a date of birth, a year of birth (`1992`), an age (`25`) or an
+   age group (`25-45`, `60+`, `under 25`); the last purchase may be a date, a
+   number of days (`12`), or yes/no for "in the last 30 days"; a purchase
+   count may cover 7 to 90 days. The page reads the form from the column and
+   asks once what it cannot know: whether an age is kept up to date or was
+   recorded on another date (the sign-up date, say), and how many days a
+   yes/no covers. Age groups written in words (`senior`) are answered once
+   (`60+`). Rules are then answered only with customers who certainly match:
+   someone aged 25-45 is not in a "30 to 40" audience, and anyone who may be
+   under 18 is left out of the copy.
 5. **Orders and bookings** (optional). If you keep a table with one row per
    order, or per booking, pick it: the Agent works out per customer when they
    last bought, how many orders in the last 90 days, what they buy most and

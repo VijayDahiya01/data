@@ -3,6 +3,7 @@ package managed
 import (
 	"errors"
 
+	"github.com/oolix/partner-agent/internal/clean"
 	"github.com/oolix/partner-agent/internal/standard"
 )
 
@@ -11,6 +12,69 @@ type Capability struct {
 	AttributeKey string   `json:"attribute_key"`
 	Operators    []string `json:"operators"`
 	Status       string   `json:"status"`
+	// Precision is absent when the copy holds the attribute exactly.
+	Precision *Precision `json:"precision,omitempty"`
+}
+
+// Precision says how exactly the copy holds an attribute, when not exactly:
+// ages as groups 25-45, purchases counted over 30 days. It is the Partner's
+// FORMAT -- group edges and window lengths -- never a value or a count, and it
+// lets Oolix tell a Buyer when a rule is narrower than the data can answer.
+type Precision struct {
+	// Kind is APPROXIMATE (ranges up to Width Units wide), BANDS (age groups
+	// kept up to date), WITHIN (a yes/no for the last Days days) or WINDOW (a
+	// count over Days days rather than the attribute's own window).
+	Kind  string          `json:"kind"`
+	Unit  string          `json:"unit,omitempty"`
+	Width int             `json:"width,omitempty"`
+	Bands []PrecisionBand `json:"bands,omitempty"`
+	Days  int             `json:"days,omitempty"`
+}
+
+// PrecisionBand is one age group; Hi is nil for an open one ("60+").
+type PrecisionBand struct {
+	Lo int  `json:"lo"`
+	Hi *int `json:"hi"`
+}
+
+// precisionOf is how exactly a mapping holds an attribute.
+func precisionOf(a standard.Attribute, am AttributeMapping, ar AttributeReport) *Precision {
+	switch am.Form {
+	case standard.FormBirthYear, standard.FormAge:
+		return &Precision{Kind: "APPROXIMATE", Unit: "YEARS", Width: 1}
+	case standard.FormDaysSince:
+		return &Precision{Kind: "APPROXIMATE", Unit: "DAYS", Width: 1}
+	case standard.FormWithinDays:
+		return &Precision{Kind: "WITHIN", Days: am.Days}
+	case standard.FormAgeBand:
+		var bands []PrecisionBand
+		width := 1
+		for _, text := range ar.Bands {
+			b, ok := clean.ParseBand(text)
+			if !ok {
+				continue
+			}
+			pb := PrecisionBand{Lo: b.Lo}
+			if b.Open {
+				width = max(width, clean.MaxAge-b.Lo)
+			} else {
+				hi := b.Hi
+				pb.Hi = &hi
+				width = max(width, b.Hi-b.Lo+1)
+			}
+			bands = append(bands, pb)
+		}
+		if am.AsOf == AsOfRefresh && len(bands) > 0 {
+			return &Precision{Kind: "BANDS", Unit: "YEARS", Bands: bands}
+		}
+		// Groups recorded on different dates have drifted apart: only their
+		// width still says anything.
+		return &Precision{Kind: "APPROXIMATE", Unit: "YEARS", Width: width}
+	}
+	if a.Key == "purchase_frequency" && am.window() < standard.FrequencyDays {
+		return &Precision{Kind: "WINDOW", Days: am.window()}
+	}
+	return nil
 }
 
 // Capabilities is everything the Agent tells Oolix. It names standard
@@ -44,16 +108,20 @@ func BuildCapabilities(m Mapping, last *Report) (Capabilities, error) {
 	}
 	provides := ActivityProvides(m)
 	for _, a := range standard.Attributes {
+		var precision *Precision
 		if provides[a.Key] {
+			// Worked out from every order or booking: exact.
 			if withheld(m, a.Key) || last.Attributes[a.Key].Filled == 0 {
 				continue
 			}
 		} else if am, ok := m.Attributes[a.Key]; !ok || am.Column == "" || !am.Publish ||
 			last.Attributes[a.Key].Filled == 0 {
 			continue
+		} else {
+			precision = precisionOf(a, am, last.Attributes[a.Key])
 		}
 		caps.Attributes = append(caps.Attributes, Capability{
-			AttributeKey: a.Key, Operators: a.Operators, Status: "AVAILABLE",
+			AttributeKey: a.Key, Operators: a.Operators, Status: "AVAILABLE", Precision: precision,
 		})
 	}
 	if len(caps.Attributes) == 0 {

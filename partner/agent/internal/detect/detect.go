@@ -51,6 +51,12 @@ type Suggestion struct {
 	Sampled int
 	// Order is how dates in the column are written.
 	Order clean.Order
+	// Form is how the column holds the attribute: an age group rather than a
+	// date of birth, say. FormNative for the attribute's own form.
+	Form standard.Form
+	// Days is a window read from the column's name -- 30 for
+	// "orders_last_30_days" -- or 0 when the name gives none.
+	Days int
 	// NeedsReview asks the setup page to have the Partner confirm.
 	NeedsReview bool
 	// Unrecognised lists values of a list attribute that mapped to no code.
@@ -109,19 +115,74 @@ func Suggest(columns []Column, samples map[string][]any, now time.Time) []Sugges
 // Evaluate reports how well a column the Partner picked by hand fits an
 // attribute, so the setup page can show the same numbers for it.
 func Evaluate(a standard.Attribute, c Column, values []any, now time.Time) Suggestion {
-	s := measure(a, c, values, now)
+	s := bestForm(a, c, values, now)
+	s.Days = WindowFromName(c.Name)
 	s.Score = s.Readable
 	s.NeedsReview = s.NeedsReview || s.Readable < 0.9 || len(s.Unrecognised) > 0
 	s.Reason = joinReason("chosen by you; "+readableText(s), s.Reason)
 	return s
 }
 
+// Forms lists the forms a column may hold an attribute in, the native one
+// first.
+func Forms(a standard.Attribute) []standard.Form {
+	out := []standard.Form{standard.FormNative}
+	for _, f := range []standard.Form{standard.FormBirthYear, standard.FormAge, standard.FormAgeBand,
+		standard.FormDaysSince, standard.FormWithinDays} {
+		if _, ok := a.Forms[f]; ok {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+func hintsFor(a standard.Attribute, f standard.Form) []string {
+	if f == standard.FormNative {
+		return a.Hints
+	}
+	return a.Forms[f]
+}
+
+// bestForm measures a column under each form the attribute accepts and keeps
+// the one its values read best in. The name decides a tie: a column called
+// age_group holding "25" is an age group with one-year bands, not an age.
+func bestForm(a standard.Attribute, c Column, values []any, now time.Time) Suggestion {
+	var best Suggestion
+	bestName := -1.0
+	for i, f := range Forms(a) {
+		s := measure(a, f, c, values, now)
+		name := nameScore(c.Name, hintsFor(a, f))
+		if i == 0 || s.Readable > best.Readable || (s.Readable == best.Readable && name > bestName) {
+			best, bestName = s, name
+		}
+	}
+	return best
+}
+
+var windowName = regexp.MustCompile(`(?:^|_)(?:last_?|l|past_?)?(\d{1,3})_?(?:d|day|days)(?:_|$)`)
+
+// WindowFromName reads the days a column's name says it covers:
+// orders_30d, orders_last_30_days, purchased_l7d. 0 when it says none.
+func WindowFromName(name string) int {
+	m := windowName.FindStringSubmatch(Words(name))
+	if m == nil {
+		return 0
+	}
+	n := 0
+	fmt.Sscan(m[1], &n)
+	return n
+}
+
 func score(a standard.Attribute, c Column, values []any, now time.Time) (Suggestion, bool) {
-	name := nameScore(c.Name, a.Hints)
+	name := 0.0
+	for _, f := range Forms(a) {
+		name = max(name, nameScore(c.Name, hintsFor(a, f)))
+	}
 	if name == 0 && !valueOnly[a.Key] {
 		return Suggestion{}, false
 	}
-	s := measure(a, c, values, now)
+	s := bestForm(a, c, values, now)
+	s.Days = WindowFromName(c.Name)
 	if s.Sampled == 0 {
 		// An empty column holds nothing to copy, whatever it is called.
 		if name < 1 {
@@ -144,7 +205,10 @@ func score(a standard.Attribute, c Column, values []any, now time.Time) (Suggest
 		// Right name, wrong contents: better to leave it for the Partner.
 		return Suggestion{}, false
 	}
-	s.NeedsReview = s.Score < 0.75 || s.Readable < 0.9 || len(s.Unrecognised) > 0 || s.NeedsReview
+	// An age, a number of days or a yes/no was true on some date, and a
+	// yes/no covers some number of days: the Partner has to say which.
+	s.NeedsReview = s.Score < 0.75 || s.Readable < 0.9 || len(s.Unrecognised) > 0 || s.NeedsReview ||
+		s.Form.NeedsAsOf()
 	why := "values look right"
 	if name >= 1 {
 		why = "the name matches"
@@ -164,8 +228,8 @@ func joinReason(main, note string) string {
 }
 
 // measure cleans the sample the way the sync will, and counts what survives.
-func measure(a standard.Attribute, c Column, values []any, now time.Time) Suggestion {
-	s := Suggestion{Attribute: a.Key, Column: c.Name}
+func measure(a standard.Attribute, f standard.Form, c Column, values []any, now time.Time) Suggestion {
+	s := Suggestion{Attribute: a.Key, Column: c.Name, Form: f}
 	var nonEmpty []any
 	for _, v := range values {
 		if strings.TrimSpace(clean.Text(v)) != "" {
@@ -178,6 +242,19 @@ func measure(a standard.Attribute, c Column, values []any, now time.Time) Sugges
 	}
 
 	good := 0
+	if f != standard.FormNative {
+		misses := map[string]int{}
+		for _, v := range nonEmpty {
+			if readsAs(f, v, now) {
+				good++
+			} else if f == standard.FormAgeBand {
+				misses[strings.TrimSpace(clean.Text(v))]++
+			}
+		}
+		s.Unrecognised = topValues(misses, 10)
+		s.Readable = float64(good) / float64(s.Sampled)
+		return s
+	}
 	switch a.Kind {
 	case standard.KindDate, standard.KindTimestamp:
 		decision := clean.DetectOrder(nonEmpty).Decide()
@@ -233,6 +310,28 @@ func measure(a standard.Attribute, c Column, values []any, now time.Time) Sugges
 // (Under-18s are dropped later, at sync; they still count as readable here.)
 func plausibleBirth(d, now time.Time) bool {
 	return d.Year() >= 1900 && !d.After(now.AddDate(-13, 0, 0))
+}
+
+// readsAs says whether one value reads in a form other than the native one.
+func readsAs(f standard.Form, v any, now time.Time) bool {
+	switch f {
+	case standard.FormBirthYear:
+		y, ok := clean.ParseWhole(v)
+		return ok && y >= 1900 && y <= now.Year()-13
+	case standard.FormAge:
+		n, ok := clean.ParseWhole(v)
+		return ok && n <= clean.MaxAge
+	case standard.FormAgeBand:
+		_, ok := clean.ParseBand(v)
+		return ok
+	case standard.FormDaysSince:
+		n, ok := clean.ParseWhole(v)
+		return ok && n <= 36500
+	case standard.FormWithinDays:
+		_, ok := clean.ParseBool(v)
+		return ok
+	}
+	return false
 }
 
 // SuggestID picks the column most likely to be the customer id: a name that

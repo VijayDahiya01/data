@@ -59,6 +59,58 @@
         </div>
         {{if .Problem}}<p class="error">{{.Problem}}</p>{{end}}
 
+        {{if .Forms}}
+        {{$form := .Form}}
+        <div class="question">
+          <label for="form_{{.Key}}">This column holds</label>
+          <select id="form_{{.Key}}" name="form_{{.Key}}" data-recheck>
+            {{range .Forms}}<option value="{{.Value}}"{{if eq .Value $form}} selected{{end}}>{{.Label}}</option>{{end}}
+          </select>
+        </div>
+        {{end}}
+
+        {{if .NeedsAsOf}}
+        {{$asofcol := .AsOfColumn}}
+        <div class="question{{if eq .AsOf "ask"}} ask{{end}}">
+          <label for="asof_{{.Key}}">When was each value true?</label>
+          <select id="asof_{{.Key}}" name="asof_{{.Key}}" data-recheck>
+            <option value="ask"{{if eq .AsOf "ask"}} selected{{end}}>Choose</option>
+            <option value="refresh"{{if eq .AsOf "refresh"}} selected{{end}}>Today: your system keeps it up to date</option>
+            <option value="column"{{if eq .AsOf "column"}} selected{{end}}>On the date in another column, such as the sign-up date</option>
+            <option value="date"{{if eq .AsOf "date"}} selected{{end}}>On one date, such as when this file was exported</option>
+          </select>
+          {{if eq .AsOf "column"}}
+          <label for="asof_column_{{.Key}}">Column with that date</label>
+          <select id="asof_column_{{.Key}}" name="asof_column_{{.Key}}" data-recheck>
+            <option value="">Choose a column</option>
+            {{range $d.Columns}}<option value="{{.Name}}"{{if eq .Name $asofcol}} selected{{end}}>{{.Name}}</option>{{end}}
+          </select>
+          {{else if eq .AsOf "date"}}
+          <label for="asof_date_{{.Key}}">That date</label>
+          <input id="asof_date_{{.Key}}" name="asof_date_{{.Key}}" type="date" value="{{.AsOfDate}}" data-recheck>
+          {{end}}
+          <p class="muted">An age of 25 recorded five years ago is 30 today. The Agent works out today's value from
+            the date you give, every night, so nobody has to update the column.</p>
+        </div>
+        {{end}}
+
+        {{if .AskDays}}
+        {{$days := .Days}}
+        <div class="question{{if not .Days}} ask{{end}}">
+          {{if .DayChoices}}
+          <label for="days_{{.Key}}">The count covers the last</label>
+          <select id="days_{{.Key}}" name="days_{{.Key}}" data-recheck>
+            {{range .DayChoices}}<option value="{{.}}"{{if eq . $days}} selected{{end}}>{{.}} days</option>{{end}}
+          </select>
+          <p class="muted">A count over fewer than 90 days still answers "at least so many in 90 days". A lifetime
+            count cannot: add your orders table on the next step instead.</p>
+          {{else}}
+          <label for="days_{{.Key}}">Yes means within the last how many days?</label>
+          <input id="days_{{.Key}}" name="days_{{.Key}}" type="number" min="1" max="730" value="{{if .Days}}{{.Days}}{{end}}" data-recheck>
+          {{end}}
+        </div>
+        {{end}}
+
         {{if .AskOrder}}
         <div class="question{{if .OrderNote}} ask{{end}}">
           <label for="order_{{.Key}}">In this column, 03/04/1990 means</label>
@@ -77,7 +129,24 @@
         </table>
         {{end}}
 
-        {{if .Answers}}
+        {{if and .Answers .BandAnswers}}
+        <div class="question ask">
+          <p>These values are not age groups the Agent can read. Type the group each one means, such as 25-45
+            or 60+, or <code>-</code> to ignore it.</p>
+          <table class="answers">
+            <tbody>
+              {{range $i, $a := .Answers}}
+              <tr>
+                <td><code>{{$a.Raw}}</code>{{if $a.Count}} <span class="muted">&times; {{$a.Count}}</span>{{end}}
+                  <input type="hidden" name="raw_{{$key}}_{{$i}}" value="{{$a.Raw}}"></td>
+                <td><input name="code_{{$key}}_{{$i}}" value="{{$a.Code}}" aria-label="Age group for {{$a.Raw}}"
+                    placeholder="Decide later" autocomplete="off"></td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+        {{else if .Answers}}
         <div class="question ask">
           <p>These values do not match a known {{lower .Label}}. What does each one mean?</p>
           <table class="answers">

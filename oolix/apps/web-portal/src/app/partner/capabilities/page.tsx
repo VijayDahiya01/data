@@ -20,9 +20,39 @@ import { CapabilitiesForm } from '@/components/CapabilitiesForm';
 import { MarketplaceListingForm } from '@/components/MarketplaceListingForm';
 import type { TaxonomyAttribute } from '@/components/AudienceBuilder';
 
+/** How exactly the Agent's copy holds an attribute; absent when exactly. */
+interface Precision {
+  kind: 'APPROXIMATE' | 'BANDS' | 'WITHIN' | 'WINDOW';
+  unit?: 'YEARS' | 'DAYS';
+  width?: number;
+  bands?: { lo: number; hi: number | null }[];
+  days?: number;
+}
+
+function precisionText(p: Precision | undefined): string {
+  if (!p) return 'Exactly';
+  switch (p.kind) {
+    case 'BANDS':
+      return `As age groups: ${(p.bands ?? []).map((b) => (b.hi === null ? `${b.lo}+` : `${b.lo}-${b.hi}`)).join(', ')}`;
+    case 'APPROXIMATE': {
+      const unit = p.unit === 'DAYS' ? 'day' : 'year';
+      return `To within ${p.width} ${unit}${p.width === 1 ? '' : 's'}`;
+    }
+    case 'WITHIN':
+      return `Yes or no for the last ${p.days} days`;
+    case 'WINDOW':
+      return `Counted over the last ${p.days} days`;
+  }
+}
+
 interface Capabilities {
   capability_version: number | null;
-  attributes: { attribute_key: string; operators: string[]; status?: string }[];
+  attributes: {
+    attribute_key: string;
+    operators: string[];
+    status?: string;
+    precision?: Precision;
+  }[];
   geographies: string[];
   channels: string[];
   mapping_version?: number | null;
@@ -182,28 +212,37 @@ export default async function CapabilitiesPage() {
         {declared.length === 0 ? (
           <Empty>Nothing published yet, so Buyers cannot find you.</Empty>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Attribute</th>
-                <th>Operators</th>
-              </tr>
-            </thead>
-            <tbody>
-              {declared.map((a) => {
-                const def = attributes.find((t) => t.key === a.attribute_key);
-                return (
-                  <tr key={a.attribute_key}>
-                    <td>
-                      {def?.display_name ?? a.attribute_key}
-                      <div className="faint small">{a.attribute_key}</div>
-                    </td>
-                    <td className="faint">{a.operators.join(', ')}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Attribute</th>
+                  <th>How exactly</th>
+                  <th>Operators</th>
+                </tr>
+              </thead>
+              <tbody>
+                {declared.map((a) => {
+                  const def = attributes.find((t) => t.key === a.attribute_key);
+                  return (
+                    <tr key={a.attribute_key}>
+                      <td>
+                        {def?.display_name ?? a.attribute_key}
+                        <div className="faint small">{a.attribute_key}</div>
+                      </td>
+                      <td>{precisionText(a.precision)}</td>
+                      <td className="faint">{a.operators.join(', ')}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <p className="faint small" style={{ marginBottom: 0 }}>
+              Advertisers are matched only with customers who certainly fit their rules. Where you
+              hold an attribute less exactly -- ages as groups, say -- a narrower rule reaches none
+              of your customers, and the advertiser is told how to widen it.
+            </p>
+          </>
         )}
       </Card>
 

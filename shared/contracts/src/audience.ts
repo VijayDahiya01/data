@@ -149,10 +149,33 @@ export function canonicalAudienceRules(rules: AudienceRule[]): string {
 
 /* --- capability matching (§7) ---------------------------------------------- */
 
+/**
+ * How exactly a Partner knows an attribute, when not exactly. It describes the
+ * Partner's data FORMAT -- "ages are held as groups 18-24, 25-45, 46+" -- never
+ * a customer or a value. The Agent answers rules with customers who certainly
+ * match, so a rule narrower than the format reaches nobody; this is what lets
+ * the matcher say so instead of leaving the Buyer to wonder.
+ *
+ *   APPROXIMATE  values are ranges up to `width` `unit`s wide (a year of
+ *                birth, an age in years, a number of days)
+ *   BANDS        age groups kept up to date: `bands` are the groups
+ *   WITHIN       a yes/no for "in the last `days` days"
+ *   WINDOW       a count over the last `days` days instead of the attribute's own
+ */
+export interface CapabilityPrecision {
+  kind: 'APPROXIMATE' | 'BANDS' | 'WITHIN' | 'WINDOW';
+  unit?: 'YEARS' | 'DAYS';
+  width?: number;
+  bands?: { lo: number; hi: number | null }[];
+  days?: number;
+}
+
 export interface PartnerCapabilityAttribute {
   attribute_key: string;
   operators: RuleOperator[];
   status: 'AVAILABLE' | 'UNAVAILABLE';
+  /** Absent when the Partner knows the attribute exactly. */
+  precision?: CapabilityPrecision;
 }
 
 export interface PartnerCapability {

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/oolix/partner-agent/internal/clean"
+	"github.com/oolix/partner-agent/internal/standard"
 )
 
 var now = time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC)
@@ -183,5 +184,43 @@ func TestSuggestActivityForAnOrdersTable(t *testing.T) {
 	if ActivityKind("sales_orders") != "orders" || ActivityKind("flight_bookings") != "bookings" ||
 		ActivityKind("customers") != "" {
 		t.Error("table names misread")
+	}
+}
+
+func TestSuggestFindsAgeInAnyForm(t *testing.T) {
+	now := time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		column string
+		values []any
+		form   standard.Form
+	}{
+		{"dob", []any{"14/04/1992", "01/12/1985", "1990-05-01"}, standard.FormNative},
+		{"age", []any{"25", "31", 44.0}, standard.FormAge},
+		{"age_group", []any{"25-34", "35-44", "60+"}, standard.FormAgeBand},
+		// A column called age holding groups is read as groups.
+		{"age", []any{"25-34", "35-44", "18-24"}, standard.FormAgeBand},
+		// Mixed single ages and groups read best as groups.
+		{"Age Group", []any{"25", "25-34", "60+"}, standard.FormAgeBand},
+		{"yob", []any{"1992", "1985", 1990.0}, standard.FormBirthYear},
+	} {
+		got := Suggest([]Column{{Name: tc.column}}, map[string][]any{tc.column: tc.values}, now)
+		var age Suggestion
+		for _, s := range got {
+			if s.Attribute == "age" {
+				age = s
+			}
+		}
+		if age.Column != tc.column || age.Form != tc.form {
+			t.Errorf("%s %v: suggested %q as %q, want %q", tc.column, tc.values, age.Column, age.Form, tc.form)
+		}
+	}
+}
+
+func TestSuggestReadsTheWindowFromTheName(t *testing.T) {
+	for name, want := range map[string]int{"orders_30d": 30, "orders_last_30_days": 30, "purchased_l7d": 7,
+		"OrdersPast90Days": 90, "total_orders": 0, "purchase_frequency": 0} {
+		if got := WindowFromName(name); got != want {
+			t.Errorf("%s: %d, want %d", name, got, want)
+		}
 	}
 }

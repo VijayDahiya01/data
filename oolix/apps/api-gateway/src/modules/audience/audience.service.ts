@@ -29,6 +29,7 @@ import { PrismaService } from '../../prisma/prisma.service.js';
 import { AuditService } from '../../common/audit/audit.service.js';
 import { toWireBucket } from '../../common/reach.js';
 import { canSeePartner, visiblePartnerIds } from '../../common/partner-visibility.js';
+import { precisionNotes } from './precision.js';
 import type {
   CreateAudienceInput,
   DataQualityReportInput,
@@ -38,6 +39,7 @@ import type {
 
 interface TaxonomyEntry {
   key: string;
+  displayName: string;
   dataType: string;
   operators: RuleOperator[];
   allowedValues: string[] | null;
@@ -118,6 +120,7 @@ export class AudienceService {
         a.key,
         {
           key: a.key,
+          displayName: a.displayName,
           dataType: a.dataType,
           operators: a.operatorsJson as RuleOperator[],
           allowedValues: (a.allowedValuesJson as string[] | null) ?? null,
@@ -793,6 +796,8 @@ export class AudienceService {
       where: { audienceGroupId: id, audienceVersion: version.version },
     });
     const estimateByPartner = new Map(estimates.map((e) => [e.partnerOrgId, e]));
+    const taxonomy = await this.loadTaxonomy();
+    const displayName = (key: string) => taxonomy.get(key)?.displayName ?? key;
 
     const results = capabilities.map((cap) => {
       const capability: PartnerCapability = {
@@ -815,6 +820,9 @@ export class AudienceService {
         supported_rules: match.supported_rules,
         missing_required_rules: match.missing_required_rules,
         missing_optional_rules: match.missing_optional_rules,
+        // A rule narrower than how the Partner holds an attribute reaches
+        // none of its customers; say so, and how to widen it.
+        notes: precisionNotes(rules, capability.attributes, displayName),
         capability_version: cap.capabilityVersion,
         geographies: capability.geographies,
         // §7: an external channel stays CONDITIONAL until the eligibility gate

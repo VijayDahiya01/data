@@ -51,6 +51,7 @@ type harness struct {
 	client     *http.Client
 	published  []managed.Capabilities
 	registered []managed.Identity
+	importDir  string
 }
 
 func newHarness(t *testing.T) *harness {
@@ -77,7 +78,7 @@ func newHarness(t *testing.T) *harness {
 		t.Fatal(err)
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	h := &harness{t: t, store: store}
+	h := &harness{t: t, store: store, importDir: importDir}
 	h.runner = managed.NewRunner(store, logger)
 	h.runner.Now = func() time.Time { return testNow }
 
@@ -262,7 +263,7 @@ func TestSetupFromSignInToPublishedCopy(t *testing.T) {
 	}
 
 	_, body = h.get("/")
-	for _, want := range []string{"Customers who can be shown ads", "<dd>4</dd>", "Age (from date of birth), Gender, City, Loyalty tier"} {
+	for _, want := range []string{"Customers who can be shown ads", "<dd>4</dd>", "Age, Gender, City, Loyalty tier"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("overview lacks %q", want)
 		}

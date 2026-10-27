@@ -11,7 +11,7 @@ import (
 func EvaluatorMappings() map[string]audience.Mapping {
 	out := make(map[string]audience.Mapping, len(standard.Attributes))
 	for _, a := range standard.Attributes {
-		m := audience.Mapping{Expr: a.Expr, Type: a.Type}
+		m := audience.Mapping{Expr: a.Expr, Type: a.Type, Upper: a.Upper}
 		if a.Derive != "" {
 			// Compiled as a range over the stored date, so an index serves it.
 			m.Column, m.Derive = a.Column, a.Derive
@@ -22,5 +22,6 @@ func EvaluatorMappings() map[string]audience.Mapping {
 }
 
 // MappingVersion identifies the fixed local layout in estimate reports. It
-// changes only when the Agent's standard columns do.
-const MappingVersion = 1
+// changes only when the Agent's standard columns do: 2 added the high end of
+// each range attribute.
+const MappingVersion = 2

@@ -41,8 +41,10 @@ func (m Measurement) Percent() int {
 	return int(float64(m.Readable) / float64(m.Sampled) * 100)
 }
 
-// Measure cleans a column's sample values under a mapping.
-func Measure(a standard.Attribute, am AttributeMapping, loc string, values []any, now time.Time) (Measurement, error) {
+// Measure cleans a column's sample values under a mapping. The sample holds
+// every sampled column, because some forms read a second one: the date an age
+// was true on.
+func Measure(a standard.Attribute, am AttributeMapping, loc string, sample map[string][]any, now time.Time) (Measurement, error) {
 	l := location(loc)
 	c, err := newCleaner(a, am, l)
 	if err != nil {
@@ -51,34 +53,120 @@ func Measure(a standard.Attribute, am AttributeMapping, loc string, values []any
 	var out Measurement
 	misses := map[string]int{}
 	shown := map[string]bool{}
-	for _, raw := range values {
-		v, present, ok := c.value(raw, now)
+	for _, row := range Rows(sample) {
+		raw := row[am.Column]
+		asOf := c.asOf(row, now)
+		v, present, ok := c.value(raw, asOf, now)
 		if !present {
 			continue
 		}
 		out.Sampled++
 		text := strings.TrimSpace(clean.Text(raw))
 		if !ok {
-			if a.Kind == standard.KindEnum {
+			if a.Kind == standard.KindEnum || am.Form == standard.FormAgeBand {
 				misses[text]++
 			}
 			continue
 		}
 		out.Readable++
-		if d, isTime := v.(time.Time); isTime && a.Kind == standard.KindDate && yearsBetween(d, now) < standard.MinimumAge {
+		s, isSpan := v.(span)
+		if isSpan && a.Key == "age" && spanUnderAge(s, now) {
 			out.UnderAge++
 		}
 		key := clean.Normalize(text)
-		if a.Kind == standard.KindDate || a.Kind == standard.KindTimestamp {
+		if am.Form == standard.FormNative && (a.Kind == standard.KindDate || a.Kind == standard.KindTimestamp) {
 			key = shape(text)
 		}
 		if len(out.Examples) < 4 && !shown[key] {
 			shown[key] = true
-			out.Examples = append(out.Examples, Example{Raw: text, Clean: Display(a, v, l, now)})
+			cleaned := Display(a, v, l, now)
+			if isSpan {
+				cleaned = describe(a, am, s, asOf, l, now)
+			}
+			out.Examples = append(out.Examples, Example{Raw: text, Clean: cleaned})
 		}
 	}
 	out.Unrecognised = top(misses, 10)
 	return out, nil
+}
+
+// describe renders a range the way the setup page shows it: what the value
+// says, and what it means today.
+func describe(a standard.Attribute, am AttributeMapping, s span, asOf time.Time, loc *time.Location, now time.Time) string {
+	on := ""
+	if am.Form.NeedsAsOf() && am.AsOf != AsOfRefresh {
+		on = " on " + asOf.In(loc).Format("2 Jan 2006")
+	}
+	lo, hasLo := s.lo.(time.Time)
+	hi, hasHi := s.hi.(time.Time)
+	switch a.Kind {
+	case standard.KindDate:
+		ages := ageWords(lo, hasLo, hi, now)
+		switch am.Form {
+		case standard.FormBirthYear:
+			return fmt.Sprintf("born in %d (%s)", hi.Year(), ages)
+		case standard.FormAge, standard.FormAgeBand:
+			if on == "" {
+				return ages
+			}
+			then := ageWords(lo, hasLo, hi, asOf)
+			return fmt.Sprintf("%s%s (now %s)", then, on, strings.TrimPrefix(ages, "age "))
+		}
+		return fmt.Sprintf("%s (age %d)", hi.Format("2 Jan 2006"), yearsBetween(hi, now))
+	case standard.KindTimestamp:
+		switch am.Form {
+		case standard.FormWithinDays:
+			if !hasHi {
+				return fmt.Sprintf("not in the %d days before%s", am.Days, orToday(on))
+			}
+			return fmt.Sprintf("in the %d days before%s", am.Days, orToday(on))
+		case standard.FormDaysSince:
+			return fmt.Sprintf("about %s (%s)", hi.In(loc).Format("2 Jan 2006"), daysAgo(hi, now))
+		}
+		return fmt.Sprintf("%s (%s)", hi.In(loc).Format("2 Jan 2006, 15:04"), daysAgo(hi, now))
+	case standard.KindNumber:
+		w := am.window()
+		switch {
+		case s.lo != nil && s.hi != nil:
+			return fmt.Sprint(s.lo)
+		case s.lo != nil:
+			return fmt.Sprintf("%v in %d days: at least %v in %d", s.lo, w, s.lo, standard.FrequencyDays)
+		default:
+			return fmt.Sprintf("%v in %d days: at most %v in %d", s.hi, w, s.hi, standard.FrequencyDays)
+		}
+	}
+	return fmt.Sprint(s.lo, " to ", s.hi)
+}
+
+// ageWords is the age range of birth dates lo..hi on a day: "age 25",
+// "age 25 to 45", "age 60 or older".
+func ageWords(lo time.Time, hasLo bool, hi time.Time, on time.Time) string {
+	youngest := yearsBetween(hi, on)
+	if !hasLo || yearsBetween(lo, on) >= clean.MaxAge {
+		return fmt.Sprintf("age %d or older", youngest)
+	}
+	if oldest := yearsBetween(lo, on); oldest != youngest {
+		return fmt.Sprintf("age %d to %d", youngest, oldest)
+	}
+	return fmt.Sprintf("age %d", youngest)
+}
+
+func orToday(on string) string {
+	if on == "" {
+		return " today"
+	}
+	return on
+}
+
+func daysAgo(t, now time.Time) string {
+	switch n := int(now.Sub(t).Hours() / 24); n {
+	case 0:
+		return "today"
+	case 1:
+		return "yesterday"
+	default:
+		return fmt.Sprintf("%d days ago", n)
+	}
 }
 
 // shape reduces a value to its format, so "14/04/1992" and "01/12/1985" count

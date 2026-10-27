@@ -250,6 +250,13 @@ func (r *Runner) syncWith(ctx context.Context, full bool) (*Report, error) {
 	}
 	rep, err := r.copy(ctx, *cfg, *m, incremental, since)
 	rep.FinishedAt = r.Now().UTC()
+	if err == nil && rep.Mode == ModeIncremental {
+		// The age groups in the copy are what the last full read saw: an
+		// incremental read sees only the changed customers.
+		if prev, _ := s.LastGoodSync(ctx); prev != nil {
+			carryBands(&rep, prev)
+		}
+	}
 	status := "SUCCEEDED"
 	if err != nil {
 		status, rep.Error = "FAILED", err.Error()

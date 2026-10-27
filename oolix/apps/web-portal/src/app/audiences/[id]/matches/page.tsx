@@ -30,6 +30,8 @@ interface MatchItem {
   supported_rules: string[];
   missing_required_rules: string[];
   missing_optional_rules: string[];
+  /** Rules narrower than how this Partner holds an attribute, and how to widen them. */
+  notes?: string[];
   capability_version: number;
   geographies: string[];
   channels: { channel: string; status: string }[];
@@ -107,6 +109,14 @@ export default async function PartnerMatchesPage({ params }: { params: Promise<{
                 {m.match_score}% match{m.partner_industry ? ` · ${m.partner_industry}` : ''}
               </span>
             </div>
+
+            {m.notes && m.notes.length > 0 ? (
+              <Notice tone="info">
+                {m.notes.map((note) => (
+                  <div key={note}>{note}</div>
+                ))}
+              </Notice>
+            ) : null}
 
             <dl className="kv">
               <dt>Can match</dt>

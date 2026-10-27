@@ -142,7 +142,11 @@ func TestSyncSumsUpOrdersAndBookings(t *testing.T) {
 		t.Errorf("C4: %+v", c4)
 	}
 
-	// The audience code reads the sums like any column.
+	// The audience code reads the sums like any column. It counts against the
+	// database's clock, not the sync's fixed one, so the recency window is
+	// measured from today: wide enough for C1's order on 25 Sep 2026, never
+	// for C2's ten months before it.
+	recent := float64(int(time.Since(time.Date(2026, 9, 25, 4, 30, 0, 0, time.UTC)).Hours()/24) + 2)
 	ev := audience.NewEvaluator(audience.EvaluatorOptions{
 		Pool: store.Pool, AttributeTable: localstore.AttributesTable,
 		Mappings: EvaluatorMappings(), MappingVersion: MappingVersion,
@@ -151,7 +155,7 @@ func TestSyncSumsUpOrdersAndBookings(t *testing.T) {
 		rule audience.Rule
 		want int
 	}{
-		{audience.Rule{Attribute: "purchase_recency_days", Operator: audience.OpLTE, Value: 30.0, Required: true}, 1},
+		{audience.Rule{Attribute: "purchase_recency_days", Operator: audience.OpLTE, Value: recent, Required: true}, 1},
 		{audience.Rule{Attribute: "purchase_frequency", Operator: audience.OpGTE, Value: 2.0, Required: true}, 1},
 		{audience.Rule{Attribute: "recent_booking", Operator: audience.OpEQ, Value: true, Required: true}, 1},
 	} {

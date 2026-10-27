@@ -605,9 +605,15 @@ func suggestMapping(p *preview, prev *managed.Mapping, now time.Time) managed.Ma
 	consent, withdrawal := detect.SuggestConsent(p.columns)
 	m.Consent = managed.ConsentMapping{Column: consent, Withdrawal: withdrawal}
 	for _, sg := range detect.Suggest(p.columns, p.sample, now) {
-		if sg.Column != "" {
-			m.Attributes[sg.Attribute] = managed.AttributeMapping{Column: sg.Column, Order: sg.Order, Publish: true}
+		if sg.Column == "" {
+			continue
 		}
+		am := managed.AttributeMapping{Column: sg.Column, Order: sg.Order, Publish: true, Form: sg.Form, Days: sg.Days}
+		if sg.Form.NeedsAsOf() {
+			// When an age or a yes/no was true is the Partner's to say.
+			am.AsOf = managed.AsOfAsk
+		}
+		m.Attributes[sg.Attribute] = am
 	}
 	return m
 }
@@ -680,20 +686,21 @@ var groups = []struct {
 
 // expects tells the Partner what kind of column each attribute wants.
 var expects = map[string]string{
-	"age":                    "Date of birth. Age is worked out from it; customers under 18 are left out.",
+	"age": "Date of birth, year of birth, age, or age group such as 25-45. Customers who are, or may be, " +
+		"under 18 are left out.",
 	"gender":                 "Male, female or other -- in any spelling or code (M, F, 1, 2...).",
 	"country":                "Country name or code.",
 	"state_region":           "State name or code (Maharashtra, MH...).",
 	"city":                   "City name, old or new (Bombay, Mumbai...).",
 	"online_shopper":         "Yes/no: has bought online.",
 	"purchase_category":      "The kind of product they buy most.",
-	"purchase_recency_days":  "Date of the last order.",
-	"purchase_frequency":     "Number of purchases in the last 90 days.",
+	"purchase_recency_days":  "Date of the last order, days since it, or yes/no for a recent order.",
+	"purchase_frequency":     "Number of purchases over the last 7 to 90 days.",
 	"payment_method":         "How they usually pay (UPI, card, COD...).",
 	"recent_booking":         "Yes/no: has a recent booking.",
 	"domestic_international": "Domestic or international travel.",
-	"booking_recency_days":   "Date of the last booking.",
-	"active_user_days":       "When the customer was last active, such as the last login.",
+	"booking_recency_days":   "Date of the last booking, days since it, or yes/no for a recent booking.",
+	"active_user_days":       "When the customer was last active, days since then, or yes/no for recently active.",
 	"app_active":             "Yes/no: uses your app.",
 	"loyalty_tier":           "Loyalty tier (Bronze, Silver, Gold, Platinum).",
 }
@@ -719,6 +726,57 @@ type attrRow struct {
 	Answers      []answer
 	Publish      bool
 	Problem      string
+	// Forms are what the column may hold, when there is a choice.
+	Forms []option
+	Form  string
+	// AsOf asks when an age, an age group, a number of days or a yes/no was
+	// true: "refresh", "column", "date", or "ask" while unanswered.
+	NeedsAsOf  bool
+	AsOf       string
+	AsOfColumn string
+	AsOfDate   string
+	// Days is the window of a yes/no (typed) or of a count (chosen).
+	AskDays    bool
+	Days       int
+	DayChoices []int
+	// BandAnswers asks for age groups in words rather than codes.
+	BandAnswers bool
+}
+
+// formLabels name each form for the Partner, per attribute.
+var formLabels = map[string]map[standard.Form]string{
+	"age": {
+		standard.FormNative:    "A date of birth",
+		standard.FormBirthYear: "A year of birth, such as 1992",
+		standard.FormAge:       "An age in years, such as 25",
+		standard.FormAgeBand:   "An age group, such as 25-45 or 60+",
+	},
+	"purchase_recency_days": recencyLabels("order"),
+	"booking_recency_days":  recencyLabels("booking"),
+	"active_user_days": {
+		standard.FormNative:     "The date they were last active",
+		standard.FormDaysSince:  "The number of days since they were last active",
+		standard.FormWithinDays: "Yes or no: active in the last few days",
+	},
+}
+
+func recencyLabels(what string) map[standard.Form]string {
+	return map[standard.Form]string{
+		standard.FormNative:     "The date of the last " + what,
+		standard.FormDaysSince:  "The number of days since the last " + what,
+		standard.FormWithinDays: "Yes or no: a " + what + " in the last few days",
+	}
+}
+
+// asOfValue is how an as-of choice is written in the form.
+func asOfValue(am managed.AttributeMapping) string {
+	switch am.AsOf {
+	case managed.AsOfRefresh:
+		return "refresh"
+	case managed.AsOfColumn, managed.AsOfDate:
+		return am.AsOf
+	}
+	return "ask"
 }
 
 type reviewGroup struct {
@@ -817,6 +875,7 @@ func (s *Server) reviewData(p *preview, m *managed.Mapping) reviewData {
 				row.Column = ""
 			} else if am.Column != "" {
 				values := p.sample[am.Column]
+				s.formQuestions(&row, a, am)
 				if row.IsDate {
 					report := clean.DetectOrder(values)
 					if report.DayFirst+report.MonthFirst+report.Ambiguous > 0 {
@@ -836,7 +895,16 @@ func (s *Server) reviewData(p *preview, m *managed.Mapping) reviewData {
 						row.Order = "month"
 					}
 				}
-				ms, err := managed.Measure(a, am, "", values, now)
+				// An unanswered question still shows the examples, read as if
+				// answered the simplest way; the question stays marked.
+				measured := am
+				if measured.AsOf == managed.AsOfAsk {
+					measured.AsOf = managed.AsOfRefresh
+				}
+				ms, err := managed.Measure(a, measured, "", p.sample, now)
+				if problem := managed.CheckAttribute(a, am); problem != nil {
+					err = problem
+				}
 				if err != nil {
 					row.Problem = err.Error()
 				}
@@ -858,6 +926,118 @@ func (s *Server) reviewData(p *preview, m *managed.Mapping) reviewData {
 		d.Groups = append(d.Groups, rg)
 	}
 	return d
+}
+
+// formQuestions fills in what the review page asks about an attribute's form:
+// what the column holds, when it was true, and how many days it covers.
+func (s *Server) formQuestions(row *attrRow, a standard.Attribute, am managed.AttributeMapping) {
+	if a.Upper == "" {
+		return
+	}
+	formValue := func(f standard.Form) string {
+		if f == standard.FormNative {
+			return "native"
+		}
+		return string(f)
+	}
+	forms := detect.Forms(a)
+	if len(forms) > 1 {
+		for _, f := range forms {
+			row.Forms = append(row.Forms, option{Value: formValue(f), Label: formLabels[a.Key][f]})
+		}
+	}
+	row.Form = formValue(am.Form)
+	// Only a date in the attribute's own form has a day/month order to ask.
+	row.IsDate = row.IsDate && am.Form == standard.FormNative
+	if am.Form.NeedsAsOf() {
+		row.NeedsAsOf, row.AsOf, row.AsOfColumn = true, asOfValue(am), am.AsOfColumn
+		if am.AsOfDate != nil {
+			row.AsOfDate = am.AsOfDate.Format("2006-01-02")
+		}
+	}
+	switch {
+	case am.Form == standard.FormWithinDays:
+		row.AskDays, row.Days = true, am.Days
+	case a.Key == "purchase_frequency":
+		row.AskDays, row.Days, row.DayChoices = true, am.Days, managed.FrequencyWindows
+		if row.Days == 0 {
+			row.Days = standard.FrequencyDays
+		}
+	}
+	if am.Form == standard.FormAgeBand {
+		row.BandAnswers = true
+	}
+}
+
+// readForm reads an attribute's form answers from the review form: what the
+// column holds, when it was true, how many days it covers, and age groups
+// written in words.
+func readForm(f func(string) string, a standard.Attribute, prev managed.AttributeMapping,
+	known map[string]bool, sample map[string][]any, now time.Time, am *managed.AttributeMapping) {
+	if a.Upper == "" {
+		return
+	}
+	if prev.Column != am.Column {
+		// A different column: start again from what it looks like.
+		sg := detect.Evaluate(a, detect.Column{Name: am.Column}, sample[am.Column], now)
+		am.Form, am.Days = sg.Form, sg.Days
+		if am.Form.NeedsAsOf() {
+			am.AsOf = managed.AsOfAsk
+		}
+		return
+	}
+	am.Form, am.AsOf, am.AsOfColumn, am.AsOfDate, am.Days = prev.Form, prev.AsOf, prev.AsOfColumn, prev.AsOfDate, prev.Days
+	switch v := f("form_" + a.Key); {
+	case v == "native":
+		am.Form = standard.FormNative
+	case v != "" && slices.Contains(detect.Forms(a), standard.Form(v)):
+		am.Form = standard.Form(v)
+	}
+	if am.Form != prev.Form {
+		// The questions belonged to the old form; the page asks them again.
+		am.AsOf, am.AsOfColumn, am.AsOfDate, am.Days = managed.AsOfRefresh, "", nil, detect.WindowFromName(am.Column)
+		if am.Form.NeedsAsOf() {
+			am.AsOf = managed.AsOfAsk
+		}
+		return
+	}
+	if am.Form.NeedsAsOf() {
+		switch f("asof_" + a.Key) {
+		case "refresh":
+			am.AsOf = managed.AsOfRefresh
+		case "ask":
+			am.AsOf = managed.AsOfAsk
+		case "column":
+			am.AsOf = managed.AsOfColumn
+			if col := f("asof_column_" + a.Key); known[col] {
+				am.AsOfColumn = col
+			}
+		case "date":
+			am.AsOf = managed.AsOfDate
+			if d, err := time.Parse("2006-01-02", f("asof_date_"+a.Key)); err == nil {
+				am.AsOfDate = &d
+			}
+		}
+	}
+	if n, err := strconv.Atoi(strings.TrimSpace(f("days_" + a.Key))); err == nil {
+		am.Days = n
+	}
+	if am.Form == standard.FormAgeBand {
+		// Age groups written in words, answered with a group: "senior" -> 60+.
+		am.Overrides = map[string]string{}
+		for i := 0; i < 200; i++ {
+			raw := f(fmt.Sprintf("raw_%s_%d", a.Key, i))
+			if raw == "" {
+				break
+			}
+			answer := strings.TrimSpace(f(fmt.Sprintf("code_%s_%d", a.Key, i)))
+			if answer == "-" {
+				am.Overrides[raw] = ""
+			} else if b, ok := clean.ParseBand(answer); ok {
+				am.Overrides[raw] = b.String()
+			}
+		}
+	}
 }
 
 func (s *Server) saveReview(w http.ResponseWriter, r *http.Request, sess *session) {
@@ -908,6 +1088,7 @@ func (s *Server) saveReview(w http.ResponseWriter, r *http.Request, sess *sessio
 		case "month":
 			am.Order = clean.MonthFirst
 		}
+		readForm(f, a, prev, known, p.sample, s.opts.Now(), &am)
 		if a.Kind == standard.KindEnum && prev.Column == col {
 			am.Overrides = map[string]string{}
 			for i := 0; i < 200; i++ {
@@ -1077,9 +1258,17 @@ func (s *Server) saveConsent(w http.ResponseWriter, r *http.Request, sess *sessi
 	d := s.consentData(st, p, &m)
 	v.Data = d
 	problem := ""
+	unanswered := m.Problems()
 	switch {
 	case st.identity == nil:
 		problem = "Connect this Agent to Oolix first (step 1)."
+	case len(unanswered) > 0:
+		// A copy cannot be made with a question open: an age whose date is
+		// unknown could be years out.
+		keys := sortedKeys(unanswered)
+		a, _ := standard.ByKey(keys[0])
+		problem = fmt.Sprintf("Answer the question about %s on the matches step first: %s.",
+			strings.ToLower(a.Label), unanswered[keys[0]])
 	case m.Consent.Column == "" && !m.Consent.Everyone:
 		problem = "Choose the column that records agreement to marketing. Without it nobody can be shown an ad."
 	case d.Measure.Agreed == 0:

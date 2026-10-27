@@ -298,6 +298,10 @@ func activityColumns(provides map[string]bool) map[string]string {
 	for key := range provides {
 		if a, ok := standard.ByKey(key); ok {
 			out[a.Column] = exprs[key]
+			if a.Upper != "" {
+				// Worked out from every order, so known exactly: both ends.
+				out[a.Upper] = exprs[key]
+			}
 		}
 	}
 	return out

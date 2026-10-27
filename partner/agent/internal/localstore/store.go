@@ -218,6 +218,9 @@ func AttributeDDL(table string) string {
 	fmt.Fprintf(&b, "CREATE TABLE IF NOT EXISTS %s (\n  partner_user_id TEXT NOT NULL", table)
 	for _, a := range standard.Attributes {
 		fmt.Fprintf(&b, ",\n  %s %s", a.Column, ColumnType(a))
+		if a.Upper != "" {
+			fmt.Fprintf(&b, ",\n  %s %s", a.Upper, ColumnType(a))
+		}
 	}
 	b.WriteString(",\n  refreshed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()\n)")
 	return b.String()
@@ -299,6 +302,32 @@ func (s *Store) migrate(ctx context.Context) error {
 	for _, st := range stmts {
 		if _, err := tx.Exec(ctx, st); err != nil {
 			return fmt.Errorf("%s: %w", firstLine(st), err)
+		}
+	}
+	// Range attributes hold a low and a high end. A copy made before ranges
+	// existed held exact values only, so a new high-end column starts equal
+	// to the low end -- and audiences keep working until the next refresh
+	// rebuilds the copy in full.
+	for _, a := range standard.Attributes {
+		if a.Upper == "" {
+			continue
+		}
+		var exists bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns
+			WHERE table_schema = current_schema() AND table_name = $1 AND column_name = $2)`,
+			AttributesTable, a.Upper).Scan(&exists); err != nil {
+			return err
+		}
+		if exists {
+			continue
+		}
+		for _, st := range []string{
+			fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s %s`, AttributesTable, a.Upper, ColumnType(a)),
+			fmt.Sprintf(`UPDATE %s SET %s = %s`, AttributesTable, a.Upper, a.Column),
+		} {
+			if _, err := tx.Exec(ctx, st); err != nil {
+				return fmt.Errorf("%s: %w", firstLine(st), err)
+			}
 		}
 	}
 	return tx.Commit(ctx)

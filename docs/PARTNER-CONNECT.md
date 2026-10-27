@@ -44,7 +44,7 @@ ever sees counts.
    | Connect to Oolix          | Paste a one-time code from the portal                                                                                                                                                         |
    | Connect your database     | Give a **read-only** login: PostgreSQL, MySQL/MariaDB, SQL Server, MongoDB — or CSV/Excel files                                                                                               |
    | Choose the customer table | Pick the table with one row per customer                                                                                                                                                      |
-   | Check the matches         | Confirm what the tool found. It shows real rows cleaned: `14/04/1992` → 14 Apr 1992 (age 34), `Bombay` → MUMBAI. Values it cannot place are listed for the Partner to answer, never guessed |
+   | Check the matches         | Confirm what the tool found. It shows real rows cleaned: `14/04/1992` → 14 Apr 1992 (age 34), `Bombay` → MUMBAI, `25-45` → age 25 to 45. An age, an age group or a number of days is asked about once: kept up to date, or true on another date such as sign-up. Values it cannot place are listed for the Partner to answer, never guessed |
    | Orders and bookings       | Optional: pick a table with one row per order or per booking                                                                                                                                  |
    | Consent and publish       | Choose the column that records agreement to marketing, then **Publish**                                                                                                                       |
 

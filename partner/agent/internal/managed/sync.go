@@ -26,6 +26,9 @@ type AttributeReport struct {
 	Unreadable int `json:"unreadable"`
 	// Unrecognised are list values that matched no code, most common first.
 	Unrecognised []detect.ValueCount `json:"unrecognised,omitempty"`
+	// Bands are the age groups an age-group column holds, youngest first:
+	// the Partner's format, published so a Buyer can be told which rules fit.
+	Bands []string `json:"bands,omitempty"`
 }
 
 // Sync modes.
@@ -80,28 +83,54 @@ const (
 // cleaner turns one mapped attribute's raw value into its stored value.
 type cleaner struct {
 	attr  standard.Attribute
+	am    AttributeMapping
 	col   string
 	opts  clean.DateOptions
 	enums *clean.EnumMapper
+	// bands are the Partner's answers for age groups written in words, by
+	// normalised value; nil means ignore the value.
+	bands map[string]*clean.Band
 }
 
 func newCleaner(a standard.Attribute, am AttributeMapping, loc *time.Location) (cleaner, error) {
-	c := cleaner{attr: a, col: am.Column, opts: clean.DateOptions{Order: am.Order, Location: loc}}
-	if a.Kind == standard.KindEnum {
+	c := cleaner{attr: a, am: am, col: am.Column, opts: clean.DateOptions{Order: am.Order, Location: loc}}
+	if err := checkForm(a, am); err != nil {
+		return c, err
+	}
+	switch {
+	case a.Kind == standard.KindEnum:
 		e, err := clean.NewEnumMapper(a, am.Overrides)
 		if err != nil {
 			return c, err
 		}
 		c.enums = e
+	case am.Form == standard.FormAgeBand:
+		c.bands = map[string]*clean.Band{}
+		for raw, answer := range am.Overrides {
+			key := clean.Normalize(raw)
+			if answer == "" {
+				c.bands[key] = nil
+				continue
+			}
+			b, ok := clean.ParseBand(answer)
+			if !ok {
+				return c, fmt.Errorf("%q is not an age group such as 25-45 or 60+", answer)
+			}
+			c.bands[key] = &b
+		}
 	}
 	return c, nil
 }
 
 // value cleans one raw value. present is false for an empty value, and for
-// one the Partner told us to ignore.
-func (c cleaner) value(raw any, now time.Time) (v any, present, ok bool) {
+// one the Partner told us to ignore. A range attribute's value is a span;
+// asOf is when the value was true, for the forms that need one.
+func (c cleaner) value(raw any, asOf, now time.Time) (v any, present, ok bool) {
 	if strings.TrimSpace(clean.Text(raw)) == "" {
 		return nil, false, false
+	}
+	if c.attr.Upper != "" {
+		return c.span(raw, asOf, now)
 	}
 	switch c.attr.Kind {
 	case standard.KindDate:
@@ -208,6 +237,9 @@ func run(ctx context.Context, src source.Source, store *localstore.Store, m Mapp
 		}
 		cleaners = append(cleaners, c)
 		want(am.Column)
+		if am.Form.NeedsAsOf() && am.AsOf == AsOfColumn {
+			want(am.AsOfColumn)
+		}
 		rep.Attributes[a.Key] = AttributeReport{}
 	}
 	if !m.Consent.Everyone {
@@ -224,6 +256,9 @@ func run(ctx context.Context, src source.Source, store *localstore.Store, m Mapp
 	attrCols := []string{"partner_user_id"}
 	for _, a := range standard.Attributes {
 		attrCols = append(attrCols, a.Column)
+		if a.Upper != "" {
+			attrCols = append(attrCols, a.Upper)
+		}
 	}
 	attrCols = append(attrCols, "refreshed_at")
 	index := map[string]int{}
@@ -233,6 +268,7 @@ func run(ctx context.Context, src source.Source, store *localstore.Store, m Mapp
 	consentCols := []string{"partner_user_id", "purpose_id", "eligible", "policy_version", "updated_at", "withdrawn_at"}
 
 	unrecognised := map[string]map[string]int{}
+	bands := map[string]map[clean.Band]bool{}
 	var attrBatch, consentBatch [][]any
 	flush := func() error {
 		if len(attrBatch) > 0 {
@@ -270,16 +306,23 @@ func run(ctx context.Context, src source.Source, store *localstore.Store, m Mapp
 		values := make([]any, len(attrCols))
 		results := make([]struct{ present, ok bool }, len(cleaners))
 		for i, c := range cleaners {
-			v, present, ok := c.value(row[c.col], now)
+			v, present, ok := c.value(row[c.col], c.asOf(row, now), now)
 			results[i].present, results[i].ok = present, ok
-			if ok {
+			if !ok {
+				continue
+			}
+			if s, isSpan := v.(span); isSpan {
+				values[index[c.attr.Column]], values[index[c.attr.Upper]] = s.lo, s.hi
+			} else {
 				values[index[c.attr.Column]] = v
 			}
 		}
 		scrambled := store.ScrambleID(id)
 		// DPDP Act: no targeted advertising at children, so they are not
-		// copied at all. A customer whose age is unknown cannot be judged.
-		if dob, ok := values[index["dob"]].(time.Time); ok && yearsBetween(dob, now) < standard.MinimumAge {
+		// copied at all -- nor is anyone who may be one, judged by the latest
+		// birth date their age allows. A customer whose age is unknown cannot
+		// be judged.
+		if spanUnderAge(span{hi: values[index["dob_hi"]]}, now) {
 			rep.UnderAge++
 			if since != nil {
 				// Already in the copy, perhaps, with a birth date since corrected.
@@ -294,6 +337,14 @@ func run(ctx context.Context, src source.Source, store *localstore.Store, m Mapp
 		consentBatch = append(consentBatch, []any{scrambled, localstore.AnyPurpose, eligible, policyVersion, now.UTC(), withdrawnAt})
 		if eligible {
 			for i, c := range cleaners {
+				if results[i].ok && c.am.Form == standard.FormAgeBand && len(bands[c.attr.Key]) < maxBands {
+					if b, _, ok := c.band(row[c.col]); ok {
+						if bands[c.attr.Key] == nil {
+							bands[c.attr.Key] = map[clean.Band]bool{}
+						}
+						bands[c.attr.Key][b] = true
+					}
+				}
 				if results[i].present && !results[i].ok {
 					ar := rep.Attributes[c.attr.Key]
 					ar.Unreadable++
@@ -344,6 +395,11 @@ func run(ctx context.Context, src source.Source, store *localstore.Store, m Mapp
 		ar.Unrecognised = top(counts, 10)
 		rep.Attributes[key] = ar
 	}
+	for key, seen := range bands {
+		ar := rep.Attributes[key]
+		ar.Bands = sortedBands(seen)
+		rep.Attributes[key] = ar
+	}
 
 	if since != nil {
 		err = applyChanges(ctx, store, attrCols, provides, now, &rep)
@@ -387,9 +443,13 @@ func consentOf(row source.Row, c ConsentMapping, loc *time.Location, now time.Ti
 	return given && withdrawnAt == nil, withdrawnAt
 }
 
+// yearsBetween is someone's age on day `to` if born on `from`. Month and day
+// are compared, not the day of the year: after February a leap year's days
+// are numbered one higher, which made everyone born in one a year younger on
+// their birthday.
 func yearsBetween(from, to time.Time) int {
 	years := to.Year() - from.Year()
-	if to.YearDay() < from.YearDay() {
+	if to.Month() < from.Month() || (to.Month() == from.Month() && to.Day() < from.Day()) {
 		years--
 	}
 	return years
@@ -416,8 +476,9 @@ func dropStaging(ctx context.Context, store *localstore.Store) {
 }
 
 // indexed are the columns rules filter on; the dates as ranges, so an index
-// serves them.
-var indexed = []string{"dob", "last_order_at", "last_booking_at", "last_seen_at", "city", "state_region"}
+// serves them, and both ends of each range.
+var indexed = []string{"dob", "dob_hi", "last_order_at", "last_order_at_hi", "last_booking_at",
+	"last_booking_at_hi", "last_seen_at", "last_seen_at_hi", "city", "state_region"}
 
 // selectAttributes is the SELECT list building one attribute row from a
 // staged customer row (alias a) and, for what orders and bookings supply,
@@ -656,7 +717,12 @@ func filled(ctx context.Context, q interface {
 	for _, a := range standard.Attributes {
 		if _, ok := rep.Attributes[a.Key]; ok {
 			keys = append(keys, a.Key)
-			exprs = append(exprs, "count("+a.Column+")")
+			if a.Upper != "" {
+				// A range with either end known says something.
+				exprs = append(exprs, "count(COALESCE("+a.Column+", "+a.Upper+"))")
+			} else {
+				exprs = append(exprs, "count("+a.Column+")")
+			}
 		}
 	}
 	if len(keys) == 0 {

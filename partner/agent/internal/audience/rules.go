@@ -79,6 +79,13 @@ type Mapping struct {
 	//   years_since  whole years elapsed, as `age` is
 	//   days_since   whole days elapsed, as `purchase_recency_days` is
 	Derive string `yaml:"derive"`
+
+	// Upper names the column holding the HIGH end of a value known only as a
+	// range -- an age group, a year of birth, a count over a shorter window --
+	// with Column (or Expr, for a number) holding the low end. A rule then
+	// matches only rows where every value in the range satisfies it: certain
+	// matches, never possible ones. Optional; empty means the value is exact.
+	Upper string `yaml:"upper"`
 }
 
 // sargable reports whether this mapping can be compiled as a range over a
@@ -161,7 +168,8 @@ func Compile(rules []Rule, mappings map[string]Mapping) (*CompiledQuery, error) 
 			}
 		}
 
-		if mapping.sargable() && !safeColumn.MatchString(mapping.Column) {
+		if (mapping.sargable() && !safeColumn.MatchString(mapping.Column)) ||
+			(mapping.Upper != "" && !safeColumn.MatchString(mapping.Upper)) {
 			return nil, &ErrUnmappable{
 				Attribute: rule.Attribute,
 				Reason:    "local mapping column is not a plain identifier",
@@ -204,8 +212,19 @@ func compileRule(rule Rule, mapping Mapping, argOffset int) (string, []interface
 		if clause, args, ok := compileDerivedRange(rule, mapping, next); ok {
 			return clause, args, nil
 		}
+		if mapping.Upper != "" {
+			// Expr reads one end of the range, which is a guess about the
+			// rest of it. Refuse rather than widen the audience.
+			return "", nil, &ErrUnmappable{
+				Attribute: rule.Attribute,
+				Reason:    fmt.Sprintf("operator %q cannot be answered for certain from a range", rule.Operator),
+			}
+		}
 		// An operator the range form does not cover falls through to Expr,
 		// which is correct but slower — never wrong.
+	}
+	if mapping.Upper != "" {
+		return compileNumberRange(rule, mapping, next)
 	}
 
 	switch rule.Operator {
@@ -256,6 +275,11 @@ func compileRule(rule Rule, mapping Mapping, argOffset int) (string, []interface
 // between hi and hi+1 years back, and a strict `>` excludes the person who has
 // just turned hi+1. `days_since` follows the same shape with days.
 //
+// With Upper set, Column holds the earliest date the value can be and Upper
+// the latest, and each bound is checked against the end that decides it: "at
+// most N days ago" must hold for the earliest date, "at least N" for the
+// latest. Without Upper both are Column, which is the exact case above.
+//
 // Returns ok=false for anything it cannot express exactly, so the caller can
 // fall back rather than guess.
 func compileDerivedRange(
@@ -266,6 +290,10 @@ func compileDerivedRange(
 	unit := "years"
 	if mapping.Derive == "days_since" {
 		unit = "days"
+	}
+	earliest, latest := mapping.Column, mapping.Column
+	if mapping.Upper != "" {
+		latest = mapping.Upper
 	}
 
 	// `NOW() - ($n || ' years')::interval` keeps the bound a parameter: the
@@ -293,7 +321,7 @@ func compileDerivedRange(
 		if !ok {
 			return "", nil, false
 		}
-		return fmt.Sprintf("%s > %s", mapping.Column, ago(next(0))),
+		return fmt.Sprintf("%s > %s", earliest, ago(next(0))),
 			[]interface{}{fmt.Sprint(n + 1)}, true
 
 	case OpGTE:
@@ -301,7 +329,7 @@ func compileDerivedRange(
 		if !ok {
 			return "", nil, false
 		}
-		return fmt.Sprintf("%s <= %s", mapping.Column, ago(next(0))),
+		return fmt.Sprintf("%s <= %s", latest, ago(next(0))),
 			[]interface{}{fmt.Sprint(n)}, true
 
 	case OpBETWEEN:
@@ -315,12 +343,38 @@ func compileDerivedRange(
 			return "", nil, false
 		}
 		return fmt.Sprintf("(%s <= %s AND %s > %s)",
-				mapping.Column, ago(next(0)),
-				mapping.Column, ago(next(1))),
+				latest, ago(next(0)),
+				earliest, ago(next(1))),
 			[]interface{}{fmt.Sprint(lo), fmt.Sprint(hi + 1)}, true
 	}
 
 	return "", nil, false
+}
+
+// compileNumberRange answers a rule on a number known as a range, Expr being
+// the smallest it can be and Upper the largest -- "at least 3 purchases in 90
+// days" from a count over 30. A missing end is NULL, which matches nothing.
+func compileNumberRange(rule Rule, mapping Mapping, next func(int) string) (string, []interface{}, error) {
+	low, high := "("+mapping.Expr+")", mapping.Upper
+	switch rule.Operator {
+	case OpGTE:
+		return fmt.Sprintf("%s >= %s", low, next(0)), []interface{}{rule.Value}, nil
+	case OpLTE:
+		return fmt.Sprintf("%s <= %s", high, next(0)), []interface{}{rule.Value}, nil
+	case OpEQ:
+		return fmt.Sprintf("(%s = %s AND %s = %s)", low, next(0), high, next(0)), []interface{}{rule.Value}, nil
+	case OpBETWEEN:
+		bounds, ok := rule.Value.([]interface{})
+		if !ok || len(bounds) != 2 {
+			return "", nil, &ErrUnmappable{Attribute: rule.Attribute, Reason: "BETWEEN needs [min, max]"}
+		}
+		return fmt.Sprintf("(%s >= %s AND %s <= %s)", low, next(0), high, next(1)),
+			[]interface{}{bounds[0], bounds[1]}, nil
+	}
+	return "", nil, &ErrUnmappable{
+		Attribute: rule.Attribute,
+		Reason:    fmt.Sprintf("operator %q cannot be answered for certain from a range", rule.Operator),
+	}
 }
 
 func toStringSlice(values []interface{}) []string {

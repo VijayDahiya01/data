@@ -10,6 +10,7 @@ import (
 	"github.com/oolix/partner-agent/internal/clean"
 	"github.com/oolix/partner-agent/internal/localstore"
 	"github.com/oolix/partner-agent/internal/source"
+	"github.com/oolix/partner-agent/internal/standard"
 )
 
 // Setting keys in the local store.
@@ -49,10 +50,27 @@ type SourceSettings struct {
 // AttributeMapping says where one standard attribute comes from.
 type AttributeMapping struct {
 	Column string `json:"column"`
+	// Form is how the column holds the attribute when it is not the
+	// attribute's own form: an age or an age group instead of a date of
+	// birth, a number of days or a yes/no instead of a date.
+	Form standard.Form `json:"form,omitempty"`
+	// AsOf says when an age, an age group, a number of days or a yes/no was
+	// true. Empty: it is kept up to date, so it is true at each refresh.
+	// AsOfColumn: as of the date in AsOfColumn -- often when the customer
+	// signed up. AsOfDate: as of a fixed day, such as when a file was exported.
+	AsOf       string     `json:"as_of,omitempty"`
+	AsOfColumn string     `json:"as_of_column,omitempty"`
+	AsOfDate   *time.Time `json:"as_of_date,omitempty"`
+	// Days is the window of a count (purchases in the last 30 days) or of a
+	// yes/no (bought in the last 30 days). For purchase_frequency, 0 means
+	// 90, which is what the setup page asked for before windows could be
+	// chosen.
+	Days int `json:"days,omitempty"`
 	// Order is how numeric dates in the column are written.
 	Order clean.Order `json:"order,omitempty"`
 	// Overrides are the Partner's answers for values the cleaner did not
-	// recognise: raw value -> code, or "" to ignore it.
+	// recognise: raw value -> code, or "" to ignore it. For an age group they
+	// are bands in ParseBand's form: "senior" -> "60+".
 	Overrides map[string]string `json:"overrides,omitempty"`
 	// Publish offers the attribute to Buyers. A Partner may copy an attribute
 	// and still choose not to be asked about it.

@@ -44,6 +44,49 @@ export type RequestReachEstimatesInput = z.infer<typeof RequestReachEstimatesSch
  * Partner, and §17 says Oolix stores capability metadata, "not Partner customer
  * records or Partner local field names".
  */
+/**
+ * How exactly a Partner knows an attribute (see CapabilityPrecision in
+ * @oolix/contracts). Format only: group edges and window lengths, never a
+ * value or a count of anything.
+ */
+export const CapabilityPrecisionSchema = z
+  .object({
+    kind: z.enum(['APPROXIMATE', 'BANDS', 'WITHIN', 'WINDOW']),
+    unit: z.enum(['YEARS', 'DAYS']).optional(),
+    width: z.number().int().min(1).max(36500).optional(),
+    bands: z
+      .array(
+        z
+          .object({
+            lo: z.number().int().min(0).max(120),
+            hi: z.number().int().min(0).max(120).nullable(),
+          })
+          .strict()
+          .refine((b) => b.hi === null || b.hi >= b.lo, 'a group ends after it starts'),
+      )
+      .min(1)
+      .max(30)
+      .optional(),
+    days: z.number().int().min(1).max(730).optional(),
+  })
+  .strict()
+  .superRefine((p, ctx) => {
+    const need = (field: 'unit' | 'width' | 'bands' | 'days') => {
+      if (p[field] === undefined) {
+        ctx.addIssue({ code: 'custom', path: [field], message: `${p.kind} needs ${field}` });
+      }
+    };
+    if (p.kind === 'APPROXIMATE') {
+      need('unit');
+      need('width');
+    }
+    if (p.kind === 'BANDS') {
+      need('unit');
+      need('bands');
+    }
+    if (p.kind === 'WITHIN' || p.kind === 'WINDOW') need('days');
+  });
+
 export const PublishCapabilitiesSchema = z.object({
   attributes: z
     .array(
@@ -51,6 +94,7 @@ export const PublishCapabilitiesSchema = z.object({
         attribute_key: z.string().min(1).max(120),
         operators: z.array(z.enum(['EQ', 'IN', 'LTE', 'GTE', 'BETWEEN'])).min(1),
         status: z.enum(['AVAILABLE', 'UNAVAILABLE']).default('AVAILABLE'),
+        precision: CapabilityPrecisionSchema.optional(),
       }),
     )
     .min(1)

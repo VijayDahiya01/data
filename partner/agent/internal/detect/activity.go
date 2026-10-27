@@ -78,7 +78,7 @@ func SuggestActivity(kind string, columns []Column, samples map[string][]any, id
 		if name == 0 {
 			continue
 		}
-		m := measure(when, c, samples[c.Name], now)
+		m := measure(when, standard.FormNative, c, samples[c.Name], now)
 		if m.Sampled == 0 || m.Readable < 0.8 {
 			continue
 		}
@@ -104,7 +104,7 @@ func SuggestActivity(kind string, columns []Column, samples map[string][]any, id
 			if name == 0 {
 				continue
 			}
-			m := measure(a, c, samples[c.Name], now)
+			m := measure(a, standard.FormNative, c, samples[c.Name], now)
 			if m.Sampled == 0 || m.Readable < least {
 				continue
 			}

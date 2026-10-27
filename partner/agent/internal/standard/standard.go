@@ -29,14 +29,56 @@ const (
 	KindNumber Kind = "NUMBER"
 )
 
+// Form is how a Partner's column holds an attribute. The same fact arrives in
+// many shapes -- a date of birth, an age, an age group -- and each is read
+// into the same stored range.
+type Form string
+
+const (
+	// FormNative is the attribute's own form: a date of birth for age, a
+	// date for the recency attributes, a code, a yes/no, a count.
+	FormNative Form = ""
+	// FormBirthYear is a year of birth: 1992.
+	FormBirthYear Form = "birth_year"
+	// FormAge is an age in whole years, true on some date: 25.
+	FormAge Form = "age"
+	// FormAgeBand is an age group, true on some date: 25-45, 60+, under 25.
+	FormAgeBand Form = "age_band"
+	// FormDaysSince is a number of whole days before some date: 12.
+	FormDaysSince Form = "days_since"
+	// FormWithinDays is yes or no for "in the last N days", true on some date.
+	FormWithinDays Form = "within_days"
+)
+
+// NeedsAsOf says whether values in this form were true on a particular date,
+// which the Partner has to name: an age of 25 means nothing until we know
+// when the customer was 25.
+func (f Form) NeedsAsOf() bool {
+	return f == FormAge || f == FormAgeBand || f == FormDaysSince || f == FormWithinDays
+}
+
 // Attribute is one standard attribute and the local column that holds it.
 type Attribute struct {
 	// Key is Oolix's name for it -- the only thing Oolix ever hears about.
 	Key string
 	// Label is how the setup page names it to the Partner.
 	Label string
-	// Column is where the cleaned value lives in the local copy.
+	// Column is where the cleaned value lives in the local copy. For an
+	// attribute stored as a range it is the low end: the earliest date or
+	// the smallest count the value can be.
 	Column string
+	// Upper is the column holding the high end of a range attribute: the
+	// latest date or the largest count. Empty for attributes held exactly.
+	//
+	// A value known exactly has both ends equal. A year of birth, an age or an
+	// age group is a wider range, and a missing end means no bound on that
+	// side ("35+" has no earliest birth date). Rules are answered with the
+	// customers who CERTAINLY match: every value in their range satisfies the
+	// rule, so nobody is shown an ad because they might be in the audience.
+	Upper string
+	// Forms are the shapes besides the native one a Partner's column may hold
+	// this attribute in, with the column names that suggest each.
+	Forms map[Form][]string
 	// Kind is how raw values are read.
 	Kind Kind
 	// Type is the taxonomy data type rules are compiled against.
@@ -58,11 +100,17 @@ type Attribute struct {
 // Attributes is the full vocabulary, in the order the setup page shows it.
 var Attributes = []Attribute{
 	{
-		Key: "age", Label: "Age (from date of birth)", Column: "dob",
+		Key: "age", Label: "Age", Column: "dob", Upper: "dob_hi",
 		Kind: KindDate, Type: "NUMBER", Derive: "years_since",
 		Expr: "date_part('year', age(dob))", Operators: []string{"BETWEEN"},
 		Hints: []string{"dob", "date_of_birth", "dateofbirth", "birth_date", "birthdate",
 			"birthday", "bday", "birth_dt", "dt_of_birth", "d_o_b"},
+		Forms: map[Form][]string{
+			FormBirthYear: {"yob", "birth_year", "year_of_birth", "birthyear", "byear", "birth_yr"},
+			FormAge:       {"age", "customer_age", "current_age", "age_years", "age_yrs", "age_in_years", "cust_age"},
+			FormAgeBand: {"age_group", "age_band", "age_range", "agegroup", "ageband", "age_bucket",
+				"age_bracket", "age_category", "age_segment", "age_grp"},
+		},
 	},
 	{
 		Key: "gender", Label: "Gender", Column: "gender",
@@ -105,18 +153,31 @@ var Attributes = []Attribute{
 	},
 	{
 		Key: "purchase_recency_days", Label: "Days since last purchase", Column: "last_order_at",
-		Kind: KindTimestamp, Type: "NUMBER", Derive: "days_since",
+		Upper: "last_order_at_hi",
+		Kind:  KindTimestamp, Type: "NUMBER", Derive: "days_since",
 		Expr:      "date_part('day', now() - last_order_at)",
 		Operators: []string{"LTE"},
 		Hints: []string{"last_order_at", "last_order_date", "last_purchase_at", "last_purchase_date",
 			"last_ordered_at", "last_order", "last_purchase", "last_txn_date"},
+		Forms: map[Form][]string{
+			FormDaysSince: {"days_since_last_order", "days_since_last_purchase", "days_since_order",
+				"days_since_purchase", "purchase_recency", "order_recency", "recency_days", "recency"},
+			FormWithinDays: {"purchased_recently", "ordered_recently", "bought_recently", "recent_buyer",
+				"recent_purchaser", "is_recent_buyer", "active_buyer"},
+		},
 	},
 	{
+		// A count says nothing until its window is known: 5 orders in 30 days
+		// and 5 ever are different facts. The Partner names the window; a
+		// shorter one than 90 days gives a lower bound -- at least that many
+		// in 90 -- so only those customers count as certain.
 		Key: "purchase_frequency", Label: "Purchases in the last 90 days", Column: "purchase_frequency",
-		Kind: KindNumber, Type: "NUMBER", Expr: "purchase_frequency",
+		Upper: "purchase_frequency_hi",
+		Kind:  KindNumber, Type: "NUMBER", Expr: "purchase_frequency",
 		Operators: []string{"GTE"},
-		Hints: []string{"order_count_90d", "orders_90d", "purchase_count_90d", "purchase_frequency",
-			"order_count", "orders_count", "num_orders", "total_orders"},
+		Hints: []string{"order_count_90d", "orders_90d", "purchase_count_90d", "purchases_90d",
+			"orders_last_90_days", "purchase_frequency", "order_count_30d", "orders_30d",
+			"purchase_count_30d", "purchases_30d", "orders_last_30_days", "orders_60d", "orders_7d"},
 	},
 	{
 		Key: "payment_method", Label: "Usual payment method", Column: "payment_method",
@@ -139,19 +200,30 @@ var Attributes = []Attribute{
 	},
 	{
 		Key: "booking_recency_days", Label: "Days since last booking", Column: "last_booking_at",
-		Kind: KindTimestamp, Type: "NUMBER", Derive: "days_since",
+		Upper: "last_booking_at_hi",
+		Kind:  KindTimestamp, Type: "NUMBER", Derive: "days_since",
 		Expr:      "date_part('day', now() - last_booking_at)",
 		Operators: []string{"LTE"},
 		Hints: []string{"last_booking_at", "last_booking_date", "last_trip_date", "last_travel_date",
 			"last_booking"},
+		Forms: map[Form][]string{
+			FormDaysSince:  {"days_since_last_booking", "days_since_booking", "days_since_last_trip", "booking_recency"},
+			FormWithinDays: {"booked_recently", "travelled_recently", "traveled_recently", "recent_traveller"},
+		},
 	},
 	{
 		Key: "active_user_days", Label: "Days since last seen", Column: "last_seen_at",
-		Kind: KindTimestamp, Type: "NUMBER", Derive: "days_since",
+		Upper: "last_seen_at_hi",
+		Kind:  KindTimestamp, Type: "NUMBER", Derive: "days_since",
 		Expr:      "date_part('day', now() - last_seen_at)",
 		Operators: []string{"LTE"},
 		Hints: []string{"last_seen_at", "last_login_at", "last_login", "last_active_at",
 			"last_activity", "last_seen", "last_visit", "last_login_date"},
+		Forms: map[Form][]string{
+			FormDaysSince: {"days_since_login", "days_since_last_login", "days_since_last_seen",
+				"days_since_active", "days_since_last_active", "inactive_days", "days_inactive"},
+			FormWithinDays: {"active_recently", "recently_active", "is_active", "active_user"},
+		},
 	},
 	{
 		Key: "app_active", Label: "Uses the app", Column: "app_active",
