@@ -79,6 +79,8 @@ type Evaluator struct {
 	mappings       map[string]Mapping
 	mappingVersion int
 	timeout        time.Duration
+	// members answers membership from memory once an audience is loaded.
+	members *memberIndex
 }
 
 // EvaluatorOptions configures local evaluation. Everything here comes from the
@@ -114,6 +116,7 @@ func NewEvaluator(opts EvaluatorOptions) *Evaluator {
 		mappings:       opts.Mappings,
 		mappingVersion: opts.MappingVersion,
 		timeout:        timeout,
+		members:        newMemberIndex(opts.Pool),
 	}
 }
 
@@ -284,6 +287,8 @@ func (e *Evaluator) Materialize(
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit: %w", err)
 	}
+	// The next lookup loads the new build.
+	e.members.forget(activationID)
 
 	return &MaterializeResult{
 		MaterializationVersion: version,
@@ -309,6 +314,9 @@ func (e *Evaluator) IsMaterializedMember(
 	// it from the member row rather than the materialization table means it
 	// describes the build THIS person was selected by, not whatever build is
 	// current -- those differ during a refresh.
+	if found, member, v := e.members.lookup(activationID, partnerUserID); found {
+		return member, v, nil
+	}
 	var version int
 	err := e.pool.QueryRow(ctx, `
 		SELECT materialization_version FROM oolix_audience_members

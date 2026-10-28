@@ -10,7 +10,7 @@
  * could carry a count or a member, and §92.4 scopes everything to the Agent's
  * own registered Partner — never to an id supplied in the body.
  */
-import { Body, Controller, Get, Inject, Post } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Post, Query } from '@nestjs/common';
 import { z } from 'zod';
 import type { AgentPrincipal } from '@oolix/auth-rbac';
 import { RequireAgentScope } from '../../common/auth/auth.guard.js';
@@ -77,10 +77,16 @@ export class AgentAudienceController {
    * The rules travel with the request because the Agent has to compile them —
    * that is the point of v6. What does not travel is anything about people.
    */
+  /**
+   * With ?wait=N (up to 25 seconds) the request is held until a request
+   * arrives for this Partner -- a long poll -- so a Buyer's estimate takes a
+   * second or two rather than up to a polling interval.
+   */
   @Get('estimate-requests')
   @RequireAgentScope('config:read')
-  async pendingEstimates(@Principal() p: AgentPrincipal) {
-    return this.service.pendingEstimates(p.partnerOrgId);
+  async pendingEstimates(@Principal() p: AgentPrincipal, @Query('wait') wait?: string) {
+    const seconds = Math.min(Math.max(Number.parseInt(wait ?? '0', 10) || 0, 0), 25);
+    return this.service.pendingEstimates(p.partnerOrgId, seconds);
   }
 
   /**

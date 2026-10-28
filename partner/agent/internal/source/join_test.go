@@ -23,6 +23,10 @@ func TestJoinedTablesReadAsOneRow(t *testing.T) {
 		`INSERT INTO join_addresses VALUES (1, 'Pune', '2025-01-01'), (1, 'Mumbai', '2026-01-01'), (3, 'Delhi', '2024-01-01')`,
 		`INSERT INTO join_usermeta (user_id, meta_key, meta_value) VALUES
 		   (1, 'billing_city', 'Thane'), (1, 'gender', 'F'), (2, 'gender', 'M'), (2, 'nickname', 'b')`)
+	// The fixture shares a database with other suites locally: leave nothing.
+	t.Cleanup(func() {
+		sqlFixture(t, "pgx", url, `DROP TABLE IF EXISTS join_users, join_profiles, join_addresses, join_usermeta`)
+	})
 
 	ctx := context.Background()
 	src, err := Open(ctx, Config{Kind: Postgres, URI: url})

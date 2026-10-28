@@ -25,6 +25,9 @@ func TestLargeTablesAreReadInSlices(t *testing.T) {
 	}
 	stmts = append(stmts, `CREATE VIEW paging_view AS SELECT id, name FROM paging_customers`)
 	sqlFixture(t, "pgx", url, stmts...)
+	t.Cleanup(func() {
+		sqlFixture(t, "pgx", url, `DROP VIEW IF EXISTS paging_view`, `DROP TABLE IF EXISTS paging_customers`)
+	})
 
 	ctx := context.Background()
 	src, err := Open(ctx, Config{Kind: Postgres, URI: url, Location: "Asia/Kolkata"})

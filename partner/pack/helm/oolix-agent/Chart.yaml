@@ -1,0 +1,10 @@
+apiVersion: v2
+name: oolix-agent
+description: >-
+  The Oolix Partner Agent in managed mode (Partner Connect) with its local
+  store, in one namespace of a Data Partner's own cluster. The Agent only
+  reads the Partner's database; customer data never leaves the cluster.
+type: application
+version: 0.1.0
+appVersion: "latest"
+keywords: [oolix, partner-agent, privacy]

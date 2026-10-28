@@ -1,0 +1,42 @@
+# The store talks to the Agent and nothing else.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "oolix-agent.store" . }}
+  labels: {{- include "oolix-agent.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: store
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: agent
+      ports:
+        - port: 5432
+  egress: []
+---
+# The ad-decision port is for the Partner's own backend only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "oolix-agent.name" . }}
+  labels: {{- include "oolix-agent.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: agent
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {{- toYaml .Values.decisionClients.podSelector | nindent 12 }}
+          {{- with .Values.decisionClients.namespaceSelector }}
+          namespaceSelector: {{- toYaml . | nindent 12 }}
+          {{- end }}
+      ports:
+        - port: 8082

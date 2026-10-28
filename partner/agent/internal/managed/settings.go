@@ -24,6 +24,7 @@ const (
 	keyLastFull = "last_full_sync"
 	keyMark     = "watermark"
 	keyPublish  = "published"
+	keyLatest   = "latest_agent_version"
 )
 
 // Identity is what registering with Oolix produced. The private key it goes
@@ -319,4 +320,17 @@ func (s Settings) Published(ctx context.Context) (*PublishRecord, error) {
 		return nil, err
 	}
 	return &p, nil
+}
+
+// SaveLatestVersion records the Agent version Oolix's bundle now runs, as each
+// heartbeat reports it.
+func (s Settings) SaveLatestVersion(ctx context.Context, version string) error {
+	return s.Store.Put(ctx, keyLatest, version)
+}
+
+// LatestVersion is the version last reported, or "".
+func (s Settings) LatestVersion(ctx context.Context) (string, error) {
+	var v string
+	_, err := s.Store.Get(ctx, keyLatest, &v)
+	return v, err
 }

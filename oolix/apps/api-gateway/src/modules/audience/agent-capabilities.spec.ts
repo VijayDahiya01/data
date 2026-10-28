@@ -11,6 +11,10 @@ import { AudienceService } from './audience.service.js';
 import { PublishCapabilitiesSchema } from './audience.schema.js';
 import type { PrismaService } from '../../prisma/prisma.service.js';
 import type { AuditService } from '../../common/audit/audit.service.js';
+import type { Wakeups } from '../../common/redis/wakeups.js';
+
+// Nothing here long-polls.
+const noWakeups = { notify: async () => {} } as unknown as Wakeups;
 
 const agent: AgentPrincipal = {
   kind: 'agent',
@@ -61,7 +65,7 @@ function serviceFor(verificationStatus: string | null) {
       recorded.audits.push(input);
     },
   } as unknown as AuditService;
-  return { service: new AudienceService(prisma, audit), recorded };
+  return { service: new AudienceService(prisma, audit, noWakeups), recorded };
 }
 
 const input = PublishCapabilitiesSchema.parse({
@@ -136,7 +140,11 @@ describe('AudienceService data quality (Partner Connect)', () => {
       },
     } as unknown as PrismaService;
     return {
-      service: new AudienceService(prisma, { record: async () => {} } as unknown as AuditService),
+      service: new AudienceService(
+        prisma,
+        { record: async () => {} } as unknown as AuditService,
+        noWakeups,
+      ),
       upserts,
     };
   }

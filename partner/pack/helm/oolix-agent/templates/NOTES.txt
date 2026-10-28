@@ -1,0 +1,15 @@
+The Oolix Agent is starting in namespace {{ .Release.Namespace }}.
+
+1. The setup page password, written once to the Agent's log on first start:
+
+     kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "oolix-agent.name" . }} | grep setup_password
+
+2. Open the setup page from your machine (it is not exposed in the cluster):
+
+     kubectl -n {{ .Release.Namespace }} port-forward deploy/{{ include "oolix-agent.name" . }} 8083:8083
+
+   then browse to http://localhost:8083 and follow the six steps.
+
+3. Your backend asks for ad decisions at:
+
+     http://{{ include "oolix-agent.name" . }}.{{ .Release.Namespace }}.svc:8082/private/v1/ad-decision

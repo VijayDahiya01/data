@@ -43,6 +43,9 @@ type Options struct {
 	StaleGrace       time.Duration
 	HTTPClient       *http.Client
 	Logger           *slog.Logger
+	// OnLatestVersion hears the Agent version Oolix's Partner Connect bundle
+	// now runs, from each heartbeat; nil to ignore it.
+	OnLatestVersion func(version string)
 }
 
 // Syncer maintains the Agent's verified view of what it may serve.
@@ -406,6 +409,13 @@ func (s *Syncer) sendHeartbeat(ctx context.Context) error {
 		return err
 	}
 	defer res.Body.Close()
+	var ack struct {
+		LatestAgentVersion string `json:"latest_agent_version"`
+	}
+	if res.StatusCode == http.StatusOK && json.NewDecoder(io.LimitReader(res.Body, 64*1024)).Decode(&ack) == nil &&
+		ack.LatestAgentVersion != "" && s.opts.OnLatestVersion != nil {
+		s.opts.OnLatestVersion(ack.LatestAgentVersion)
+	}
 	io.Copy(io.Discard, res.Body)
 	return nil
 }

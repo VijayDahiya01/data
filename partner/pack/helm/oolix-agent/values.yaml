@@ -1,0 +1,45 @@
+# The Oolix API this Agent registers with (the portal shows it).
+apiBaseUrl: "https://api.oolix.example"
+
+image:
+  repository: ghcr.io/vijaydahiya01/data/partner-agent
+  tag: latest
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# Optional: choose the setup page password yourself (12+ characters), from a
+# Secret key. Without it the Agent writes one to its log on first start.
+setupPassword:
+  existingSecret: ""
+  key: setup-password
+
+# The Agent's state: its identity key and the key that scrambles customer IDs.
+# Keep it: losing it means registering again and rebuilding the copy.
+state:
+  size: 1Gi
+  storageClass: ""
+
+# CSV, Excel or JSON-lines exports, if the Agent reads files rather than a
+# database: an existing claim holding them, mounted read-only.
+importClaim: ""
+
+store:
+  image: postgres:16-alpine
+  size: 20Gi
+  storageClass: ""
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { memory: 2Gi }
+
+resources:
+  requests: { cpu: 250m, memory: 256Mi }
+  limits: { memory: 1Gi }
+
+# Who may call the ad-decision port (8082): pods matching these selectors.
+# Empty selectors: every pod in this namespace.
+decisionClients:
+  podSelector: {}
+  namespaceSelector: {}
+
+nodeSelector: {}
+tolerations: []

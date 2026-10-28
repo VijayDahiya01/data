@@ -7,8 +7,10 @@ import { Global, Module, type OnApplicationShutdown } from '@nestjs/common';
 import { Inject, Injectable } from '@nestjs/common';
 import Redis from 'ioredis';
 import { CONFIG, type OolixConfig } from '../../config/configuration.js';
+import { Wakeups } from './wakeups.js';
+import { REDIS } from './redis.token.js';
 
-export const REDIS = Symbol('OOLIX_REDIS');
+export { REDIS };
 
 @Injectable()
 export class RedisLifecycle implements OnApplicationShutdown {
@@ -36,7 +38,8 @@ export class RedisLifecycle implements OnApplicationShutdown {
         }),
     },
     RedisLifecycle,
+    Wakeups,
   ],
-  exports: [REDIS],
+  exports: [REDIS, Wakeups],
 })
 export class RedisModule {}

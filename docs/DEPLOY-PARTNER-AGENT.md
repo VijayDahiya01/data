@@ -205,11 +205,57 @@ column so the nightly read covers only the customers who changed.
 ### Keeping it running
 
 - **Upgrade:** `docker compose pull && docker compose up -d`. The copy, your
-  choices and the Agent's identity live in Docker volumes and survive.
+  choices and the Agent's identity live in Docker volumes and survive. The
+  setup page says when Oolix runs a newer Agent than yours; you choose when
+  to update.
 - **Nothing to back up** that cannot be rebuilt — the copy is rebuilt every
   night. Keep the `agent-state` volume to avoid registering again.
 - **Logs:** `docker compose logs -f agent`. They never contain a customer ID
   or a value from your database.
+- **Check the image before you run it.** Images are signed in CI, keylessly,
+  and carry a software bill of materials and build provenance:
+
+  ```sh
+  cosign verify ghcr.io/<owner>/<repo>/partner-agent:<tag> \
+    --certificate-identity-regexp 'https://github.com/<owner>/<repo>/' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com
+  ```
+
+### On Kubernetes
+
+The Helm chart in `partner/pack/helm/oolix-agent` runs the same two parts --
+the Agent with its setup page, and its local store -- in one namespace, with
+network policies that keep the store reachable from the Agent only and the
+decision port from your own pods only:
+
+```sh
+helm install shop partner/pack/helm/oolix-agent --namespace oolix --create-namespace \
+  --set apiBaseUrl=https://<oolix-api>
+kubectl -n oolix logs deploy/shop-oolix-agent | grep setup_password
+kubectl -n oolix port-forward deploy/shop-oolix-agent 8083:8083
+```
+
+The setup page is never exposed in the cluster; reach it with the
+port-forward. Your backend calls
+`http://shop-oolix-agent.oolix.svc:8082/private/v1/ad-decision`.
+
+### Without Docker
+
+For a server without Docker -- many Windows and SQL Server shops -- the Agent
+runs as a service. CI publishes the binaries (Linux x86-64 and ARM, Windows)
+with checksums, next to the install scripts in `partner/pack/native`. The
+Agent's local store is then a PostgreSQL database of its own, on this server
+or any it reaches; the install script prints the two statements that create
+it.
+
+- **Linux:** `sudo ./install-linux.sh https://<oolix-api> ./oolix-agent-linux-amd64`,
+  then `sudo systemctl enable --now oolix-agent`. The unit is locked down:
+  no new privileges, a read-only system, writes only to `/var/lib/oolix-agent`.
+- **Windows** (elevated PowerShell): `.\install-windows.ps1 -ApiUrl https://<oolix-api> -Binary .\oolix-agent-windows-amd64.exe`,
+  then `Start-Service OolixAgent`. The log, with the setup page password, is
+  in `C:\ProgramData\Oolix\Agent\agent.log`, readable by administrators only.
+
+In both, the setup page listens on this server only (`127.0.0.1:8083`).
 
 ---
 

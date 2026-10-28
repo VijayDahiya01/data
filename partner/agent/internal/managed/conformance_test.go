@@ -233,6 +233,16 @@ func TestEveryConnectorMakesTheSameCopy(t *testing.T) {
 				t.Skip(k.env + " not set")
 			}
 			k.load(t, dsn)
+			if k.kind == source.Postgres {
+				// Locally this database is shared with the API's own suites,
+				// whose privacy checks look for customer-ID columns.
+				t.Cleanup(func() {
+					if db, err := sql.Open("pgx", dsn); err == nil {
+						_, _ = db.Exec(`DROP TABLE IF EXISTS conf_customers`)
+						_ = db.Close()
+					}
+				})
+			}
 			cfg := source.Config{Kind: k.kind, URI: dsn, Location: "Asia/Kolkata"}
 			if k.kind == source.MongoDB {
 				cfg.Database = "oolix_source_test"

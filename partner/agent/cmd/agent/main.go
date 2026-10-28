@@ -75,11 +75,23 @@ func main() {
 		return
 	}
 
-	if err := run(*configPath, *managedMode); err != nil {
+	// Installed as a Windows service, the service manager starts and stops it.
+	handled, err := runAsService(func(ctx context.Context) error {
+		baseContext = func() context.Context { return ctx }
+		return run(*configPath, *managedMode)
+	})
+	if !handled && err == nil {
+		err = run(*configPath, *managedMode)
+	}
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent failed: %v\n", err)
 		os.Exit(1)
 	}
 }
+
+// baseContext is what the Agent runs within: the process, or a Windows
+// service the service manager can stop.
+var baseContext = context.Background
 
 // runRegister performs §92.2 and prints what belongs in the configuration file.
 //
@@ -153,7 +165,7 @@ func run(configPath string, managedMode bool) error {
 		"meta_enabled", cfg.Channels.Meta.Enabled,
 		"google_enabled", cfg.Channels.Google.Enabled)
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(baseContext(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	if cfg.IsManaged() {
@@ -256,6 +268,8 @@ type serving struct {
 	onSyncer func(*controlsync.Syncer)
 	// pusher serves the push routes; nil outside managed mode.
 	pusher httpapi.Pusher
+	// latestVersion hears the newest Agent version from heartbeats; may be nil.
+	latestVersion func(string)
 }
 
 // serve runs the parts both modes share: the decision engine, the private
@@ -302,6 +316,7 @@ func serve(ctx context.Context, cfg *config.Config, logger *slog.Logger, parts s
 		StaleGrace:       cfg.Agent.StaleGrace,
 		HTTPClient:       httpClient,
 		Logger:           logger,
+		OnLatestVersion:  parts.latestVersion,
 	})
 
 	tokens := attribution.NewIssuer(httpClient, cfg.Oolix.APIBaseURL, cfg.Oolix.AgentID, syncer.AccessToken)
@@ -811,6 +826,9 @@ func runManaged(ctx context.Context, cfg *config.Config, logger *slog.Logger) er
 		evaluator: evaluator,
 		index:     managed.ScrambledAudience{AudienceIndex: evaluator, Scramble: store.ScrambleID},
 		pusher:    pushAPI{store: store, runner: runner},
+		latestVersion: func(v string) {
+			_ = managed.Settings{Store: store}.SaveLatestVersion(context.Background(), v)
+		},
 		onSyncer: func(s *controlsync.Syncer) {
 			runner.SetQualityReporter(func(ctx context.Context, q managed.Quality) error {
 				return s.ReportQuality(ctx, q)

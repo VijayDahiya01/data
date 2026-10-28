@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { parse } from 'yaml';
 import { PARTNER_COMPOSE_TEMPLATE, renderPartnerCompose } from './partner-compose.js';
+import { latestAgentVersion } from './agent-registry.service.js';
 
 const PACK = path.resolve(__dirname, '../../../../../../partner/pack/docker-compose.partner.yml');
 
@@ -38,5 +39,16 @@ describe('Partner Connect Compose bundle', () => {
     expect(agent.ports).toContain('127.0.0.1:8083:8083');
     // Interpolation is left for Docker Compose, not eaten by the template.
     expect(out).toContain('${OOLIX_SETUP_PASSWORD:-}');
+  });
+});
+
+describe('latestAgentVersion', () => {
+  it('reads the version an image tag names, and nothing else', () => {
+    expect(latestAgentVersion('ghcr.io/acme/data/partner-agent:3f2a9c1e')).toBe('3f2a9c1e');
+    expect(latestAgentVersion('registry.local:5000/partner-agent:1.4.0')).toBe('1.4.0');
+    expect(latestAgentVersion('ghcr.io/acme/data/partner-agent:latest')).toBeNull();
+    expect(latestAgentVersion('oolix/partner-agent:dev')).toBeNull();
+    expect(latestAgentVersion('ghcr.io/acme/partner-agent@sha256:abc')).toBeNull();
+    expect(latestAgentVersion('partner-agent')).toBeNull();
   });
 });

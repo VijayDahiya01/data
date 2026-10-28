@@ -1,0 +1,33 @@
+# The Oolix Partner Agent in managed mode (Partner Connect), without Docker.
+# Installed by install-linux.sh; settings in /etc/oolix-agent/agent.env.
+[Unit]
+Description=Oolix Partner Agent
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=oolix-agent
+Group=oolix-agent
+EnvironmentFile=/etc/oolix-agent/agent.env
+ExecStart=/usr/local/bin/oolix-agent -managed
+Restart=on-failure
+RestartSec=5
+
+# It only reads the Partner's database and writes its own state folder.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ReadWritePaths=/var/lib/oolix-agent
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+MemoryDenyWriteExecute=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

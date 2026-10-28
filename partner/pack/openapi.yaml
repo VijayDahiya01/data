@@ -2407,10 +2407,19 @@ paths:
         Scoped entirely by the Agent's registered Partner (§92.4: never trust a
         `partner_org_id` supplied by the caller), so an Agent cannot collect
         another Partner's work with a valid token.
+
+        With `wait`, a long poll: the request is held until a request arrives
+        for this Partner or `wait` seconds pass, so a Buyer's estimate is
+        answered in a second or two.
       security:
         - agentBearer: []
       parameters:
         - $ref: '#/components/parameters/AgentId'
+        - name: wait
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, maximum: 25, default: 0 }
+          description: Seconds to hold the request while there is no work.
       responses:
         '200':
           description: |

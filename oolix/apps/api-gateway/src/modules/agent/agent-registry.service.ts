@@ -67,6 +67,18 @@ function sha256(value: string): Uint8Array<ArrayBuffer> {
   return toBytes(createHash('sha256').update(value).digest());
 }
 
+/**
+ * The Agent version an image reference names: its tag, which CI sets to the
+ * commit it stamps into the Agent. Null for a digest, `latest` or `dev`,
+ * which name no version an Agent could compare itself with.
+ */
+export function latestAgentVersion(image: string): string | null {
+  if (image.includes('@')) return null;
+  const last = image.split('/').pop() ?? '';
+  const tag = last.includes(':') ? last.slice(last.indexOf(':') + 1) : '';
+  return tag && tag !== 'latest' && tag !== 'dev' ? tag : null;
+}
+
 @Injectable()
 export class AgentRegistryService {
   constructor(
@@ -300,6 +312,9 @@ export class AgentRegistryService {
       stale_grace_seconds: this.config.CONTROL_STALE_GRACE_SEC,
       config_status: configCritical ? 'CRITICAL' : configStale ? 'STALE' : 'FRESH',
       server_time: new Date().toISOString(),
+      // The version the Partner Connect bundle now runs, so an Agent can tell
+      // its Partner it is behind. The Partner decides when to update.
+      latest_agent_version: latestAgentVersion(this.config.PARTNER_AGENT_IMAGE),
     };
   }
 

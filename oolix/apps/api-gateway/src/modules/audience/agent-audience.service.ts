@@ -16,6 +16,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { AuditService } from '../../common/audit/audit.service.js';
 import { BUCKET_TO_DB } from '../../common/reach.js';
+import { Wakeups } from '../../common/redis/wakeups.js';
 import type {
   MaterializationReportInput,
   ReachEstimateResultInput,
@@ -29,6 +30,7 @@ export class AgentAudienceService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(Wakeups) private readonly wakeups: Wakeups,
   ) {}
 
   /**
@@ -38,7 +40,21 @@ export class AgentAudienceService {
    * that crashed mid-evaluation would otherwise leave the Buyer waiting
    * forever on a request nobody will pick up.
    */
-  async pendingEstimates(partnerOrgId: string) {
+  async pendingEstimates(partnerOrgId: string, waitSeconds = 0) {
+    if (waitSeconds <= 0) return this.claimEstimates(partnerOrgId);
+    // Long poll: listen before looking, so a request made in between still
+    // wakes this one; then hold until work arrives or the time is up.
+    const waiting = this.wakeups.wait('estimates:' + partnerOrgId, waitSeconds * 1000);
+    const first = await this.claimEstimates(partnerOrgId);
+    if (first.items.length > 0) {
+      waiting.cancel();
+      return first;
+    }
+    await waiting.done;
+    return this.claimEstimates(partnerOrgId);
+  }
+
+  private async claimEstimates(partnerOrgId: string) {
     const staleClaimBefore = new Date(Date.now() - CLAIM_TIMEOUT_MINUTES * 60_000);
 
     const rows = await this.prisma.reachEstimate.findMany({

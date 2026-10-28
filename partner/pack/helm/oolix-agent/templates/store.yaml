@@ -1,0 +1,83 @@
+{{- /* The Agent's own database: the cleaned copy and audience lists. Reachable only from the Agent. */ -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "oolix-agent.store" . }}
+  labels: {{- include "oolix-agent.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: store
+  ports:
+    - name: postgres
+      port: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "oolix-agent.store" . }}
+  labels: {{- include "oolix-agent.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "oolix-agent.store" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: store
+  template:
+    metadata:
+      labels:
+        {{- include "oolix-agent.labels" . | nindent 8 }}
+        app.kubernetes.io/component: store
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        fsGroup: 70
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: postgres
+          image: {{ .Values.store.image }}
+          env:
+            - { name: POSTGRES_USER, value: oolix_agent }
+            - { name: POSTGRES_DB, value: oolix_agent }
+            - { name: POSTGRES_PASSWORD_FILE, value: /run/oolix/store-password }
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+          ports:
+            - containerPort: 5432
+          readinessProbe:
+            exec:
+              command: [pg_isready, -U, oolix_agent, -d, oolix_agent]
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          resources: {{- toYaml .Values.store.resources | nindent 12 }}
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: secrets, mountPath: /run/oolix, readOnly: true }
+            - { name: run, mountPath: /var/run/postgresql }
+      volumes:
+        - name: secrets
+          secret:
+            secretName: {{ include "oolix-agent.store" . }}-store-password
+            defaultMode: 0444
+        - name: run
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.store.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.store.size }}

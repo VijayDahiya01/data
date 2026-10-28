@@ -1,0 +1,137 @@
+{{- /*
+The Agent in managed mode. One replica: it runs the nightly refresh and serves
+the setup page, and two would refresh the same copy at once.
+*/ -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "oolix-agent.name" . }}-state
+  labels: {{- include "oolix-agent.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- with .Values.state.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.state.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "oolix-agent.name" . }}
+  labels: {{- include "oolix-agent.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: agent
+  template:
+    metadata:
+      labels:
+        {{- include "oolix-agent.labels" . | nindent 8 }}
+        app.kubernetes.io/component: agent
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: agent
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["-managed"]
+          env:
+            - name: OOLIX_API_BASE_URL
+              value: {{ .Values.apiBaseUrl | quote }}
+            - name: OOLIX_LOCAL_STORE_URL
+              value: "postgres://oolix_agent@{{ include "oolix-agent.store" . }}:5432/oolix_agent?sslmode=disable"
+            - name: OOLIX_LOCAL_STORE_PASSWORD_FILE
+              value: /run/oolix/store-password
+            - name: OOLIX_STATE_DIR
+              value: /var/lib/oolix-agent
+            - name: OOLIX_IMPORT_FOLDER
+              value: /data/import
+            {{- with .Values.setupPassword.existingSecret }}
+            - name: OOLIX_SETUP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: {{ $.Values.setupPassword.key }}
+            {{- end }}
+          ports:
+            - name: decisions
+              containerPort: 8082
+            - name: setup
+              containerPort: 8083
+          readinessProbe:
+            httpGet:
+              path: /login
+              port: setup
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: setup
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - { name: state, mountPath: /var/lib/oolix-agent }
+            - { name: secrets, mountPath: /run/oolix, readOnly: true }
+            # Exports read from SFTP or a bucket are downloaded here.
+            - { name: tmp, mountPath: /tmp }
+            {{- if .Values.importClaim }}
+            - { name: import, mountPath: /data/import, readOnly: true }
+            {{- end }}
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: {{ include "oolix-agent.name" . }}-state
+        - name: secrets
+          secret:
+            secretName: {{ include "oolix-agent.store" . }}-store-password
+            defaultMode: 0444
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.importClaim }}
+        - name: import
+          persistentVolumeClaim:
+            claimName: {{ .Values.importClaim }}
+            readOnly: true
+        {{- end }}
+---
+# The ad-decision port, inside the cluster only. The setup page is not
+# exposed at all: reach it with kubectl port-forward (see the notes).
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "oolix-agent.name" . }}
+  labels: {{- include "oolix-agent.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: agent
+  ports:
+    - name: decisions
+      port: 8082
+      targetPort: decisions

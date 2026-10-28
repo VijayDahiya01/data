@@ -30,6 +30,7 @@ import { AuditService } from '../../common/audit/audit.service.js';
 import { toWireBucket } from '../../common/reach.js';
 import { canSeePartner, visiblePartnerIds } from '../../common/partner-visibility.js';
 import { precisionNotes } from './precision.js';
+import { Wakeups } from '../../common/redis/wakeups.js';
 import type {
   CreateAudienceInput,
   DataQualityReportInput,
@@ -84,6 +85,7 @@ export class AudienceService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(Wakeups) private readonly wakeups: Wakeups,
   ) {}
 
   /* --- taxonomy (§4) ------------------------------------------------------- */
@@ -1031,6 +1033,11 @@ export class AudienceService {
         status: created.status,
         cached: false,
       });
+    }
+
+    // Long-polling Agents pick the new requests up at once.
+    for (const r of requests) {
+      if (!r.cached) await this.wakeups.notify('estimates:' + r.partner_org_id);
     }
 
     await this.audit.record({

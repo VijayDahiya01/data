@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/oolix/partner-agent/internal/clean"
+	"github.com/oolix/partner-agent/internal/controlsync"
 	"github.com/oolix/partner-agent/internal/detect"
 	"github.com/oolix/partner-agent/internal/managed"
 	"github.com/oolix/partner-agent/internal/source"
@@ -185,6 +186,8 @@ type overviewData struct {
 	PushToken   string
 	IDColumn    string
 	PushColumns []string
+	// UpdateTo is a newer Agent version Oolix's bundle runs, if any.
+	UpdateTo string
 }
 
 type activityStatus struct {
@@ -261,6 +264,9 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request, sess *session)
 		}
 		d.IDColumn = st.live.IDColumn
 		d.PushColumns = st.live.PushColumns()
+	}
+	if latest, err := s.settings.LatestVersion(ctx); err == nil && latest != "" && latest != controlsync.Version {
+		d.UpdateTo = latest
 	}
 	v := s.view(r, sess, st, "Overview", "/")
 	v.Data = d

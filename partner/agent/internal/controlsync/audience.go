@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/oolix/partner-agent/internal/audience"
@@ -71,6 +72,8 @@ func (s *Syncer) RunAudienceWorker(
 		ttl = 24 * time.Hour
 	}
 
+	go s.pollEstimates(ctx, evaluator, interval)
+
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -79,12 +82,38 @@ func (s *Syncer) RunAudienceWorker(
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := s.processEstimates(ctx, evaluator); err != nil {
-				// A failed poll is not fatal: the request stays claimed only
-				// briefly and is offered again, so the next tick retries.
-				s.log.Warn("audience estimate poll failed", "error", err)
-			}
 			s.reconcileMaterializations(ctx, evaluator, ttl)
+		}
+	}
+}
+
+// estimateWait is how long the API may hold a request for estimate work: the
+// long poll. It stays under the client's 30-second timeout.
+const estimateWait = 20 * time.Second
+
+// pollEstimates asks for estimate requests with a long poll: the API holds the
+// request until one arrives, so a Buyer's estimate takes a second or two
+// rather than up to a polling interval. An API that does not hold requests
+// answers at once with nothing, and the loop then waits the interval.
+func (s *Syncer) pollEstimates(ctx context.Context, evaluator AudienceEvaluator, interval time.Duration) {
+	for ctx.Err() == nil {
+		started := time.Now()
+		n, err := s.processEstimates(ctx, evaluator, estimateWait)
+		pause := time.Duration(0)
+		switch {
+		case err != nil:
+			// Not fatal: a claimed request is offered again before long.
+			s.log.Warn("audience estimate poll failed", "error", err)
+			pause = interval
+		case n == 0 && time.Since(started) < estimateWait/2:
+			pause = interval
+		}
+		if pause > 0 {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(pause):
+			}
 		}
 	}
 }
@@ -207,10 +236,10 @@ func (s *Syncer) recordMaterialized(activationID, ruleHash string, version int) 
 	}
 }
 
-func (s *Syncer) processEstimates(ctx context.Context, evaluator AudienceEvaluator) error {
-	queue, err := s.pullEstimateRequests(ctx)
+func (s *Syncer) processEstimates(ctx context.Context, evaluator AudienceEvaluator, wait time.Duration) (int, error) {
+	queue, err := s.pullEstimateRequests(ctx, wait)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	for _, request := range queue.Items {
@@ -233,17 +262,17 @@ func (s *Syncer) processEstimates(ctx context.Context, evaluator AudienceEvaluat
 		}
 	}
 
-	return nil
+	return len(queue.Items), nil
 }
 
-func (s *Syncer) pullEstimateRequests(ctx context.Context) (*estimateQueueDTO, error) {
+func (s *Syncer) pullEstimateRequests(ctx context.Context, wait time.Duration) (*estimateQueueDTO, error) {
 	token, err := s.tokens.Token(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("agent token: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		s.opts.APIBaseURL+"/agent/v1/audience/estimate-requests", nil)
+		s.opts.APIBaseURL+"/agent/v1/audience/estimate-requests?wait="+strconv.Itoa(int(wait.Seconds())), nil)
 	if err != nil {
 		return nil, err
 	}

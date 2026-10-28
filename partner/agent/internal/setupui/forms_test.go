@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/oolix/partner-agent/internal/controlsync"
 	"github.com/oolix/partner-agent/internal/managed"
 	"github.com/oolix/partner-agent/internal/standard"
 )
@@ -92,5 +93,36 @@ func TestAgeGroupsAskWhenTheyWereTrue(t *testing.T) {
 	if len(h.published) != 1 || h.published[0].Attributes[0].Precision == nil ||
 		h.published[0].Attributes[0].Precision.Kind != "APPROXIMATE" {
 		t.Errorf("published: %+v", h.published)
+	}
+}
+
+// The overview says when Oolix's bundle runs a newer Agent than this one.
+func TestOverviewOffersANewerAgent(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	h.post("/login", url.Values{"password": {"correct horse battery"}})
+	csrf := h.csrf()
+	h.post("/register", url.Values{"csrf": {csrf}, "code": {"one-time-code"}})
+	h.post("/source", url.Values{"csrf": {csrf}, "kind": {"file"}, "location": {"Asia/Kolkata"}})
+	h.post("/table", url.Values{"csrf": {csrf}, "table": {"customers.csv"}})
+	h.post("/review", url.Values{"csrf": {csrf}, "id_column": {"customer_id"}, "col_city": {"City"},
+		"publish_city": {"on"}, "action": {"next"}})
+	if _, at, _ := h.post("/consent", url.Values{"csrf": {csrf}, "consent_column": {"marketing_opt_in"},
+		"web": {"on"}, "sync_hour": {"3"}, "action": {"publish"}}); at != "/?notice=publishing" {
+		t.Fatalf("publish ended at %s", at)
+	}
+	s := managed.Settings{Store: h.store}
+	const notice = "A newer version of the Agent is available"
+	if err := s.SaveLatestVersion(ctx, controlsync.Version); err != nil {
+		t.Fatal(err)
+	}
+	if _, body := h.get("/"); strings.Contains(body, notice) {
+		t.Error("an up-to-date Agent was told to update")
+	}
+	if err := s.SaveLatestVersion(ctx, "a-newer-build"); err != nil {
+		t.Fatal(err)
+	}
+	if _, body := h.get("/"); !strings.Contains(body, notice) {
+		t.Error("a newer Agent was not offered")
 	}
 }
