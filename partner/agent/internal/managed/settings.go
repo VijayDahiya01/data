@@ -154,6 +154,9 @@ type Mapping struct {
 	SyncHour int `json:"sync_hour"`
 	// Channels are where the Partner shows ads: PARTNER_WEB, PARTNER_APP.
 	Channels []string `json:"channels,omitempty"`
+	// CrossPartner is the opt-in to matching customers with other Partners
+	// in the clean room; nil while off.
+	CrossPartner *CrossPartnerMapping `json:"cross_partner,omitempty"`
 	// PublishedAt is set when the Partner publishes, and cleared when they
 	// delete the copy. Nightly syncs run only while it is set.
 	PublishedAt *time.Time `json:"published_at,omitempty"`

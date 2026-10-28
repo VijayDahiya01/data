@@ -42,6 +42,7 @@ import { AttributionModule } from './modules/attribution/attribution.module.js';
 import { ReportingModule } from './modules/reporting/reporting.module.js';
 import { BillingModule } from './modules/billing/billing.module.js';
 import { SuggestionsModule } from './modules/suggestions/suggestions.module.js';
+import { CleanRoomModule } from './modules/cleanroom/cleanroom.module.js';
 
 @Module({
   imports: [
@@ -75,6 +76,9 @@ import { SuggestionsModule } from './modules/suggestions/suggestions.module.js';
     // Suggested meanings for values an Agent could not read, and synonyms
     // learned from Partners (docs/DESIGN-PARTNER-DATA.md §5.6).
     SuggestionsModule,
+    // Matching customers across Partners in a clean room nobody can look
+    // into (docs/DESIGN-PARTNER-DATA.md phase 7).
+    CleanRoomModule,
   ],
   providers: [
     OolixExceptionFilter,

@@ -294,6 +294,15 @@ export type PartnerDataQuality = Prisma.PartnerDataQualityModel
  */
 export type SynonymContribution = Prisma.SynonymContributionModel
 /**
+ * Model CleanRoomRun
+ * A clean-room run between two Partners (docs/DESIGN-PARTNER-DATA.md phase
+ * 7): an overlap count, or a joint audience for the Partner who asked. It
+ * holds who, what and the answer as a size band -- never a match key or a
+ * customer. The Agents' sealed inputs pass through Redis for an hour at
+ * most, and the clean room keeps nothing.
+ */
+export type CleanRoomRun = Prisma.CleanRoomRunModel
+/**
  * Model SharedSynonym
  * An Oolix admin's decision on a shared value: APPROVED sends value -> code
  * to every Agent; REJECTED keeps the value out of review until changed.

@@ -1269,11 +1269,17 @@ type consentData struct {
 	Hours      []int
 	Offered    []string
 	Registered bool
+	// CrossPartner is the opt-in to matching with other Partners.
+	CrossPartnerOn bool
+	CrossPartner   managed.CrossPartnerMapping
 }
 
 func (s *Server) consentData(st state, p *preview, m *managed.Mapping) consentData {
 	d := consentData{Consent: m.Consent, SyncHour: m.SyncHour, Registered: st.identity != nil,
 		Web: slices.Contains(m.Channels, "PARTNER_WEB"), App: slices.Contains(m.Channels, "PARTNER_APP")}
+	if m.CrossPartner != nil {
+		d.CrossPartnerOn, d.CrossPartner = m.CrossPartner.Enabled(), *m.CrossPartner
+	}
 	for h := 0; h < 24; h++ {
 		d.Hours = append(d.Hours, h)
 	}
@@ -1379,6 +1385,22 @@ func (s *Server) saveConsent(w http.ResponseWriter, r *http.Request, sess *sessi
 	}
 	if h, err := strconv.Atoi(f("sync_hour")); err == nil && h >= 0 && h < 24 {
 		m.SyncHour = h
+	}
+	m.CrossPartner = nil
+	if f("cp_on") == "on" {
+		cp := &managed.CrossPartnerMapping{}
+		if col := f("cp_email"); known[col] {
+			cp.EmailColumn = col
+		}
+		if col := f("cp_phone"); known[col] {
+			cp.PhoneColumn = col
+		}
+		if col := f("cp_consent"); known[col] {
+			cp.Consent.Column = col
+		}
+		// Kept even when incomplete, so the page shows what was chosen; it
+		// takes part only once Enabled.
+		m.CrossPartner = cp
 	}
 	if err := s.settings.SaveDraft(ctx, m); err != nil {
 		s.fail(w, err)

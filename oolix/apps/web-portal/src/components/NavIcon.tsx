@@ -127,6 +127,7 @@ const BY_HREF: Record<string, Glyph> = {
   '/partner/reports': GLYPHS.chart,
   '/partner/payouts': GLYPHS.wallet,
   '/partner/policies': GLYPHS.shield,
+  '/partner/cleanroom': GLYPHS.nodes,
 
   '/network': GLYPHS.nodes,
   '/network/members': GLYPHS.team,

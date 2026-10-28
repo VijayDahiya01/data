@@ -318,3 +318,56 @@ export async function publishCapabilities(_prev: ActionState, fd: FormData): Pro
   revalidatePath('/partner/capabilities');
   return { ok: true };
 }
+
+/**
+ * The cross-Partner clean room (docs/DESIGN-PARTNER-DATA.md phase 7): take
+ * part, ask another Partner for a run, or answer one. The API checks that
+ * both Partners take part, and that only the asked Partner decides.
+ */
+export async function setCleanRoomParticipation(
+  _prev: ActionState,
+  fd: FormData,
+): Promise<ActionState> {
+  try {
+    await api('/v1/partner/cleanroom/participation', {
+      method: 'PUT',
+      body: { enabled: str(fd, 'enabled') === 'true' },
+    });
+  } catch (err) {
+    return toState(err);
+  }
+  revalidatePath('/partner/cleanroom');
+  return { ok: true };
+}
+
+export async function requestCleanRoomRun(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const withOrg = str(fd, 'with_org_id');
+  if (!withOrg) return { error: 'Choose the Partner to ask.' };
+  try {
+    await api('/v1/partner/cleanroom/runs', {
+      method: 'POST',
+      body: { kind: str(fd, 'kind') === 'JOINT' ? 'JOINT' : 'OVERLAP', with_org_id: withOrg },
+    });
+  } catch (err) {
+    return toState(err);
+  }
+  revalidatePath('/partner/cleanroom');
+  return { ok: true };
+}
+
+export async function decideCleanRoomRun(
+  runId: string,
+  _prev: ActionState,
+  fd: FormData,
+): Promise<ActionState> {
+  try {
+    await api(`/v1/partner/cleanroom/runs/${runId}/decision`, {
+      method: 'POST',
+      body: { approve: str(fd, 'approve') === 'true' },
+    });
+  } catch (err) {
+    return toState(err);
+  }
+  revalidatePath('/partner/cleanroom');
+  return { ok: true };
+}

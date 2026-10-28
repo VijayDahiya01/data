@@ -102,3 +102,35 @@ func TestHelpWithUnreadValues(t *testing.T) {
 		t.Errorf("synonyms %q: %v", version, byAttr)
 	}
 }
+
+// Sealed customers go to Oolix in parts the API's 1 MB bodies take, the key
+// for a joint audience's result with the last.
+func TestCleanRoomInputGoesInParts(t *testing.T) {
+	var got []map[string]any
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /agent/v1/token", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "t", "expires_in": 3600})
+	})
+	mux.HandleFunc("PUT /agent/v1/cleanroom/tasks/run-1/parts/{n}", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		body["n"] = r.PathValue("n")
+		got = append(got, body)
+		_, _ = w.Write([]byte(`{}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	priv, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	s := New(Options{APIBaseURL: srv.URL, AgentID: "agent-1", ClientID: "client-1", PartnerOrgID: testPartner,
+		PrivateKey: priv, StaleGrace: time.Hour, HTTPClient: srv.Client(), Logger: quiet()})
+	sealed := make([]byte, 2*cleanRoomPart+10)
+	if err := s.SubmitCleanRoomInput(context.Background(), "run-1", sealed, []byte("recipient-key-32-bytes-long....!")); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 || got[2]["n"] != "2" || got[0]["parts"] != float64(3) {
+		t.Fatalf("parts: %d", len(got))
+	}
+	if _, ok := got[0]["recipient"]; ok || got[2]["recipient"] == nil {
+		t.Error("the recipient key belongs with the last part only")
+	}
+}

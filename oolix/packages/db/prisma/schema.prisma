@@ -635,21 +635,26 @@ model NetworkMembership {
 // ---------------------------------------------------------------------------
 
 model PartnerProfile {
-  orgId               String           @id @map("org_id") @db.Uuid
-  readinessStatus     PartnerReadiness @default(PROFILE_INCOMPLETE) @map("readiness_status")
-  activePolicyId      String?          @map("active_policy_id") @db.Uuid
-  payoutProfileId     String?          @map("payout_profile_id") @db.Uuid
+  orgId                  String           @id @map("org_id") @db.Uuid
+  readinessStatus        PartnerReadiness @default(PROFILE_INCOMPLETE) @map("readiness_status")
+  activePolicyId         String?          @map("active_policy_id") @db.Uuid
+  payoutProfileId        String?          @map("payout_profile_id") @db.Uuid
   /// Approval SLA in days (§101 default 7).
-  approvalSlaDays     Int              @default(7) @map("approval_sla_days")
+  approvalSlaDays        Int              @default(7) @map("approval_sla_days")
   /// §72: a Partner may raise, never lower, the publishable cohort floor.
-  minPublishableReach Int              @default(1000) @map("min_publishable_reach")
+  minPublishableReach    Int              @default(1000) @map("min_publishable_reach")
   /// §66.2 marketplace listing: every verified Buyer can find this Partner by
   /// its published capabilities, without sharing a Network. Off until the
   /// Partner turns it on.
-  marketplaceListed   Boolean          @default(false) @map("marketplace_listed")
-  marketplaceListedAt DateTime?        @map("marketplace_listed_at") @db.Timestamptz(6)
-  createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  marketplaceListed      Boolean          @default(false) @map("marketplace_listed")
+  marketplaceListedAt    DateTime?        @map("marketplace_listed_at") @db.Timestamptz(6)
+  /// Cross-Partner matching in the clean room (docs/DESIGN-PARTNER-DATA.md
+  /// phase 7): whether this Partner takes part. Off until it says so; each
+  /// run still needs the other Partner's approval.
+  crossPartnerMatching   Boolean          @default(false) @map("cross_partner_matching")
+  crossPartnerMatchingAt DateTime?        @map("cross_partner_matching_at") @db.Timestamptz(6)
+  createdAt              DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
@@ -1045,8 +1050,8 @@ model Activation {
   materializationVersion Int?      @map("materialization_version")
   materializedAt         DateTime? @map("materialized_at") @db.Timestamptz(6)
 
-  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   request           PartnerRequest     @relation(fields: [requestId], references: [id], onDelete: Cascade)
   placement         Placement?         @relation(fields: [placementId], references: [id])
@@ -1575,6 +1580,33 @@ model SynonymContribution {
   @@unique([partnerOrgId, attributeKey, valueKey], map: "synonym_contributions_org_value_key")
   @@index([attributeKey, valueKey], map: "synonym_contributions_value_idx")
   @@map("synonym_contributions")
+}
+
+/// A clean-room run between two Partners (docs/DESIGN-PARTNER-DATA.md phase
+/// 7): an overlap count, or a joint audience for the Partner who asked. It
+/// holds who, what and the answer as a size band -- never a match key or a
+/// customer. The Agents' sealed inputs pass through Redis for an hour at
+/// most, and the clean room keeps nothing.
+model CleanRoomRun {
+  id          String    @id @default(uuid()) @db.Uuid
+  /// OVERLAP | JOINT
+  kind        String
+  /// The Partner who asked; a joint audience is for it alone.
+  requestedBy String    @map("requested_by") @db.Uuid
+  /// The Partner asked to take part.
+  withOrg     String    @map("with_org") @db.Uuid
+  /// WAITING_APPROVAL | WAITING_INPUTS | DONE | DECLINED | FAILED
+  status      String
+  /// { pairs | band } and the clean room's signed answer, for audit.
+  resultJson  Json?     @map("result_json")
+  error       String?
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  decidedAt   DateTime? @map("decided_at") @db.Timestamptz(6)
+  finishedAt  DateTime? @map("finished_at") @db.Timestamptz(6)
+
+  @@index([requestedBy, createdAt], map: "clean_room_runs_requested_idx")
+  @@index([withOrg, createdAt], map: "clean_room_runs_with_idx")
+  @@map("clean_room_runs")
 }
 
 /// An Oolix admin's decision on a shared value: APPROVED sends value -> code

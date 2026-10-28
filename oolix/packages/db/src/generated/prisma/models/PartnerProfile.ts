@@ -45,6 +45,8 @@ export type PartnerProfileMinAggregateOutputType = {
   minPublishableReach: number | null
   marketplaceListed: boolean | null
   marketplaceListedAt: Date | null
+  crossPartnerMatching: boolean | null
+  crossPartnerMatchingAt: Date | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -58,6 +60,8 @@ export type PartnerProfileMaxAggregateOutputType = {
   minPublishableReach: number | null
   marketplaceListed: boolean | null
   marketplaceListedAt: Date | null
+  crossPartnerMatching: boolean | null
+  crossPartnerMatchingAt: Date | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -71,6 +75,8 @@ export type PartnerProfileCountAggregateOutputType = {
   minPublishableReach: number
   marketplaceListed: number
   marketplaceListedAt: number
+  crossPartnerMatching: number
+  crossPartnerMatchingAt: number
   createdAt: number
   updatedAt: number
   _all: number
@@ -96,6 +102,8 @@ export type PartnerProfileMinAggregateInputType = {
   minPublishableReach?: true
   marketplaceListed?: true
   marketplaceListedAt?: true
+  crossPartnerMatching?: true
+  crossPartnerMatchingAt?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -109,6 +117,8 @@ export type PartnerProfileMaxAggregateInputType = {
   minPublishableReach?: true
   marketplaceListed?: true
   marketplaceListedAt?: true
+  crossPartnerMatching?: true
+  crossPartnerMatchingAt?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -122,6 +132,8 @@ export type PartnerProfileCountAggregateInputType = {
   minPublishableReach?: true
   marketplaceListed?: true
   marketplaceListedAt?: true
+  crossPartnerMatching?: true
+  crossPartnerMatchingAt?: true
   createdAt?: true
   updatedAt?: true
   _all?: true
@@ -222,6 +234,8 @@ export type PartnerProfileGroupByOutputType = {
   minPublishableReach: number
   marketplaceListed: boolean
   marketplaceListedAt: Date | null
+  crossPartnerMatching: boolean
+  crossPartnerMatchingAt: Date | null
   createdAt: Date
   updatedAt: Date
   _count: PartnerProfileCountAggregateOutputType | null
@@ -258,6 +272,8 @@ export type PartnerProfileWhereInput = {
   minPublishableReach?: Prisma.IntFilter<"PartnerProfile"> | number
   marketplaceListed?: Prisma.BoolFilter<"PartnerProfile"> | boolean
   marketplaceListedAt?: Prisma.DateTimeNullableFilter<"PartnerProfile"> | Date | string | null
+  crossPartnerMatching?: Prisma.BoolFilter<"PartnerProfile"> | boolean
+  crossPartnerMatchingAt?: Prisma.DateTimeNullableFilter<"PartnerProfile"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"PartnerProfile"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"PartnerProfile"> | Date | string
   organization?: Prisma.XOR<Prisma.OrganizationScalarRelationFilter, Prisma.OrganizationWhereInput>
@@ -272,6 +288,8 @@ export type PartnerProfileOrderByWithRelationInput = {
   minPublishableReach?: Prisma.SortOrder
   marketplaceListed?: Prisma.SortOrder
   marketplaceListedAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  crossPartnerMatching?: Prisma.SortOrder
+  crossPartnerMatchingAt?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   organization?: Prisma.OrganizationOrderByWithRelationInput
@@ -289,6 +307,8 @@ export type PartnerProfileWhereUniqueInput = Prisma.AtLeast<{
   minPublishableReach?: Prisma.IntFilter<"PartnerProfile"> | number
   marketplaceListed?: Prisma.BoolFilter<"PartnerProfile"> | boolean
   marketplaceListedAt?: Prisma.DateTimeNullableFilter<"PartnerProfile"> | Date | string | null
+  crossPartnerMatching?: Prisma.BoolFilter<"PartnerProfile"> | boolean
+  crossPartnerMatchingAt?: Prisma.DateTimeNullableFilter<"PartnerProfile"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"PartnerProfile"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"PartnerProfile"> | Date | string
   organization?: Prisma.XOR<Prisma.OrganizationScalarRelationFilter, Prisma.OrganizationWhereInput>
@@ -303,6 +323,8 @@ export type PartnerProfileOrderByWithAggregationInput = {
   minPublishableReach?: Prisma.SortOrder
   marketplaceListed?: Prisma.SortOrder
   marketplaceListedAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  crossPartnerMatching?: Prisma.SortOrder
+  crossPartnerMatchingAt?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   _count?: Prisma.PartnerProfileCountOrderByAggregateInput
@@ -324,6 +346,8 @@ export type PartnerProfileScalarWhereWithAggregatesInput = {
   minPublishableReach?: Prisma.IntWithAggregatesFilter<"PartnerProfile"> | number
   marketplaceListed?: Prisma.BoolWithAggregatesFilter<"PartnerProfile"> | boolean
   marketplaceListedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"PartnerProfile"> | Date | string | null
+  crossPartnerMatching?: Prisma.BoolWithAggregatesFilter<"PartnerProfile"> | boolean
+  crossPartnerMatchingAt?: Prisma.DateTimeNullableWithAggregatesFilter<"PartnerProfile"> | Date | string | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"PartnerProfile"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"PartnerProfile"> | Date | string
 }
@@ -336,6 +360,8 @@ export type PartnerProfileCreateInput = {
   minPublishableReach?: number
   marketplaceListed?: boolean
   marketplaceListedAt?: Date | string | null
+  crossPartnerMatching?: boolean
+  crossPartnerMatchingAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   organization: Prisma.OrganizationCreateNestedOneWithoutPartnerProfileInput
@@ -350,6 +376,8 @@ export type PartnerProfileUncheckedCreateInput = {
   minPublishableReach?: number
   marketplaceListed?: boolean
   marketplaceListedAt?: Date | string | null
+  crossPartnerMatching?: boolean
+  crossPartnerMatchingAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -362,6 +390,8 @@ export type PartnerProfileUpdateInput = {
   minPublishableReach?: Prisma.IntFieldUpdateOperationsInput | number
   marketplaceListed?: Prisma.BoolFieldUpdateOperationsInput | boolean
   marketplaceListedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  crossPartnerMatching?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  crossPartnerMatchingAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   organization?: Prisma.OrganizationUpdateOneRequiredWithoutPartnerProfileNestedInput
@@ -376,6 +406,8 @@ export type PartnerProfileUncheckedUpdateInput = {
   minPublishableReach?: Prisma.IntFieldUpdateOperationsInput | number
   marketplaceListed?: Prisma.BoolFieldUpdateOperationsInput | boolean
   marketplaceListedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  crossPartnerMatching?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  crossPartnerMatchingAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -389,6 +421,8 @@ export type PartnerProfileCreateManyInput = {
   minPublishableReach?: number
   marketplaceListed?: boolean
   marketplaceListedAt?: Date | string | null
+  crossPartnerMatching?: boolean
+  crossPartnerMatchingAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -401,6 +435,8 @@ export type PartnerProfileUpdateManyMutationInput = {
   minPublishableReach?: Prisma.IntFieldUpdateOperationsInput | number
   marketplaceListed?: Prisma.BoolFieldUpdateOperationsInput | boolean
   marketplaceListedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  crossPartnerMatching?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  crossPartnerMatchingAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -414,6 +450,8 @@ export type PartnerProfileUncheckedUpdateManyInput = {
   minPublishableReach?: Prisma.IntFieldUpdateOperationsInput | number
   marketplaceListed?: Prisma.BoolFieldUpdateOperationsInput | boolean
   marketplaceListedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  crossPartnerMatching?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  crossPartnerMatchingAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -432,6 +470,8 @@ export type PartnerProfileCountOrderByAggregateInput = {
   minPublishableReach?: Prisma.SortOrder
   marketplaceListed?: Prisma.SortOrder
   marketplaceListedAt?: Prisma.SortOrder
+  crossPartnerMatching?: Prisma.SortOrder
+  crossPartnerMatchingAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -450,6 +490,8 @@ export type PartnerProfileMaxOrderByAggregateInput = {
   minPublishableReach?: Prisma.SortOrder
   marketplaceListed?: Prisma.SortOrder
   marketplaceListedAt?: Prisma.SortOrder
+  crossPartnerMatching?: Prisma.SortOrder
+  crossPartnerMatchingAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -463,6 +505,8 @@ export type PartnerProfileMinOrderByAggregateInput = {
   minPublishableReach?: Prisma.SortOrder
   marketplaceListed?: Prisma.SortOrder
   marketplaceListedAt?: Prisma.SortOrder
+  crossPartnerMatching?: Prisma.SortOrder
+  crossPartnerMatchingAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -516,6 +560,8 @@ export type PartnerProfileCreateWithoutOrganizationInput = {
   minPublishableReach?: number
   marketplaceListed?: boolean
   marketplaceListedAt?: Date | string | null
+  crossPartnerMatching?: boolean
+  crossPartnerMatchingAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -528,6 +574,8 @@ export type PartnerProfileUncheckedCreateWithoutOrganizationInput = {
   minPublishableReach?: number
   marketplaceListed?: boolean
   marketplaceListedAt?: Date | string | null
+  crossPartnerMatching?: boolean
+  crossPartnerMatchingAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -556,6 +604,8 @@ export type PartnerProfileUpdateWithoutOrganizationInput = {
   minPublishableReach?: Prisma.IntFieldUpdateOperationsInput | number
   marketplaceListed?: Prisma.BoolFieldUpdateOperationsInput | boolean
   marketplaceListedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  crossPartnerMatching?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  crossPartnerMatchingAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -568,6 +618,8 @@ export type PartnerProfileUncheckedUpdateWithoutOrganizationInput = {
   minPublishableReach?: Prisma.IntFieldUpdateOperationsInput | number
   marketplaceListed?: Prisma.BoolFieldUpdateOperationsInput | boolean
   marketplaceListedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  crossPartnerMatching?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  crossPartnerMatchingAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -583,6 +635,8 @@ export type PartnerProfileSelect<ExtArgs extends runtime.Types.Extensions.Intern
   minPublishableReach?: boolean
   marketplaceListed?: boolean
   marketplaceListedAt?: boolean
+  crossPartnerMatching?: boolean
+  crossPartnerMatchingAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
@@ -597,6 +651,8 @@ export type PartnerProfileSelectCreateManyAndReturn<ExtArgs extends runtime.Type
   minPublishableReach?: boolean
   marketplaceListed?: boolean
   marketplaceListedAt?: boolean
+  crossPartnerMatching?: boolean
+  crossPartnerMatchingAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
@@ -611,6 +667,8 @@ export type PartnerProfileSelectUpdateManyAndReturn<ExtArgs extends runtime.Type
   minPublishableReach?: boolean
   marketplaceListed?: boolean
   marketplaceListedAt?: boolean
+  crossPartnerMatching?: boolean
+  crossPartnerMatchingAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
@@ -625,11 +683,13 @@ export type PartnerProfileSelectScalar = {
   minPublishableReach?: boolean
   marketplaceListed?: boolean
   marketplaceListedAt?: boolean
+  crossPartnerMatching?: boolean
+  crossPartnerMatchingAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type PartnerProfileOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"orgId" | "readinessStatus" | "activePolicyId" | "payoutProfileId" | "approvalSlaDays" | "minPublishableReach" | "marketplaceListed" | "marketplaceListedAt" | "createdAt" | "updatedAt", ExtArgs["result"]["partnerProfile"]>
+export type PartnerProfileOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"orgId" | "readinessStatus" | "activePolicyId" | "payoutProfileId" | "approvalSlaDays" | "minPublishableReach" | "marketplaceListed" | "marketplaceListedAt" | "crossPartnerMatching" | "crossPartnerMatchingAt" | "createdAt" | "updatedAt", ExtArgs["result"]["partnerProfile"]>
 export type PartnerProfileInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
 }
@@ -665,6 +725,13 @@ export type $PartnerProfilePayload<ExtArgs extends runtime.Types.Extensions.Inte
      */
     marketplaceListed: boolean
     marketplaceListedAt: Date | null
+    /**
+     * Cross-Partner matching in the clean room (docs/DESIGN-PARTNER-DATA.md
+     * phase 7): whether this Partner takes part. Off until it says so; each
+     * run still needs the other Partner's approval.
+     */
+    crossPartnerMatching: boolean
+    crossPartnerMatchingAt: Date | null
     createdAt: Date
     updatedAt: Date
   }, ExtArgs["result"]["partnerProfile"]>
@@ -1099,6 +1166,8 @@ export interface PartnerProfileFieldRefs {
   readonly minPublishableReach: Prisma.FieldRef<"PartnerProfile", 'Int'>
   readonly marketplaceListed: Prisma.FieldRef<"PartnerProfile", 'Boolean'>
   readonly marketplaceListedAt: Prisma.FieldRef<"PartnerProfile", 'DateTime'>
+  readonly crossPartnerMatching: Prisma.FieldRef<"PartnerProfile", 'Boolean'>
+  readonly crossPartnerMatchingAt: Prisma.FieldRef<"PartnerProfile", 'DateTime'>
   readonly createdAt: Prisma.FieldRef<"PartnerProfile", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"PartnerProfile", 'DateTime'>
 }

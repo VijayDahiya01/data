@@ -96,6 +96,7 @@ export const ModelName = {
   PartnerCapability: 'PartnerCapability',
   PartnerDataQuality: 'PartnerDataQuality',
   SynonymContribution: 'SynonymContribution',
+  CleanRoomRun: 'CleanRoomRun',
   SharedSynonym: 'SharedSynonym',
   AudienceGroup: 'AudienceGroup',
   AudienceGroupVersion: 'AudienceGroupVersion',
@@ -232,6 +233,8 @@ export const PartnerProfileScalarFieldEnum = {
   minPublishableReach: 'minPublishableReach',
   marketplaceListed: 'marketplaceListed',
   marketplaceListedAt: 'marketplaceListedAt',
+  crossPartnerMatching: 'crossPartnerMatching',
+  crossPartnerMatchingAt: 'crossPartnerMatchingAt',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
@@ -861,6 +864,22 @@ export const SynonymContributionScalarFieldEnum = {
 } as const
 
 export type SynonymContributionScalarFieldEnum = (typeof SynonymContributionScalarFieldEnum)[keyof typeof SynonymContributionScalarFieldEnum]
+
+
+export const CleanRoomRunScalarFieldEnum = {
+  id: 'id',
+  kind: 'kind',
+  requestedBy: 'requestedBy',
+  withOrg: 'withOrg',
+  status: 'status',
+  resultJson: 'resultJson',
+  error: 'error',
+  createdAt: 'createdAt',
+  decidedAt: 'decidedAt',
+  finishedAt: 'finishedAt'
+} as const
+
+export type CleanRoomRunScalarFieldEnum = (typeof CleanRoomRunScalarFieldEnum)[keyof typeof CleanRoomRunScalarFieldEnum]
 
 
 export const SharedSynonymScalarFieldEnum = {

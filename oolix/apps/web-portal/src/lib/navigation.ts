@@ -84,6 +84,8 @@ const PARTNER: NavItem[] = [
   { label: 'Reports', href: '/partner/reports', permissions: ['report:read'] },
   // No Payouts entry: hidden with billing for the starter set.
   { label: 'Policies', href: '/partner/policies', permissions: ['partner:policy:manage'] },
+  // Phase 7: overlap counts and joint audiences with other Partners.
+  { label: 'Other Partners', href: '/partner/cleanroom', permissions: ['report:read'] },
 ];
 
 const NETWORK: NavItem[] = [

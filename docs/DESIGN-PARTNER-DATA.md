@@ -1,9 +1,12 @@
 # Partner data platform — design for scale
 
-**Status:** phases 0–6 of the roadmap (§9) are built on `feat/partner-connect`
-(phase 6, the hosted Agent in an AWS Nitro Enclave, is described for
-operators in [`DEPLOY-ENCLAVE.md`](DEPLOY-ENCLAVE.md), with the checks still
-to run on real hardware); phase 7 is next. **Builds on:** Partner Connect (branch
+**Status:** every phase of the roadmap (§9) is built on `feat/partner-connect`.
+Phases 6 and 7 — the hosted Agent and the cross-Partner clean room, both in
+AWS Nitro Enclaves — are described for operators in
+[`DEPLOY-ENCLAVE.md`](DEPLOY-ENCLAVE.md), with the checks still to run on real
+enclave hardware. A joint audience reaches the asking Partner's Agent and is
+kept there; letting Buyers target it in campaigns is the next step.
+**Builds on:** Partner Connect (branch
 `feat/partner-connect`), described for non-engineers in
 [`PARTNER-CONNECT.md`](PARTNER-CONNECT.md).
 

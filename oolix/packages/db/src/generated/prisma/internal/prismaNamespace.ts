@@ -442,6 +442,7 @@ export const ModelName = {
   PartnerCapability: 'PartnerCapability',
   PartnerDataQuality: 'PartnerDataQuality',
   SynonymContribution: 'SynonymContribution',
+  CleanRoomRun: 'CleanRoomRun',
   SharedSynonym: 'SharedSynonym',
   AudienceGroup: 'AudienceGroup',
   AudienceGroupVersion: 'AudienceGroupVersion',
@@ -463,7 +464,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "authToken" | "authSession" | "organization" | "organizationMember" | "network" | "networkMembership" | "partnerProfile" | "partnerPolicy" | "buyerProfile" | "brand" | "billingProfile" | "segment" | "segmentOffer" | "placement" | "campaign" | "creative" | "creativeVersion" | "partnerRequest" | "channelRequest" | "approval" | "partnerCreativeDecision" | "activation" | "manifest" | "agent" | "agentBootstrapToken" | "channelConnection" | "externalResource" | "attributionToken" | "leadEvent" | "aggregateMetric" | "deliveryBatch" | "reconciliation" | "commercialTerms" | "financialEvent" | "invoice" | "payout" | "auditEvent" | "notification" | "idempotencyRecord" | "killSwitch" | "attributeDefinition" | "partnerCapability" | "partnerDataQuality" | "synonymContribution" | "sharedSynonym" | "audienceGroup" | "audienceGroupVersion" | "partnerMatchSnapshot" | "reachEstimate" | "campaignAudienceLink"
+    modelProps: "user" | "authToken" | "authSession" | "organization" | "organizationMember" | "network" | "networkMembership" | "partnerProfile" | "partnerPolicy" | "buyerProfile" | "brand" | "billingProfile" | "segment" | "segmentOffer" | "placement" | "campaign" | "creative" | "creativeVersion" | "partnerRequest" | "channelRequest" | "approval" | "partnerCreativeDecision" | "activation" | "manifest" | "agent" | "agentBootstrapToken" | "channelConnection" | "externalResource" | "attributionToken" | "leadEvent" | "aggregateMetric" | "deliveryBatch" | "reconciliation" | "commercialTerms" | "financialEvent" | "invoice" | "payout" | "auditEvent" | "notification" | "idempotencyRecord" | "killSwitch" | "attributeDefinition" | "partnerCapability" | "partnerDataQuality" | "synonymContribution" | "cleanRoomRun" | "sharedSynonym" | "audienceGroup" | "audienceGroupVersion" | "partnerMatchSnapshot" | "reachEstimate" | "campaignAudienceLink"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -3797,6 +3798,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    CleanRoomRun: {
+      payload: Prisma.$CleanRoomRunPayload<ExtArgs>
+      fields: Prisma.CleanRoomRunFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.CleanRoomRunFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$CleanRoomRunPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.CleanRoomRunFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$CleanRoomRunPayload>
+        }
+        findFirst: {
+          args: Prisma.CleanRoomRunFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$CleanRoomRunPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.CleanRoomRunFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$CleanRoomRunPayload>
+        }
+        findMany: {
+          args: Prisma.CleanRoomRunFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$CleanRoomRunPayload>[]
+        }
+        create: {
+          args: Prisma.CleanRoomRunCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$CleanRoomRunPayload>
+        }
+        createMany: {
+          args: Prisma.CleanRoomRunCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.CleanRoomRunCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$CleanRoomRunPayload>[]
+        }
+        delete: {
+          args: Prisma.CleanRoomRunDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$CleanRoomRunPayload>
+        }
+        update: {
+          args: Prisma.CleanRoomRunUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$CleanRoomRunPayload>
+        }
+        deleteMany: {
+          args: Prisma.CleanRoomRunDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.CleanRoomRunUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.CleanRoomRunUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$CleanRoomRunPayload>[]
+        }
+        upsert: {
+          args: Prisma.CleanRoomRunUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$CleanRoomRunPayload>
+        }
+        aggregate: {
+          args: Prisma.CleanRoomRunAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateCleanRoomRun>
+        }
+        groupBy: {
+          args: Prisma.CleanRoomRunGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.CleanRoomRunGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.CleanRoomRunCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.CleanRoomRunCountAggregateOutputType> | number
+        }
+      }
+    }
     SharedSynonym: {
       payload: Prisma.$SharedSynonymPayload<ExtArgs>
       fields: Prisma.SharedSynonymFieldRefs
@@ -4392,6 +4467,8 @@ export const PartnerProfileScalarFieldEnum = {
   minPublishableReach: 'minPublishableReach',
   marketplaceListed: 'marketplaceListed',
   marketplaceListedAt: 'marketplaceListedAt',
+  crossPartnerMatching: 'crossPartnerMatching',
+  crossPartnerMatchingAt: 'crossPartnerMatchingAt',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
@@ -5021,6 +5098,22 @@ export const SynonymContributionScalarFieldEnum = {
 } as const
 
 export type SynonymContributionScalarFieldEnum = (typeof SynonymContributionScalarFieldEnum)[keyof typeof SynonymContributionScalarFieldEnum]
+
+
+export const CleanRoomRunScalarFieldEnum = {
+  id: 'id',
+  kind: 'kind',
+  requestedBy: 'requestedBy',
+  withOrg: 'withOrg',
+  status: 'status',
+  resultJson: 'resultJson',
+  error: 'error',
+  createdAt: 'createdAt',
+  decidedAt: 'decidedAt',
+  finishedAt: 'finishedAt'
+} as const
+
+export type CleanRoomRunScalarFieldEnum = (typeof CleanRoomRunScalarFieldEnum)[keyof typeof CleanRoomRunScalarFieldEnum]
 
 
 export const SharedSynonymScalarFieldEnum = {
@@ -6126,6 +6219,7 @@ export type GlobalOmitConfig = {
   partnerCapability?: Prisma.PartnerCapabilityOmit
   partnerDataQuality?: Prisma.PartnerDataQualityOmit
   synonymContribution?: Prisma.SynonymContributionOmit
+  cleanRoomRun?: Prisma.CleanRoomRunOmit
   sharedSynonym?: Prisma.SharedSynonymOmit
   audienceGroup?: Prisma.AudienceGroupOmit
   audienceGroupVersion?: Prisma.AudienceGroupVersionOmit

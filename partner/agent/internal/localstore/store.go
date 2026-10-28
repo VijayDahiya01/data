@@ -39,6 +39,10 @@ import (
 const (
 	AttributesTable = "oolix_audience_attributes"
 	ConsentTable    = "oolix_user_consent"
+	// MatchKeysTable and JointAudiencesTable hold cross-Partner matching's
+	// keys and results, on this server only.
+	MatchKeysTable      = "oolix_match_keys"
+	JointAudiencesTable = "oolix_joint_audiences"
 	// WithdrawalsTable remembers customers who withdrew consent through the
 	// Partner's own system, so a refresh cannot copy them again before the
 	// table catches up. Scrambled ids and times only.
@@ -293,6 +297,19 @@ func (s *Store) migrate(ctx context.Context) error {
 		   last_error              TEXT,
 		   built_at                TIMESTAMPTZ,
 		   expires_at              TIMESTAMPTZ)`,
+		// Cross-Partner matching (docs/DESIGN-PARTNER-DATA.md phase 7):
+		// which customer each match key belongs to, so a joint audience can
+		// come back to customers, and the joint audiences received. Both
+		// stay here, on the Partner's server.
+		`CREATE TABLE IF NOT EXISTS ` + MatchKeysTable + ` (
+		   match_key       BYTEA NOT NULL,
+		   partner_user_id TEXT  NOT NULL)`,
+		`CREATE INDEX IF NOT EXISTS oolix_match_keys_key_idx ON ` + MatchKeysTable + ` (match_key)`,
+		`CREATE TABLE IF NOT EXISTS ` + JointAudiencesTable + ` (
+		   run_id          TEXT        NOT NULL,
+		   partner_user_id TEXT        NOT NULL,
+		   received_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		   PRIMARY KEY (run_id, partner_user_id))`,
 	}
 	// Attributes added in a later version arrive as new, empty columns.
 	for _, a := range standard.Attributes {
@@ -346,7 +363,8 @@ func (s *Store) migrate(ctx context.Context) error {
 // settings: what the "Delete all copied data" button does.
 func (s *Store) DeleteCopiedData(ctx context.Context) error {
 	_, err := s.Pool.Exec(ctx, `TRUNCATE `+AttributesTable+`, `+ConsentTable+`,
-		oolix_audience_members, oolix_audience_materialization, oolix_segment_membership`)
+		oolix_audience_members, oolix_audience_materialization, oolix_segment_membership, `+
+		MatchKeysTable+`, `+JointAudiencesTable)
 	return err
 }
 

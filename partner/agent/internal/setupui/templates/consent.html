@@ -54,6 +54,32 @@
       customers match. Never names, contact details, customer IDs or any value from your database.</p>
   </section>
 
+  <section class="card">
+    <h2>Matching with other Partners <span class="muted">(optional)</span></h2>
+    <p>With your agreement, Oolix can tell you how many customers you share with another Partner, in a size band,
+      and build audiences of the customers you share. Emails and phone numbers are turned into one-way codes on
+      this server and sealed to a clean room that runs where nobody, Oolix included, can look in. No other
+      Partner, and nobody at Oolix, sees your customers. Only customers who agreed to this purpose take part.</p>
+    <label class="check"><input type="checkbox" name="cp_on"{{if $d.CrossPartnerOn}} checked{{end}}>
+      Take part in matching with other Partners</label>
+    <label for="cp_email">Email column</label>
+    <select id="cp_email" name="cp_email">
+      <option value="">None</option>
+      {{range $d.Columns}}<option value="{{.Name}}"{{if eq .Name $d.CrossPartner.EmailColumn}} selected{{end}}>{{.Name}}</option>{{end}}
+    </select>
+    <label for="cp_phone">Mobile number column</label>
+    <select id="cp_phone" name="cp_phone">
+      <option value="">None</option>
+      {{range $d.Columns}}<option value="{{.Name}}"{{if eq .Name $d.CrossPartner.PhoneColumn}} selected{{end}}>{{.Name}}</option>{{end}}
+    </select>
+    <label for="cp_consent">Which column records agreement to matching with other Partners?</label>
+    <select id="cp_consent" name="cp_consent">
+      <option value="">Choose a column</option>
+      {{range $d.Columns}}<option value="{{.Name}}"{{if eq .Name $d.CrossPartner.Consent.Column}} selected{{end}}>{{.Name}}</option>{{end}}
+    </select>
+    <p class="muted">A separate agreement from marketing: a customer who agreed to marketing alone is never matched.</p>
+  </section>
+
   {{if not $d.Registered}}<p class="error">Connect this Agent to Oolix (step 1) before publishing.</p>{{end}}
 
   <div class="actions">

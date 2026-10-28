@@ -214,6 +214,9 @@ jobs:
           # The host process beside an enclave Oolix runs (docs/DEPLOY-ENCLAVE.md).
           GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" \
             -o dist/enclave-host-linux-amd64 ./cmd/enclave-host
+          # The cross-Partner clean room, run in its own enclave.
+          GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" \
+            -o dist/cleanroom-linux-amd64 ./cmd/cleanroom
       - uses: actions/upload-artifact@v4
         with:
           name: oolix-agent-binaries

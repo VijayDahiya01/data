@@ -36,6 +36,7 @@ import (
 	"github.com/oolix/partner-agent/internal/config"
 	"github.com/oolix/partner-agent/internal/connector"
 	"github.com/oolix/partner-agent/internal/controlsync"
+	"github.com/oolix/partner-agent/internal/enclave"
 	"github.com/oolix/partner-agent/internal/eventbuffer"
 	"github.com/oolix/partner-agent/internal/httpapi"
 	"github.com/oolix/partner-agent/internal/localstore"
@@ -924,8 +925,29 @@ func runManaged(ctx context.Context, cfg *config.Config, logger *slog.Logger) er
 			// and the synonyms other Partners taught it.
 			ui.SetHelper(s)
 			go managed.KeepSharedSynonyms(ctx, settings, 6*time.Hour, logger, s.SharedSynonyms)
+			// Cross-Partner matching, for a Partner who opted in: customers
+			// are sealed only to a clean room image this Agent trusts.
+			cleanRoom := &managed.CleanRoom{Runner: runner, Client: s, Logger: logger,
+				Trusted: trustedCleanRooms(logger)}
+			go cleanRoom.Run(ctx, 2*time.Minute)
 		},
 	})
+}
+
+// trustedCleanRooms are the clean room images this Agent will seal
+// customers to: the published measurements in the file
+// OOLIX_CLEANROOM_MEASUREMENTS names. None, and nothing is ever sent.
+func trustedCleanRooms(logger *slog.Logger) []enclave.Measurements {
+	path := os.Getenv("OOLIX_CLEANROOM_MEASUREMENTS")
+	if path == "" {
+		return nil
+	}
+	m, err := readMeasurements(path)
+	if err != nil {
+		logger.Warn("the trusted clean room measurements could not be read: nothing will be sent", "error", err.Error())
+		return nil
+	}
+	return m
 }
 
 // openLocalStore connects to the local store, waiting for it while it starts:

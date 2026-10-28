@@ -119,6 +119,10 @@ export const ConfigSchema = z
     // Partner then asks for each set of suggestions on the setup page.
     ANTHROPIC_API_KEY: z.string().min(1).optional(),
     SUGGESTIONS_MODEL: z.string().min(1).default('claude-opus-5-5'),
+
+    // The cross-Partner clean room (docs/DESIGN-PARTNER-DATA.md phase 7):
+    // where its enclave answers, through its host. Off when unset.
+    CLEANROOM_URL: z.string().url().optional(),
   })
   .superRefine((c, ctx) => {
     // A deployment that cannot send email cannot let anyone sign up, verify an

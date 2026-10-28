@@ -519,6 +519,113 @@ paths:
 
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner/cleanroom:
+    get:
+      operationId: getCleanRoomStatus
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [CleanRoom]
+      summary: Whether this Partner takes part in the clean room, and who else does
+      description: |
+        docs/DESIGN-PARTNER-DATA.md phase 7. The clean room counts the
+        customers two Partners share, and builds joint audiences, without
+        either -- or Oolix -- seeing the other's customers. `available` is
+        false when the deployment has no clean room (`CLEANROOM_URL`).
+      responses:
+        '200': { description: 'available, enabled, and the other Partners taking part' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner/cleanroom/participation:
+    put:
+      operationId: setCleanRoomParticipation
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [CleanRoom]
+      summary: Take part in the clean room, or stop
+      description: |
+        Off until the Partner turns it on. Taking part lets other Partners ask
+        for runs; each run still needs this Partner's approval. Customers take
+        part only with their own consent to this purpose, which the Agent reads.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+      responses:
+        '200': { description: The new state }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/partner/cleanroom/runs:
+    get:
+      operationId: listCleanRoomRuns
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [CleanRoom]
+      summary: This Partner's clean-room runs
+      description: Runs it asked for and runs it was asked for, with their results as size bands.
+      responses:
+        '200': { description: Runs }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    post:
+      operationId: requestCleanRoomRun
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      tags: [CleanRoom]
+      summary: Ask another Partner for an overlap count or a joint audience
+      description: |
+        Both Partners must take part; the other must approve the run. An
+        overlap count is a size band, nothing under 100; a joint audience goes
+        to the asking Partner's Agent alone, sealed to it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, with_org_id]
+              properties:
+                kind: { type: string, enum: [OVERLAP, JOINT] }
+                with_org_id: { type: string, format: uuid }
+      responses:
+        '201': { description: The run, waiting for approval }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { description: '`SYS_002` -- no clean room on this deployment.' }
+  /v1/partner/cleanroom/runs/{id}/decision:
+    post:
+      operationId: decideCleanRoomRun
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      tags: [CleanRoom]
+      summary: Approve or decline a run another Partner asked for
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approve]
+              properties:
+                approve: { type: boolean }
+      responses:
+        '201': { description: The run, decided }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: '`PART_001` -- no such run waiting for this Partner.' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /v1/partner/listing:
     get:
       operationId: getMarketplaceListing
@@ -2715,6 +2822,92 @@ paths:
                         value_key: { type: string }
                         code: { type: string }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /agent/v1/cleanroom/tasks:
+    get:
+      operationId: agentCleanRoomTasks
+      tags: [Agent, CleanRoom]
+      summary: Clean-room runs waiting for this Partner's customers
+      description: |
+        docs/DESIGN-PARTNER-DATA.md phase 7. Each task carries the clean
+        room's attestation document: the Agent verifies it against the clean
+        room images it trusts and seals its customers' match keys to the key
+        it names. Oolix holds no key that opens them. Requires `config:read`.
+      security:
+        - agentBearer: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '200': { description: 'Tasks: run_id, kind (OVERLAP or JOINT), role (base or other), attestation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /agent/v1/cleanroom/tasks/{runId}/parts/{index}:
+    put:
+      operationId: agentCleanRoomInputPart
+      tags: [Agent, CleanRoom]
+      summary: One part of this Partner's sealed customers
+      description: |
+        The sealed input goes in parts of up to 512 KiB (base64 in `data`),
+        `parts` in all; the last may carry `recipient`, the Agent's key a
+        joint audience is sealed to. Parts wait in Redis for an hour at most.
+        When both Partners' inputs are in, Oolix passes them to the clean
+        room. Requires `capabilities:write`.
+      security:
+        - agentBearer: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+        - { name: runId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: index, in: path, required: true, schema: { type: integer, minimum: 0 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parts, data]
+              properties:
+                parts: { type: integer, minimum: 1, maximum: 256 }
+                data: { type: string, format: byte }
+                recipient: { type: string, format: byte }
+      responses:
+        '200': { description: How many parts have arrived }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: '`PART_001` -- no such run for this Partner.' }
+        '409': { description: '`CAMP_002` -- the run is not waiting for input.' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /agent/v1/cleanroom/results:
+    get:
+      operationId: agentCleanRoomResults
+      tags: [Agent, CleanRoom]
+      summary: Joint audiences sealed to this Agent
+      description: |
+        For the Partner who asked for a joint audience: its own customers'
+        match keys that the other Partner shares, sealed to this Agent's key.
+        Requires `config:read`.
+      security:
+        - agentBearer: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '200': { description: 'Results: run_id, sealed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /agent/v1/cleanroom/results/{runId}/ack:
+    post:
+      operationId: agentCleanRoomAck
+      tags: [Agent, CleanRoom]
+      summary: A joint audience was received
+      description: Oolix drops the sealed copy it carried. Requires `capabilities:write`.
+      security:
+        - agentBearer: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+        - { name: runId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Dropped }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: '`PART_001` -- no such run for this Partner.' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /agent/v1/attribution/tokens:
     post:

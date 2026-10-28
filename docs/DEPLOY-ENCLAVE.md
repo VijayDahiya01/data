@@ -114,6 +114,29 @@ better served by the self-hosted Agent, where nothing leaves their network.
    unseals the old state — its PCR0 is now allowed — and seals it again.
 3. Remove the old PCR0 from the policy. Publish the policy.
 
+## The cross-Partner clean room
+
+Phase 7 runs one more enclave: `cmd/cleanroom`, which counts the customers
+two Partners share and builds joint audiences, keeping nothing. It makes two
+keys at start that never leave it — an X25519 key Agents seal match keys to,
+and an Ed25519 key that signs its answers — and its attestation names both.
+
+- **Build** it like the Agent's image, with the command `cleanroom` (no
+  sealing key: it keeps no state), and publish its measurements.
+- **Run** it on its own enclave with `enclave-host -forward 5000:5000`
+  (no `-allow`: it makes no connections), reachable only from the API's
+  network. Set `CLEANROOM_URL` on the API to it.
+- **Agents** seal only to a clean room whose measurements the Partner
+  trusts: `OOLIX_CLEANROOM_MEASUREMENTS` names a file with the published
+  ones. Without it, an Agent sends nothing.
+- **What travels**: each Agent's match keys (SHA-256 of normalised email and
+  mobile number, only for customers who agreed to cross-Partner matching and
+  are in its copy) sealed to the clean room, in parts through the API, which
+  holds them in Redis for an hour at most. The answer is a size band —
+  nothing under 100 — signed by the clean room; a joint audience goes back
+  sealed to the asking Partner's Agent, which stores it on its own server.
+  Each run needs the other Partner's approval in the portal.
+
 ## Before the first Partner: check on a real instance
 
 The pieces are tested in CI against stand-ins (a fake Nitro PKI and KMS, TCP
