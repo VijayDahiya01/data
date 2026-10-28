@@ -1,0 +1,26 @@
+# The host side of one Partner's enclave (cmd/enclave-host): copy to
+# /etc/systemd/system/, put the settings in /etc/oolix-enclave/<partner>.env
+# (CID, HOSTNAME, ALLOW), then: systemctl enable --now oolix-enclave-host@<partner>
+[Unit]
+Description=Oolix enclave host for %i
+After=network-online.target nitro-enclaves-allocator.service
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/oolix-enclave/%i.env
+ExecStart=/usr/local/bin/enclave-host -cid ${CID} -hostname ${HOSTNAME} -allow ${ALLOW} \
+  -state /var/lib/oolix-enclave/%i.sealed -forward ${FORWARD}
+Restart=always
+RestartSec=5
+DynamicUser=yes
+StateDirectory=oolix-enclave
+# Binding 443 and 8443; nothing else.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

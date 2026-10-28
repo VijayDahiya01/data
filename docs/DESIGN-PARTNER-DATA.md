@@ -1,7 +1,9 @@
 # Partner data platform — design for scale
 
-**Status:** phases 0–5 of the roadmap (§9) are built on `feat/partner-connect`;
-phases 6 and 7 are next. **Builds on:** Partner Connect (branch
+**Status:** phases 0–6 of the roadmap (§9) are built on `feat/partner-connect`
+(phase 6, the hosted Agent in an AWS Nitro Enclave, is described for
+operators in [`DEPLOY-ENCLAVE.md`](DEPLOY-ENCLAVE.md), with the checks still
+to run on real hardware); phase 7 is next. **Builds on:** Partner Connect (branch
 `feat/partner-connect`), described for non-engineers in
 [`PARTNER-CONNECT.md`](PARTNER-CONNECT.md).
 

@@ -43,6 +43,10 @@ type Server struct {
 	Metrics *metrics.Recorder
 	// Pusher serves the push routes; nil outside managed mode.
 	Pusher Pusher
+	// RequireToken asks for the push token on the ad-decision, click and
+	// metrics routes too: an Agent hosted by Oolix is reached over the
+	// internet, not from inside the Partner's network.
+	RequireToken bool
 }
 
 type decisionRequest struct {
@@ -54,14 +58,20 @@ type decisionRequest struct {
 // Handler builds the router.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /private/v1/ad-decision", s.handleAdDecision)
-	mux.HandleFunc("POST /private/v1/click", s.handleClick)
+	guard := func(h http.HandlerFunc) http.HandlerFunc {
+		if s.RequireToken {
+			return s.push(h)
+		}
+		return h
+	}
+	mux.HandleFunc("POST /private/v1/ad-decision", guard(s.handleAdDecision))
+	mux.HandleFunc("POST /private/v1/click", guard(s.handleClick))
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
 	mux.HandleFunc("GET /readyz", s.handleReadyz)
 	mux.HandleFunc("GET /version", s.handleVersion)
 	// The Partner's own collector scrapes this. Oolix cannot: the Agent is
 	// inside the Partner's network and nothing from outside reaches it.
-	mux.HandleFunc("GET /metrics", s.handleMetrics)
+	mux.HandleFunc("GET /metrics", guard(s.handleMetrics))
 	s.pushRoutes(mux)
 	return mux
 }

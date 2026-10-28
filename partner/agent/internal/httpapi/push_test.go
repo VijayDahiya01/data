@@ -81,3 +81,28 @@ func TestPushRoutes(t *testing.T) {
 		t.Errorf("busy: %d %v", rec.Code, rec.Header())
 	}
 }
+
+// An Agent Oolix hosts is reached over the internet: every route that
+// answers about customers asks for the token, while health stays open.
+func TestAHostedAgentAsksForTheTokenEverywhere(t *testing.T) {
+	s := bareServer()
+	s.Pusher, s.RequireToken = &fakePusher{}, true
+	for _, path := range []string{"/private/v1/ad-decision", "/private/v1/click"} {
+		if rec := pushCall(t, s, path, "", `{}`); rec.Code != http.StatusUnauthorized {
+			t.Errorf("%s without the token: %d", path, rec.Code)
+		}
+		if rec := pushCall(t, s, path, "oxp_secret", `{}`); rec.Code == http.StatusUnauthorized {
+			t.Errorf("%s with the token: refused", path)
+		}
+	}
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("metrics without the token: %d", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if rec.Code != http.StatusOK {
+		t.Errorf("healthz: %d", rec.Code)
+	}
+}

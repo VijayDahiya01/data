@@ -13,6 +13,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/oolix/partner-agent/internal/netx"
 )
 
 // gcsStore reads a folder in a Google Cloud Storage bucket with a service
@@ -72,7 +74,7 @@ func openGCS(_ context.Context, cfg Config) (*gcsStore, error) {
 	if cfg.Host != "" {
 		api = strings.TrimRight(cfg.Host, "/")
 	}
-	client := &http.Client{Timeout: 10 * time.Minute}
+	client := netx.Client(10 * time.Minute)
 	return &gcsStore{bucket: cfg.Bucket, prefix: strings.Trim(cfg.Path, "/"), api: api,
 		auth: newGoogleAuth(sa, googleReadOnly, client), http: client}, nil
 }

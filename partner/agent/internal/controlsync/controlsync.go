@@ -25,8 +25,10 @@ import (
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
+
 	"github.com/oolix/partner-agent/internal/addecision"
 	"github.com/oolix/partner-agent/internal/manifest"
+	"github.com/oolix/partner-agent/internal/netx"
 )
 
 // Options configures the sync loop.
@@ -79,7 +81,7 @@ type Syncer struct {
 func New(opts Options) *Syncer {
 	client := opts.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second}
+		client = netx.Client(10 * time.Second)
 	}
 	log := opts.Logger
 	if log == nil {

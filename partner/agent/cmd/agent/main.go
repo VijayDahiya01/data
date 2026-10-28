@@ -19,6 +19,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -40,6 +41,7 @@ import (
 	"github.com/oolix/partner-agent/internal/localstore"
 	"github.com/oolix/partner-agent/internal/managed"
 	"github.com/oolix/partner-agent/internal/metrics"
+	"github.com/oolix/partner-agent/internal/netx"
 	"github.com/oolix/partner-agent/internal/setupui"
 	"github.com/oolix/partner-agent/internal/state"
 )
@@ -51,10 +53,26 @@ func main() {
 		"exchange a bootstrap token for an identity, then exit (§92.2)")
 	managedMode := flag.Bool("managed", false,
 		"run in managed mode, configured from OOLIX_* environment variables (the Compose bundle)")
+	verifyURL := flag.String("verify-enclave", "",
+		"check that the Agent Oolix hosts at this URL runs the published image in an AWS Nitro Enclave, then exit")
+	measurements := flag.String("measurements", "enclave-measurements.json",
+		"with -verify-enclave: the published image's PCRs, from its release")
 	flag.Parse()
 
 	if *showVersion {
 		fmt.Println(controlsync.Version)
+		return
+	}
+
+	if *verifyURL != "" {
+		doc, err := verifyEnclave(*verifyURL, *measurements, nil, nil)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "NOT VERIFIED: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Verified: %s runs the published Agent image in an AWS Nitro Enclave.\n"+
+			"  PCR0 %x\n  attested %s by %s\n  TLS ends inside the enclave.\n",
+			*verifyURL, doc.PCRs[0], doc.Timestamp.UTC().Format(time.RFC3339), doc.ModuleID)
 		return
 	}
 
@@ -112,7 +130,7 @@ func runRegister(configPath string) error {
 
 	result, err := controlsync.Register(
 		context.Background(),
-		&http.Client{Timeout: 30 * time.Second},
+		netx.Client(30*time.Second),
 		cfg.Oolix.APIBaseURL,
 		token,
 		cfg.Oolix.PrivateKeyPath,
@@ -272,6 +290,9 @@ type serving struct {
 	latestVersion func(string)
 	// suggestions hears whether Oolix offers suggested meanings; may be nil.
 	suggestions func(bool)
+	// listen replaces the private API's TCP listener: TLS on a vsock port
+	// when the Agent is hosted in an enclave. nil listens on ListenAddr.
+	listen func() (net.Listener, error)
 }
 
 // serve runs the parts both modes share: the decision engine, the private
@@ -303,7 +324,7 @@ func serve(ctx context.Context, cfg *config.Config, logger *slog.Logger, parts s
 		return fmt.Errorf("agent private key: %w", err)
 	}
 
-	httpClient := &http.Client{Timeout: 10 * time.Second}
+	httpClient := netx.Client(10 * time.Second)
 
 	syncer := controlsync.New(controlsync.Options{
 		APIBaseURL:       cfg.Oolix.APIBaseURL,
@@ -355,6 +376,9 @@ func serve(ctx context.Context, cfg *config.Config, logger *slog.Logger, parts s
 		StaleGrace: cfg.Agent.StaleGrace,
 		Metrics:    recorder,
 		Pusher:     parts.pusher,
+		// Reached over the internet when hosted, so every route asks for
+		// the token.
+		RequireToken: parts.listen != nil,
 	}
 
 	httpServer := &http.Server{
@@ -403,7 +427,16 @@ func serve(ctx context.Context, cfg *config.Config, logger *slog.Logger, parts s
 		logger.Info("private ad-decision API listening",
 			"addr", cfg.Agent.ListenAddr,
 			"decision_timeout_ms", cfg.Agent.DecisionTimeout.Milliseconds())
-		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		var err error
+		if parts.listen != nil {
+			var l net.Listener
+			if l, err = parts.listen(); err == nil {
+				err = httpServer.Serve(l)
+			}
+		} else {
+			err = httpServer.ListenAndServe()
+		}
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
 	}()
@@ -712,11 +745,32 @@ func runManaged(ctx context.Context, cfg *config.Config, logger *slog.Logger) er
 	if err != nil {
 		return err
 	}
+	// Hosted by Oolix in an enclave: the network goes through the host, and
+	// the state folder comes back from the sealed state -- before the store
+	// opens, since its key decides how the stored secrets read.
+	var hosted *hostedEnclave
+	var restored *localstore.Snapshot
+	if enclaveMode() {
+		if hosted, err = startEnclave(ctx, cfg.Managed.StateDir, logger); err != nil {
+			return err
+		}
+		if restored, err = hosted.restore(ctx); err != nil {
+			return err
+		}
+	}
 	store, err := openLocalStore(ctx, dsn, filepath.Join(cfg.Managed.StateDir, "local.key"), logger)
 	if err != nil {
 		return err
 	}
 	defer store.Close()
+	if restored != nil {
+		if err := store.Restore(ctx, *restored); err != nil {
+			return fmt.Errorf("restoring the sealed settings: %w", err)
+		}
+	}
+	if hosted != nil {
+		go hosted.keepSealed(ctx, store)
+	}
 
 	runner := managed.NewRunner(store, logger)
 	go runner.Run(ctx)
@@ -729,6 +783,7 @@ func runManaged(ctx context.Context, cfg *config.Config, logger *slog.Logger) er
 		KeyPath:      keyPath,
 		ImportFolder: cfg.Managed.ImportFolder,
 		Password:     os.Getenv("OOLIX_SETUP_PASSWORD"),
+		Claim:        hosted != nil,
 		OnRegistered: func(id managed.Identity) {
 			select {
 			case registered <- id:
@@ -750,8 +805,20 @@ func runManaged(ctx context.Context, cfg *config.Config, logger *slog.Logger) er
 	}
 	setupErr := make(chan error, 1)
 	go func() {
-		logger.Info("setup page listening", "addr", cfg.Managed.SetupListenAddr)
-		if err := setupServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		var err error
+		if hosted != nil {
+			// TLS from inside the enclave, with the attestation beside it.
+			setupServer.Handler = hosted.withAttestation(setupServer.Handler)
+			var l net.Listener
+			if l, err = hosted.listen(enclaveSetupPort); err == nil {
+				logger.Info("setup page listening in the enclave", "host", hosted.hostname)
+				err = setupServer.Serve(l)
+			}
+		} else {
+			logger.Info("setup page listening", "addr", cfg.Managed.SetupListenAddr)
+			err = setupServer.ListenAndServe()
+		}
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			setupErr <- err
 		}
 	}()
@@ -828,11 +895,16 @@ func runManaged(ctx context.Context, cfg *config.Config, logger *slog.Logger) er
 	// Synonyms Oolix approved for every Agent, as last downloaded.
 	managed.UseSharedSynonyms(ctx, settings)
 
+	var listen func() (net.Listener, error)
+	if hosted != nil {
+		listen = func() (net.Listener, error) { return hosted.listen(enclaveAPIPort) }
+	}
 	return serve(ctx, cfg, logger, serving{
 		conn:      managed.ScrambledConnector{Connector: view, Scramble: store.ScrambleID},
 		evaluator: evaluator,
 		index:     managed.ScrambledAudience{AudienceIndex: evaluator, Scramble: store.ScrambleID},
 		pusher:    pushAPI{store: store, runner: runner},
+		listen:    listen,
 		latestVersion: func(v string) {
 			_ = settings.SaveLatestVersion(context.Background(), v)
 		},

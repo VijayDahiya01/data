@@ -1,4 +1,22 @@
 {{define "content"}}
+{{if and .Data (index .Data "Claim")}}
+<section class="card narrow">
+  <h1>Claim this Agent</h1>
+  <p>Oolix runs this Agent for you in a sealed enclave that Oolix itself cannot look into. To make it yours,
+    paste a one-time code from the <strong>Agents</strong> page of your Oolix portal and choose the password for
+    this page.</p>
+  <form method="post" action="/login" class="form">
+    <label for="code">One-time code</label>
+    <input id="code" name="code" autocomplete="off" required autofocus>
+    <label for="password">New setup password (at least 12 characters)</label>
+    <input id="password" name="password" type="password" autocomplete="new-password" minlength="12" required>
+    <label for="password2">The same password again</label>
+    <input id="password2" name="password2" type="password" autocomplete="new-password" minlength="12" required>
+    <button type="submit">Claim and sign in</button>
+  </form>
+  <p class="muted">The code works once. Keep the password safe: nobody at Oolix can see it or reset it.</p>
+</section>
+{{else}}
 <section class="card narrow">
   <h1>Sign in</h1>
   <p>The password was written to the Agent's log when it first started. On the server, run:</p>
@@ -10,4 +28,5 @@
   </form>
   <p class="muted">Lost it? Restart the Agent with <code>OOLIX_SETUP_PASSWORD</code> set to a password of your choice.</p>
 </section>
+{{end}}
 {{end}}

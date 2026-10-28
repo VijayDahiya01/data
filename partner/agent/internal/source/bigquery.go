@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/oolix/partner-agent/internal/detect"
+	"github.com/oolix/partner-agent/internal/netx"
 )
 
 // BigQuery reads the tables of one dataset with a service account that has
@@ -53,7 +54,7 @@ func openBigQuery(ctx context.Context, cfg Config) (Source, error) {
 	if cfg.Host != "" {
 		api = strings.TrimRight(cfg.Host, "/")
 	}
-	client := &http.Client{Timeout: 5 * time.Minute}
+	client := netx.Client(5 * time.Minute)
 	s := &bigquerySource{project: cfg.Database, dataset: cfg.Path, api: api,
 		auth: newGoogleAuth(sa, bigqueryReadOnly, client), http: client, pageSize: pageSize}
 	return s, s.Test(ctx)

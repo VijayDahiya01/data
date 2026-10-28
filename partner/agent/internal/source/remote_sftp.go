@@ -13,6 +13,8 @@ import (
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
+
+	"github.com/oolix/partner-agent/internal/netx"
 )
 
 // sftpStore reads a folder on an SFTP server. The server's key is pinned: the
@@ -61,8 +63,9 @@ func openSFTP(ctx context.Context, cfg Config) (*sftpStore, error) {
 		port = 22
 	}
 	addr := net.JoinHostPort(cfg.Host, strconv.Itoa(port))
-	d := net.Dialer{Timeout: 15 * time.Second}
-	raw, err := d.DialContext(ctx, "tcp", addr)
+	dialCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	raw, err := netx.Dial(dialCtx, "tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("could not connect: %w", err)
 	}

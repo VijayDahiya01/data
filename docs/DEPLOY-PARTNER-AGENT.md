@@ -170,6 +170,25 @@ notices customers deleted from your table. Use it only if withdrawing consent
 also updates that column; otherwise a withdrawal would wait for the weekly
 refresh. **Refresh now** on the setup page always refreshes in full.
 
+### No server? Oolix can host it
+
+Oolix can run the same Agent for you inside an AWS Nitro Enclave — a sealed
+part of the machine that Oolix's own staff cannot look into. You claim it
+with a one-time code from the portal, choose its password, and set it up
+here as above; your backend calls it at
+`https://<you>.agents.oolix.in:8443` with the token from the setup page.
+Before trusting it, have your security team check it:
+
+```bash
+oolix-agent -verify-enclave https://<you>.agents.oolix.in -measurements enclave-measurements.json
+```
+
+It confirms, from a statement signed by AWS's hardware, that the Agent runs
+the published image and that your TLS connection ends inside the enclave.
+Your database must accept TLS with a valid certificate; the hosted Agent
+connects no other way. [`DEPLOY-ENCLAVE.md`](DEPLOY-ENCLAVE.md) explains what
+it proves and the one point it does not.
+
 ### What is kept, and where
 
 | | |

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/oolix/partner-agent/internal/detect"
+	"github.com/oolix/partner-agent/internal/netx"
 )
 
 // GoogleSheets reads a spreadsheet the Partner shares with a service account
@@ -48,7 +49,7 @@ func openSheets(ctx context.Context, cfg Config) (Source, error) {
 	if cfg.Host != "" {
 		api = strings.TrimRight(cfg.Host, "/")
 	}
-	client := &http.Client{Timeout: 5 * time.Minute}
+	client := netx.Client(5 * time.Minute)
 	s := &sheetsSource{id: id, api: api, auth: newGoogleAuth(sa, sheetsReadOnly, client), http: client}
 	return s, s.Test(ctx)
 }

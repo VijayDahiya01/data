@@ -1,0 +1,11 @@
+# Findings accepted on purpose, each scoped to the one file it concerns.
+misconfigurations:
+  - id: DS002
+    paths:
+      - partner/pack/enclave/Dockerfile.enclave
+    statement: >-
+      The enclave image starts as root because its entrypoint brings up the
+      loopback interface (CAP_NET_ADMIN) and hands PostgreSQL's data folder to
+      the postgres user, then runs PostgreSQL as that user. It runs only inside
+      an AWS Nitro Enclave, which has no network interface and no shell access
+      from outside; the images Partners run themselves stay non-root.

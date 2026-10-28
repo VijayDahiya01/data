@@ -1,0 +1,51 @@
+# =============================================================================
+# The Agent as Oolix hosts it, in an AWS Nitro Enclave (docs/DEPLOY-ENCLAVE.md).
+#
+# nitro-cli turns this image into an enclave image file (EIF); its PCRs are
+# published with every release, so a Partner can check -- with
+# `oolix-agent -verify-enclave` -- that the enclave answering on their
+# hostname runs exactly this, built from this repository.
+#
+# What a host must not choose is fixed here, inside the measurement: Oolix's
+# API address and the KMS key that seals the Agent's state. A host that could
+# name the key could name one it may decrypt with.
+#
+# Build from the repository root (build-eif.sh does, then prints the PCRs):
+#   docker build -f partner/pack/enclave/Dockerfile.enclave \
+#     --build-arg VERSION=... --build-arg API_BASE_URL=https://api.oolix.in \
+#     --build-arg KMS_KEY=arn:aws:kms:ap-south-1:111122223333:key/... -t oolix/agent-enclave:dev .
+# =============================================================================
+
+FROM golang:1.27-alpine AS build
+RUN apk add --no-cache git ca-certificates
+WORKDIR /src
+COPY partner/agent/go.mod partner/agent/go.sum ./
+RUN go mod download
+COPY partner/agent/ ./
+ARG VERSION=dev
+ENV CGO_ENABLED=0
+RUN go build -trimpath -buildvcs=false \
+      -ldflags="-s -w -buildid= -X github.com/oolix/partner-agent/internal/controlsync.Version=${VERSION}" \
+      -o /out/oolix-agent ./cmd/agent
+
+# The enclave has no disk: the root filesystem is memory, and so is the local
+# store. PostgreSQL runs beside the Agent, on loopback only.
+FROM alpine:3.22
+RUN apk add --no-cache postgresql16 ca-certificates iproute2 su-exec
+COPY --from=build /out/oolix-agent /usr/local/bin/oolix-agent
+COPY partner/pack/enclave/enclave-entrypoint.sh /usr/local/bin/enclave-entrypoint
+RUN chmod 0755 /usr/local/bin/enclave-entrypoint
+
+ARG API_BASE_URL
+ARG KMS_KEY
+ARG KMS_REGION=ap-south-1
+RUN test -n "${API_BASE_URL}" && test -n "${KMS_KEY}"
+ENV OOLIX_ENCLAVE=1 \
+    OOLIX_API_BASE_URL=${API_BASE_URL} \
+    OOLIX_ENCLAVE_KMS_KEY=${KMS_KEY} \
+    OOLIX_ENCLAVE_REGION=${KMS_REGION} \
+    OOLIX_STATE_DIR=/run/oolix/state \
+    OOLIX_LOCAL_STORE_URL=postgres://oolix@127.0.0.1:5432/oolix?sslmode=disable \
+    OOLIX_LOG_FORMAT=json
+
+ENTRYPOINT ["/usr/local/bin/enclave-entrypoint"]

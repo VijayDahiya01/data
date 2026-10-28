@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/oolix/partner-agent/internal/detect"
@@ -100,7 +101,8 @@ type Config struct {
 	Database string `json:"database,omitempty"`
 	User     string `json:"user,omitempty"`
 	Password string `json:"password,omitempty"`
-	// TLS is "prefer" (the default), "require" or "disable".
+	// TLS is "prefer" (the default), "require" (encrypted, certificate not
+	// checked), "verify" (encrypted, certificate checked) or "disable".
 	TLS string `json:"tls,omitempty"`
 	// URI is a full connection string, for sources that need one
 	// (mongodb+srv://...). It overrides the fields above.
@@ -181,6 +183,12 @@ func TimeType(typ string) bool {
 
 // Open connects to a source.
 func Open(ctx context.Context, cfg Config) (Source, error) {
+	if RequireVerifiedTLS.Load() {
+		var err error
+		if cfg, err = verifiedTLS(cfg); err != nil {
+			return nil, err
+		}
+	}
 	switch cfg.Kind {
 	case Postgres, MySQL, SQLServer, Oracle:
 		return openSQL(ctx, cfg)
@@ -201,6 +209,34 @@ func Open(ctx context.Context, cfg Config) (Source, error) {
 	default:
 		return nil, fmt.Errorf("unsupported source %q", cfg.Kind)
 	}
+}
+
+// RequireVerifiedTLS makes every database connection encrypted with the
+// server's certificate checked. An Agent hosted in an enclave sets it: its
+// host carries the bytes, and must only ever see ciphertext.
+var RequireVerifiedTLS atomic.Bool
+
+// verifiedTLS turns a database connection's TLS to "verify". A connection
+// string could ask for less, so only the separate fields are accepted --
+// except a mongodb+srv:// address that does not turn checking off.
+func verifiedTLS(cfg Config) (Config, error) {
+	switch cfg.Kind {
+	case Postgres, MySQL, SQLServer, Oracle, MongoDB:
+	default:
+		return cfg, nil // HTTPS, SSH or a local folder: encrypted and checked already
+	}
+	if cfg.URI != "" {
+		lower := strings.ToLower(cfg.URI)
+		if cfg.Kind != MongoDB || !strings.HasPrefix(lower, "mongodb+srv://") ||
+			strings.Contains(lower, "tlsinsecure=true") || strings.Contains(lower, "tlsallowinvalid") ||
+			strings.Contains(lower, "tls=false") || strings.Contains(lower, "ssl=false") {
+			return cfg, errors.New("this Agent only connects with the server's certificate checked: " +
+				"enter the host, port and login instead of a connection string")
+		}
+		return cfg, nil
+	}
+	cfg.TLS = "verify"
+	return cfg, nil
 }
 
 // columnsFromSample builds a column list from sampled rows, for sources with

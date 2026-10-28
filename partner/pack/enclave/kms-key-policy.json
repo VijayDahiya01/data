@@ -1,0 +1,41 @@
+{
+  "Version": "2012-10-17",
+  "Id": "oolix-enclave-sealing",
+  "Statement": [
+    {
+      "Sid": "Administer the key, but never use it to decrypt",
+      "Effect": "Allow",
+      "Principal": { "AWS": "arn:aws:iam::ACCOUNT_ID:role/oolix-kms-admin" },
+      "Action": [
+        "kms:Describe*",
+        "kms:Get*",
+        "kms:List*",
+        "kms:PutKeyPolicy",
+        "kms:TagResource",
+        "kms:EnableKeyRotation",
+        "kms:ScheduleKeyDeletion",
+        "kms:CancelKeyDeletion"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "The enclave host may wrap new state",
+      "Effect": "Allow",
+      "Principal": { "AWS": "arn:aws:iam::ACCOUNT_ID:role/oolix-enclave-host" },
+      "Action": "kms:Encrypt",
+      "Resource": "*"
+    },
+    {
+      "Sid": "Only a published Agent image, in an enclave, may unwrap it",
+      "Effect": "Allow",
+      "Principal": { "AWS": "arn:aws:iam::ACCOUNT_ID:role/oolix-enclave-host" },
+      "Action": "kms:Decrypt",
+      "Resource": "*",
+      "Condition": {
+        "StringEqualsIgnoreCase": {
+          "kms:RecipientAttestation:ImageSha384": ["PCR0_OF_THE_CURRENT_RELEASE", "PCR0_OF_THE_NEXT_RELEASE"]
+        }
+      }
+    }
+  ]
+}

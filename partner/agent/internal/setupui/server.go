@@ -35,6 +35,7 @@ import (
 	"github.com/oolix/partner-agent/internal/detect"
 	"github.com/oolix/partner-agent/internal/localstore"
 	"github.com/oolix/partner-agent/internal/managed"
+	"github.com/oolix/partner-agent/internal/netx"
 	"github.com/oolix/partner-agent/internal/source"
 )
 
@@ -55,6 +56,10 @@ type Options struct {
 	// Password, when set, is the setup password (OOLIX_SETUP_PASSWORD).
 	// Otherwise one is generated on first start and written to the log once.
 	Password string
+	// Claim is for an Agent hosted where its log cannot be read (an
+	// enclave): no password is generated; the first visitor claims the
+	// Agent with a one-time code from the Oolix portal and chooses one.
+	Claim bool
 	// OnRegistered is told once the Agent has an identity, so serving starts.
 	OnRegistered func(managed.Identity)
 
@@ -132,7 +137,7 @@ func parsePages() (map[string]*template.Template, error) {
 // New prepares the pages and makes sure there is a setup password.
 func New(ctx context.Context, opts Options) (*Server, error) {
 	if opts.HTTPClient == nil {
-		opts.HTTPClient = &http.Client{Timeout: 30 * time.Second}
+		opts.HTTPClient = netx.Client(30 * time.Second)
 	}
 	if opts.Register == nil {
 		opts.Register = controlsync.Register
@@ -283,6 +288,10 @@ func (s *Server) ensurePassword(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if !ok && s.opts.Claim {
+		s.opts.Logger.Info("setup page ready to be claimed with a one-time code from the Oolix portal")
+		return nil
+	}
 	if ok {
 		s.opts.Logger.Info("setup page ready; its password was written to this log when the Agent first " +
 			"started. To choose a new one, restart the Agent with OOLIX_SETUP_PASSWORD set")
@@ -379,6 +388,10 @@ func (s *Server) loginPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
+	if s.unclaimed(r.Context()) {
+		s.render(w, "login.html", view{Title: "Claim this Agent", Data: map[string]any{"Claim": true}})
+		return
+	}
 	s.render(w, "login.html", view{Title: "Sign in"})
 }
 
@@ -392,6 +405,10 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "The form could not be read.", http.StatusBadRequest)
+		return
+	}
+	if s.unclaimed(r.Context()) {
+		s.claim(w, r, client)
 		return
 	}
 	var rec passwordRecord
@@ -409,7 +426,75 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		s.render(w, "login.html", view{Title: "Sign in", Error: "That password is not right."})
 		return
 	}
+	s.startSession(w, r, client)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
 
+// unclaimed reports a hosted Agent nobody has claimed yet: it has no
+// password, because its log -- where a self-hosted Agent writes one -- is
+// not readable outside its enclave.
+func (s *Server) unclaimed(ctx context.Context) bool {
+	if !s.opts.Claim {
+		return false
+	}
+	var rec passwordRecord
+	ok, err := s.opts.Store.Get(ctx, passwordKey, &rec)
+	return err == nil && !ok
+}
+
+// claim makes a hosted Agent the Partner's: the one-time code from their
+// Oolix portal registers it -- proving the visitor is the Partner's admin,
+// since the code works once -- and they choose the setup password.
+func (s *Server) claim(w http.ResponseWriter, r *http.Request, client string) {
+	ctx := r.Context()
+	fail := func(status int, msg string) {
+		w.WriteHeader(status)
+		s.render(w, "login.html", view{Title: "Claim this Agent", Error: msg, Data: map[string]any{"Claim": true}})
+	}
+	code := strings.TrimSpace(r.PostFormValue("code"))
+	password := r.PostFormValue("password")
+	switch {
+	case code == "":
+		fail(http.StatusBadRequest, "Paste the one-time code from the Oolix portal.")
+		return
+	case len(password) < 12:
+		fail(http.StatusBadRequest, "Choose a password of at least 12 characters.")
+		return
+	case password != r.PostFormValue("password2"):
+		fail(http.StatusBadRequest, "The two passwords are not the same.")
+		return
+	}
+	res, err := s.opts.Register(ctx, s.opts.HTTPClient, s.opts.APIBaseURL, code, s.opts.KeyPath,
+		[]string{"PARTNER_WEB", "PARTNER_APP"})
+	if err != nil || res.PartnerOrgID == "" {
+		s.recordFailure(client)
+		s.opts.Logger.Warn("a claim of this Agent was refused", "client", client)
+		fail(http.StatusUnauthorized, "Oolix did not accept the code. Make a new one in the portal and try again.")
+		return
+	}
+	id := managed.Identity{
+		AgentID: res.AgentID, ClientID: res.ClientID, PartnerOrgID: res.PartnerOrgID,
+		ManifestIssuer: res.ManifestIssuer, ManifestAudience: res.ManifestAudience,
+		TokenAudience: res.Audience, RegisteredAt: s.opts.Now().UTC(),
+	}
+	if err := s.settings.SaveIdentity(ctx, id); err != nil {
+		s.fail(w, err)
+		return
+	}
+	if err := s.savePassword(ctx, password); err != nil {
+		s.fail(w, err)
+		return
+	}
+	s.opts.Logger.Info("claimed from the setup page", "agent_id", id.AgentID)
+	if s.opts.OnRegistered != nil {
+		s.opts.OnRegistered(id)
+	}
+	s.startSession(w, r, client)
+	http.Redirect(w, r, "/?notice=registered", http.StatusSeeOther)
+}
+
+// startSession signs the visitor in.
+func (s *Server) startSession(w http.ResponseWriter, r *http.Request, client string) {
 	id, sess := token(), &session{csrf: token(), expires: s.opts.Now().Add(sessionTTL)}
 	s.mu.Lock()
 	for k, v := range s.sessions {
@@ -437,7 +522,6 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		MaxAge: int(sessionTTL.Seconds()),
 	})
 	s.opts.Logger.Info("signed in to the setup page", "client", client)
-	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request, _ *session) {

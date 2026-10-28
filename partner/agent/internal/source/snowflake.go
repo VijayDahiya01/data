@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/oolix/partner-agent/internal/detect"
+	"github.com/oolix/partner-agent/internal/netx"
 )
 
 // Snowflake reads tables through Snowflake's SQL API with key-pair sign-in:
@@ -63,7 +64,7 @@ func openSnowflake(ctx context.Context, cfg Config) (Source, error) {
 	sum := sha256.Sum256(pub)
 	s := &snowflakeSource{account: snowflakeAccount(cfg.Host), user: strings.ToUpper(cfg.User), key: key,
 		fingerprint: "SHA256:" + base64.StdEncoding.EncodeToString(sum[:]), database: cfg.Database,
-		schema: cfg.Path, warehouse: cfg.Warehouse, role: cfg.Role, http: &http.Client{Timeout: 10 * time.Minute}}
+		schema: cfg.Path, warehouse: cfg.Warehouse, role: cfg.Role, http: netx.Client(10 * time.Minute)}
 	if strings.Contains(cfg.Host, "://") {
 		s.base = strings.TrimRight(cfg.Host, "/")
 	} else {

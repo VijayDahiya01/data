@@ -16,6 +16,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 
 	"github.com/oolix/partner-agent/internal/detect"
+	"github.com/oolix/partner-agent/internal/netx"
 )
 
 // mongoSource reads MongoDB. Documents have no fixed schema, so a "column" is
@@ -49,6 +50,7 @@ func openMongo(ctx context.Context, cfg Config) (Source, error) {
 	}
 	opts := options.Client().ApplyURI(uri).
 		SetAppName("oolix-agent").
+		SetDialer(netx.Dialer{}).
 		SetServerSelectionTimeout(10 * time.Second).
 		// Read from a secondary when there is one, so the Partner's primary
 		// carries none of the load.

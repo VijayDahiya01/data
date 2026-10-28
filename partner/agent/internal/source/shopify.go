@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/oolix/partner-agent/internal/detect"
+	"github.com/oolix/partner-agent/internal/netx"
 )
 
 // Shopify reads a store's customers and orders through the Admin GraphQL
@@ -84,7 +85,7 @@ func openShopify(ctx context.Context, cfg Config) (Source, error) {
 		endpoint = "https://" + strings.TrimSuffix(shop, "/")
 	}
 	s := &shopifySource{endpoint: endpoint + "/admin/api/" + shopifyAPIVersion + "/graphql.json",
-		token: cfg.Password, http: &http.Client{Timeout: 2 * time.Minute}, history: 730 * 24 * time.Hour}
+		token: cfg.Password, http: netx.Client(2 * time.Minute), history: 730 * 24 * time.Hour}
 	return s, s.Test(ctx)
 }
 

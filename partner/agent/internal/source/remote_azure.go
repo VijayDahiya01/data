@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/oolix/partner-agent/internal/netx"
 )
 
 // azureStore reads a folder in an Azure Blob container through a SAS link
@@ -30,7 +32,7 @@ func openAzure(cfg Config) (*azureStore, error) {
 	sas := u.Query()
 	u.RawQuery = ""
 	return &azureStore{container: u, sas: sas, prefix: strings.Trim(cfg.Path, "/"),
-		http: &http.Client{Timeout: 10 * time.Minute}}, nil
+		http: netx.Client(10 * time.Minute)}, nil
 }
 
 type azureList struct {

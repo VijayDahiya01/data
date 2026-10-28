@@ -15,10 +15,11 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
-	_ "github.com/microsoft/go-mssqldb" // registers the "sqlserver" driver
+	mssql "github.com/microsoft/go-mssqldb"
 	goora "github.com/sijms/go-ora/v2"
 
 	"github.com/oolix/partner-agent/internal/detect"
+	"github.com/oolix/partner-agent/internal/netx"
 )
 
 // dialect is what differs between PostgreSQL, MySQL and SQL Server.
@@ -219,6 +220,7 @@ func openSQL(ctx context.Context, cfg Config) (Source, error) {
 		// Every transaction on this connection is read-only, not just ours.
 		connCfg.RuntimeParams["default_transaction_read_only"] = "on"
 		connCfg.RuntimeParams["application_name"] = "oolix-agent"
+		connCfg.DialFunc = netx.Dial
 		db = stdlib.OpenDB(*connCfg)
 	case MySQL:
 		mc := mysql.NewConfig()
@@ -237,11 +239,14 @@ func openSQL(ctx context.Context, cfg Config) (Source, error) {
 				mc.TLSConfig = "false"
 			case "require":
 				mc.TLSConfig = "skip-verify"
+			case "verify":
+				mc.TLSConfig = "true"
 			default:
 				mc.TLSConfig = "preferred"
 			}
 		}
 		mc.Timeout = 10 * time.Second
+		mc.DialFunc = netx.Dial
 		// Dates and times come back as text for the cleaner to read.
 		mc.ParseTime = false
 		// Show TIMESTAMP columns in the Partner's own zone, so the text the
@@ -256,17 +261,20 @@ func openSQL(ctx context.Context, cfg Config) (Source, error) {
 		}
 		db = sql.OpenDB(connector)
 	case SQLServer:
-		var err error
-		db, err = sql.Open("sqlserver", sqlServerURL(cfg))
+		connector, err := mssql.NewConnector(sqlServerURL(cfg))
 		if err != nil {
 			return nil, fmt.Errorf("sql server settings: %w", err)
 		}
+		connector.Dialer = netx.Dialer{}
+		db = sql.OpenDB(connector)
 	case Oracle:
-		var err error
-		db, err = sql.Open("oracle", oracleURL(cfg))
-		if err != nil {
-			return nil, fmt.Errorf("oracle settings: %w", err)
+		connector := goora.NewConnector(oracleURL(cfg))
+		oc, ok := connector.(*goora.OracleConnector)
+		if !ok {
+			return nil, errors.New("oracle settings: unexpected connector")
 		}
+		oc.Dialer(netx.Dialer{})
+		db = sql.OpenDB(oc)
 	}
 	db.SetMaxOpenConns(2)
 	db.SetConnMaxIdleTime(time.Minute)
@@ -703,6 +711,8 @@ func postgresURL(cfg Config) string {
 		q.Set("sslmode", "disable")
 	case "require":
 		q.Set("sslmode", "require")
+	case "verify":
+		q.Set("sslmode", "verify-full")
 	default:
 		q.Set("sslmode", "prefer")
 	}
@@ -731,6 +741,9 @@ func sqlServerURL(cfg Config) string {
 		q.Set("encrypt", "true")
 		// Internal servers usually present their own certificate.
 		q.Set("TrustServerCertificate", "true")
+	case "verify":
+		q.Set("encrypt", "true")
+		q.Set("TrustServerCertificate", "false")
 	default:
 		// Encrypt the login; the rest follows what the server asks for.
 		q.Set("encrypt", "false")
@@ -774,8 +787,12 @@ func oracleURL(cfg Config) string {
 		return cfg.URI
 	}
 	opts := map[string]string{}
-	if cfg.TLS == "require" {
+	switch cfg.TLS {
+	case "require":
+		opts["SSL"] = "true" // go-ora checks the certificate unless told not to
+	case "verify":
 		opts["SSL"] = "true"
+		opts["SSL VERIFY"] = "true"
 	}
 	return goora.BuildUrl(cfg.Host, portOr(cfg.Port, Oracle), cfg.Database, cfg.User, cfg.Password, opts)
 }

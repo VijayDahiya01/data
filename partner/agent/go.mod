@@ -7,10 +7,13 @@ go 1.26.0
 toolchain go1.27.0
 
 require (
+	github.com/fxamacker/cbor/v2 v2.9.6
 	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/go-sql-driver/mysql v1.10.1
 	github.com/google/uuid v1.6.0
+	github.com/hf/nsm v0.0.0-20220930140112-cd181bd646b9
 	github.com/jackc/pgx/v5 v5.10.0
+	github.com/mdlayher/vsock v1.3.0
 	github.com/microsoft/go-mssqldb v1.11.2
 	github.com/pkg/sftp v1.13.12
 	github.com/redis/go-redis/v9 v9.22.0
@@ -33,11 +36,13 @@ require (
 	github.com/klauspost/compress v1.19.2 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
+	github.com/mdlayher/socket v0.6.0 // indirect
 	github.com/richardlehane/mscfb v1.0.7 // indirect
 	github.com/richardlehane/msoleps v1.0.6 // indirect
 	github.com/rogpeppe/go-internal v1.16.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/tiendc/go-deepcopy v1.7.2 // indirect
+	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.2.0 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect
