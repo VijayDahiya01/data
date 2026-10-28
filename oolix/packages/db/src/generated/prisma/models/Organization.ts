@@ -250,6 +250,7 @@ export type OrganizationWhereInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotListRelationFilter
   reachEstimates?: Prisma.ReachEstimateListRelationFilter
   dataQuality?: Prisma.XOR<Prisma.PartnerDataQualityNullableScalarRelationFilter, Prisma.PartnerDataQualityWhereInput> | null
+  synonymAnswers?: Prisma.SynonymContributionListRelationFilter
 }
 
 export type OrganizationOrderByWithRelationInput = {
@@ -291,6 +292,7 @@ export type OrganizationOrderByWithRelationInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotOrderByRelationAggregateInput
   reachEstimates?: Prisma.ReachEstimateOrderByRelationAggregateInput
   dataQuality?: Prisma.PartnerDataQualityOrderByWithRelationInput
+  synonymAnswers?: Prisma.SynonymContributionOrderByRelationAggregateInput
 }
 
 export type OrganizationWhereUniqueInput = Prisma.AtLeast<{
@@ -335,6 +337,7 @@ export type OrganizationWhereUniqueInput = Prisma.AtLeast<{
   partnerMatches?: Prisma.PartnerMatchSnapshotListRelationFilter
   reachEstimates?: Prisma.ReachEstimateListRelationFilter
   dataQuality?: Prisma.XOR<Prisma.PartnerDataQualityNullableScalarRelationFilter, Prisma.PartnerDataQualityWhereInput> | null
+  synonymAnswers?: Prisma.SynonymContributionListRelationFilter
 }, "id">
 
 export type OrganizationOrderByWithAggregationInput = {
@@ -408,6 +411,7 @@ export type OrganizationCreateInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateInput = {
@@ -449,6 +453,7 @@ export type OrganizationUncheckedCreateInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUpdateInput = {
@@ -490,6 +495,7 @@ export type OrganizationUpdateInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateInput = {
@@ -531,6 +537,7 @@ export type OrganizationUncheckedUpdateInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateManyInput = {
@@ -981,6 +988,20 @@ export type OrganizationUpdateOneRequiredWithoutDataQualityNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.OrganizationUpdateToOneWithWhereWithoutDataQualityInput, Prisma.OrganizationUpdateWithoutDataQualityInput>, Prisma.OrganizationUncheckedUpdateWithoutDataQualityInput>
 }
 
+export type OrganizationCreateNestedOneWithoutSynonymAnswersInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutSynonymAnswersInput, Prisma.OrganizationUncheckedCreateWithoutSynonymAnswersInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutSynonymAnswersInput
+  connect?: Prisma.OrganizationWhereUniqueInput
+}
+
+export type OrganizationUpdateOneRequiredWithoutSynonymAnswersNestedInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutSynonymAnswersInput, Prisma.OrganizationUncheckedCreateWithoutSynonymAnswersInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutSynonymAnswersInput
+  upsert?: Prisma.OrganizationUpsertWithoutSynonymAnswersInput
+  connect?: Prisma.OrganizationWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.OrganizationUpdateToOneWithWhereWithoutSynonymAnswersInput, Prisma.OrganizationUpdateWithoutSynonymAnswersInput>, Prisma.OrganizationUncheckedUpdateWithoutSynonymAnswersInput>
+}
+
 export type OrganizationCreateNestedOneWithoutAudienceGroupsInput = {
   create?: Prisma.XOR<Prisma.OrganizationCreateWithoutAudienceGroupsInput, Prisma.OrganizationUncheckedCreateWithoutAudienceGroupsInput>
   connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutAudienceGroupsInput
@@ -1061,6 +1082,7 @@ export type OrganizationCreateWithoutMembersInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutMembersInput = {
@@ -1101,6 +1123,7 @@ export type OrganizationUncheckedCreateWithoutMembersInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutMembersInput = {
@@ -1157,6 +1180,7 @@ export type OrganizationUpdateWithoutMembersInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutMembersInput = {
@@ -1197,6 +1221,7 @@ export type OrganizationUncheckedUpdateWithoutMembersInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutSponsoredNetworksInput = {
@@ -1237,6 +1262,7 @@ export type OrganizationCreateWithoutSponsoredNetworksInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutSponsoredNetworksInput = {
@@ -1277,6 +1303,7 @@ export type OrganizationUncheckedCreateWithoutSponsoredNetworksInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutSponsoredNetworksInput = {
@@ -1333,6 +1360,7 @@ export type OrganizationUpdateWithoutSponsoredNetworksInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutSponsoredNetworksInput = {
@@ -1373,6 +1401,7 @@ export type OrganizationUncheckedUpdateWithoutSponsoredNetworksInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutNetworkMembershipsInput = {
@@ -1413,6 +1442,7 @@ export type OrganizationCreateWithoutNetworkMembershipsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutNetworkMembershipsInput = {
@@ -1453,6 +1483,7 @@ export type OrganizationUncheckedCreateWithoutNetworkMembershipsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutNetworkMembershipsInput = {
@@ -1509,6 +1540,7 @@ export type OrganizationUpdateWithoutNetworkMembershipsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutNetworkMembershipsInput = {
@@ -1549,6 +1581,7 @@ export type OrganizationUncheckedUpdateWithoutNetworkMembershipsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutPartnerProfileInput = {
@@ -1589,6 +1622,7 @@ export type OrganizationCreateWithoutPartnerProfileInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutPartnerProfileInput = {
@@ -1629,6 +1663,7 @@ export type OrganizationUncheckedCreateWithoutPartnerProfileInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutPartnerProfileInput = {
@@ -1685,6 +1720,7 @@ export type OrganizationUpdateWithoutPartnerProfileInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutPartnerProfileInput = {
@@ -1725,6 +1761,7 @@ export type OrganizationUncheckedUpdateWithoutPartnerProfileInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutPartnerPoliciesInput = {
@@ -1765,6 +1802,7 @@ export type OrganizationCreateWithoutPartnerPoliciesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutPartnerPoliciesInput = {
@@ -1805,6 +1843,7 @@ export type OrganizationUncheckedCreateWithoutPartnerPoliciesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutPartnerPoliciesInput = {
@@ -1861,6 +1900,7 @@ export type OrganizationUpdateWithoutPartnerPoliciesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutPartnerPoliciesInput = {
@@ -1901,6 +1941,7 @@ export type OrganizationUncheckedUpdateWithoutPartnerPoliciesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutBuyerProfileInput = {
@@ -1941,6 +1982,7 @@ export type OrganizationCreateWithoutBuyerProfileInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutBuyerProfileInput = {
@@ -1981,6 +2023,7 @@ export type OrganizationUncheckedCreateWithoutBuyerProfileInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutBuyerProfileInput = {
@@ -2037,6 +2080,7 @@ export type OrganizationUpdateWithoutBuyerProfileInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutBuyerProfileInput = {
@@ -2077,6 +2121,7 @@ export type OrganizationUncheckedUpdateWithoutBuyerProfileInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutBrandsInput = {
@@ -2117,6 +2162,7 @@ export type OrganizationCreateWithoutBrandsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutBrandsInput = {
@@ -2157,6 +2203,7 @@ export type OrganizationUncheckedCreateWithoutBrandsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutBrandsInput = {
@@ -2213,6 +2260,7 @@ export type OrganizationUpdateWithoutBrandsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutBrandsInput = {
@@ -2253,6 +2301,7 @@ export type OrganizationUncheckedUpdateWithoutBrandsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutBillingProfilesInput = {
@@ -2293,6 +2342,7 @@ export type OrganizationCreateWithoutBillingProfilesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutBillingProfilesInput = {
@@ -2333,6 +2383,7 @@ export type OrganizationUncheckedCreateWithoutBillingProfilesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutBillingProfilesInput = {
@@ -2389,6 +2440,7 @@ export type OrganizationUpdateWithoutBillingProfilesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutBillingProfilesInput = {
@@ -2429,6 +2481,7 @@ export type OrganizationUncheckedUpdateWithoutBillingProfilesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutSegmentsInput = {
@@ -2469,6 +2522,7 @@ export type OrganizationCreateWithoutSegmentsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutSegmentsInput = {
@@ -2509,6 +2563,7 @@ export type OrganizationUncheckedCreateWithoutSegmentsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutSegmentsInput = {
@@ -2565,6 +2620,7 @@ export type OrganizationUpdateWithoutSegmentsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutSegmentsInput = {
@@ -2605,6 +2661,7 @@ export type OrganizationUncheckedUpdateWithoutSegmentsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutPlacementsInput = {
@@ -2645,6 +2702,7 @@ export type OrganizationCreateWithoutPlacementsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutPlacementsInput = {
@@ -2685,6 +2743,7 @@ export type OrganizationUncheckedCreateWithoutPlacementsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutPlacementsInput = {
@@ -2741,6 +2800,7 @@ export type OrganizationUpdateWithoutPlacementsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutPlacementsInput = {
@@ -2781,6 +2841,7 @@ export type OrganizationUncheckedUpdateWithoutPlacementsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutCampaignsInput = {
@@ -2821,6 +2882,7 @@ export type OrganizationCreateWithoutCampaignsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutCampaignsInput = {
@@ -2861,6 +2923,7 @@ export type OrganizationUncheckedCreateWithoutCampaignsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutCampaignsInput = {
@@ -2917,6 +2980,7 @@ export type OrganizationUpdateWithoutCampaignsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutCampaignsInput = {
@@ -2957,6 +3021,7 @@ export type OrganizationUncheckedUpdateWithoutCampaignsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutPartnerRequestsInput = {
@@ -2997,6 +3062,7 @@ export type OrganizationCreateWithoutPartnerRequestsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutPartnerRequestsInput = {
@@ -3037,6 +3103,7 @@ export type OrganizationUncheckedCreateWithoutPartnerRequestsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutPartnerRequestsInput = {
@@ -3093,6 +3160,7 @@ export type OrganizationUpdateWithoutPartnerRequestsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutPartnerRequestsInput = {
@@ -3133,6 +3201,7 @@ export type OrganizationUncheckedUpdateWithoutPartnerRequestsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutAgentsInput = {
@@ -3173,6 +3242,7 @@ export type OrganizationCreateWithoutAgentsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutAgentsInput = {
@@ -3213,6 +3283,7 @@ export type OrganizationUncheckedCreateWithoutAgentsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutAgentsInput = {
@@ -3269,6 +3340,7 @@ export type OrganizationUpdateWithoutAgentsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutAgentsInput = {
@@ -3309,6 +3381,7 @@ export type OrganizationUncheckedUpdateWithoutAgentsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutBootstrapTokensInput = {
@@ -3349,6 +3422,7 @@ export type OrganizationCreateWithoutBootstrapTokensInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutBootstrapTokensInput = {
@@ -3389,6 +3463,7 @@ export type OrganizationUncheckedCreateWithoutBootstrapTokensInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutBootstrapTokensInput = {
@@ -3445,6 +3520,7 @@ export type OrganizationUpdateWithoutBootstrapTokensInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutBootstrapTokensInput = {
@@ -3485,6 +3561,7 @@ export type OrganizationUncheckedUpdateWithoutBootstrapTokensInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutChannelConnectionsInput = {
@@ -3525,6 +3602,7 @@ export type OrganizationCreateWithoutChannelConnectionsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutChannelConnectionsInput = {
@@ -3565,6 +3643,7 @@ export type OrganizationUncheckedCreateWithoutChannelConnectionsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutChannelConnectionsInput = {
@@ -3621,6 +3700,7 @@ export type OrganizationUpdateWithoutChannelConnectionsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutChannelConnectionsInput = {
@@ -3661,6 +3741,7 @@ export type OrganizationUncheckedUpdateWithoutChannelConnectionsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutAttributionTokensInput = {
@@ -3701,6 +3782,7 @@ export type OrganizationCreateWithoutAttributionTokensInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutAttributionTokensInput = {
@@ -3741,6 +3823,7 @@ export type OrganizationUncheckedCreateWithoutAttributionTokensInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutAttributionTokensInput = {
@@ -3797,6 +3880,7 @@ export type OrganizationUpdateWithoutAttributionTokensInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutAttributionTokensInput = {
@@ -3837,6 +3921,7 @@ export type OrganizationUncheckedUpdateWithoutAttributionTokensInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutLeadEventsInput = {
@@ -3877,6 +3962,7 @@ export type OrganizationCreateWithoutLeadEventsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutLeadEventsInput = {
@@ -3917,6 +4003,7 @@ export type OrganizationUncheckedCreateWithoutLeadEventsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutLeadEventsInput = {
@@ -3973,6 +4060,7 @@ export type OrganizationUpdateWithoutLeadEventsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutLeadEventsInput = {
@@ -4013,6 +4101,7 @@ export type OrganizationUncheckedUpdateWithoutLeadEventsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutDeliveryBatchesInput = {
@@ -4053,6 +4142,7 @@ export type OrganizationCreateWithoutDeliveryBatchesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutDeliveryBatchesInput = {
@@ -4093,6 +4183,7 @@ export type OrganizationUncheckedCreateWithoutDeliveryBatchesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutDeliveryBatchesInput = {
@@ -4149,6 +4240,7 @@ export type OrganizationUpdateWithoutDeliveryBatchesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutDeliveryBatchesInput = {
@@ -4189,6 +4281,7 @@ export type OrganizationUncheckedUpdateWithoutDeliveryBatchesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutInvoicesInput = {
@@ -4229,6 +4322,7 @@ export type OrganizationCreateWithoutInvoicesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutInvoicesInput = {
@@ -4269,6 +4363,7 @@ export type OrganizationUncheckedCreateWithoutInvoicesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutInvoicesInput = {
@@ -4325,6 +4420,7 @@ export type OrganizationUpdateWithoutInvoicesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutInvoicesInput = {
@@ -4365,6 +4461,7 @@ export type OrganizationUncheckedUpdateWithoutInvoicesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutPayoutsInput = {
@@ -4405,6 +4502,7 @@ export type OrganizationCreateWithoutPayoutsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutPayoutsInput = {
@@ -4445,6 +4543,7 @@ export type OrganizationUncheckedCreateWithoutPayoutsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutPayoutsInput = {
@@ -4501,6 +4600,7 @@ export type OrganizationUpdateWithoutPayoutsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutPayoutsInput = {
@@ -4541,6 +4641,7 @@ export type OrganizationUncheckedUpdateWithoutPayoutsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutAuditEventsInput = {
@@ -4581,6 +4682,7 @@ export type OrganizationCreateWithoutAuditEventsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutAuditEventsInput = {
@@ -4621,6 +4723,7 @@ export type OrganizationUncheckedCreateWithoutAuditEventsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutAuditEventsInput = {
@@ -4677,6 +4780,7 @@ export type OrganizationUpdateWithoutAuditEventsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutAuditEventsInput = {
@@ -4717,6 +4821,7 @@ export type OrganizationUncheckedUpdateWithoutAuditEventsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutNotificationsInput = {
@@ -4757,6 +4862,7 @@ export type OrganizationCreateWithoutNotificationsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutNotificationsInput = {
@@ -4797,6 +4903,7 @@ export type OrganizationUncheckedCreateWithoutNotificationsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutNotificationsInput = {
@@ -4853,6 +4960,7 @@ export type OrganizationUpdateWithoutNotificationsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutNotificationsInput = {
@@ -4893,6 +5001,7 @@ export type OrganizationUncheckedUpdateWithoutNotificationsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutKillSwitchesInput = {
@@ -4933,6 +5042,7 @@ export type OrganizationCreateWithoutKillSwitchesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutKillSwitchesInput = {
@@ -4973,6 +5083,7 @@ export type OrganizationUncheckedCreateWithoutKillSwitchesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutKillSwitchesInput = {
@@ -5029,6 +5140,7 @@ export type OrganizationUpdateWithoutKillSwitchesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutKillSwitchesInput = {
@@ -5069,6 +5181,7 @@ export type OrganizationUncheckedUpdateWithoutKillSwitchesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutPartnerCapabilitiesInput = {
@@ -5109,6 +5222,7 @@ export type OrganizationCreateWithoutPartnerCapabilitiesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutPartnerCapabilitiesInput = {
@@ -5149,6 +5263,7 @@ export type OrganizationUncheckedCreateWithoutPartnerCapabilitiesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutPartnerCapabilitiesInput = {
@@ -5205,6 +5320,7 @@ export type OrganizationUpdateWithoutPartnerCapabilitiesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutPartnerCapabilitiesInput = {
@@ -5245,6 +5361,7 @@ export type OrganizationUncheckedUpdateWithoutPartnerCapabilitiesInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutDataQualityInput = {
@@ -5285,6 +5402,7 @@ export type OrganizationCreateWithoutDataQualityInput = {
   partnerCapabilities?: Prisma.PartnerCapabilityCreateNestedManyWithoutOrganizationInput
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutDataQualityInput = {
@@ -5325,6 +5443,7 @@ export type OrganizationUncheckedCreateWithoutDataQualityInput = {
   partnerCapabilities?: Prisma.PartnerCapabilityUncheckedCreateNestedManyWithoutOrganizationInput
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutDataQualityInput = {
@@ -5381,6 +5500,7 @@ export type OrganizationUpdateWithoutDataQualityInput = {
   partnerCapabilities?: Prisma.PartnerCapabilityUpdateManyWithoutOrganizationNestedInput
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutDataQualityInput = {
@@ -5421,6 +5541,187 @@ export type OrganizationUncheckedUpdateWithoutDataQualityInput = {
   partnerCapabilities?: Prisma.PartnerCapabilityUncheckedUpdateManyWithoutOrganizationNestedInput
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
+}
+
+export type OrganizationCreateWithoutSynonymAnswersInput = {
+  id?: string
+  type: $Enums.OrganizationType
+  name: string
+  domain: string
+  verificationStatus?: $Enums.VerificationStatus
+  country: string
+  industry?: string | null
+  taxId?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  members?: Prisma.OrganizationMemberCreateNestedManyWithoutOrganizationInput
+  partnerProfile?: Prisma.PartnerProfileCreateNestedOneWithoutOrganizationInput
+  buyerProfile?: Prisma.BuyerProfileCreateNestedOneWithoutOrganizationInput
+  sponsoredNetworks?: Prisma.NetworkCreateNestedManyWithoutSponsorInput
+  networkMemberships?: Prisma.NetworkMembershipCreateNestedManyWithoutOrganizationInput
+  segments?: Prisma.SegmentCreateNestedManyWithoutOrganizationInput
+  placements?: Prisma.PlacementCreateNestedManyWithoutOrganizationInput
+  campaigns?: Prisma.CampaignCreateNestedManyWithoutOrganizationInput
+  partnerRequests?: Prisma.PartnerRequestCreateNestedManyWithoutOrganizationInput
+  agents?: Prisma.AgentCreateNestedManyWithoutOrganizationInput
+  bootstrapTokens?: Prisma.AgentBootstrapTokenCreateNestedManyWithoutOrganizationInput
+  channelConnections?: Prisma.ChannelConnectionCreateNestedManyWithoutOrganizationInput
+  attributionTokens?: Prisma.AttributionTokenCreateNestedManyWithoutOrganizationInput
+  leadEvents?: Prisma.LeadEventCreateNestedManyWithoutOrganizationInput
+  invoices?: Prisma.InvoiceCreateNestedManyWithoutOrganizationInput
+  payouts?: Prisma.PayoutCreateNestedManyWithoutOrganizationInput
+  auditEvents?: Prisma.AuditEventCreateNestedManyWithoutOrganizationInput
+  killSwitches?: Prisma.KillSwitchCreateNestedManyWithoutOrganizationInput
+  billingProfiles?: Prisma.BillingProfileCreateNestedManyWithoutOrganizationInput
+  brands?: Prisma.BrandCreateNestedManyWithoutOrganizationInput
+  partnerPolicies?: Prisma.PartnerPolicyCreateNestedManyWithoutOrganizationInput
+  deliveryBatches?: Prisma.DeliveryBatchCreateNestedManyWithoutOrganizationInput
+  notifications?: Prisma.NotificationCreateNestedManyWithoutOrganizationInput
+  audienceGroups?: Prisma.AudienceGroupCreateNestedManyWithoutOrganizationInput
+  partnerCapabilities?: Prisma.PartnerCapabilityCreateNestedManyWithoutOrganizationInput
+  partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
+  reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
+  dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+}
+
+export type OrganizationUncheckedCreateWithoutSynonymAnswersInput = {
+  id?: string
+  type: $Enums.OrganizationType
+  name: string
+  domain: string
+  verificationStatus?: $Enums.VerificationStatus
+  country: string
+  industry?: string | null
+  taxId?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  members?: Prisma.OrganizationMemberUncheckedCreateNestedManyWithoutOrganizationInput
+  partnerProfile?: Prisma.PartnerProfileUncheckedCreateNestedOneWithoutOrganizationInput
+  buyerProfile?: Prisma.BuyerProfileUncheckedCreateNestedOneWithoutOrganizationInput
+  sponsoredNetworks?: Prisma.NetworkUncheckedCreateNestedManyWithoutSponsorInput
+  networkMemberships?: Prisma.NetworkMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  segments?: Prisma.SegmentUncheckedCreateNestedManyWithoutOrganizationInput
+  placements?: Prisma.PlacementUncheckedCreateNestedManyWithoutOrganizationInput
+  campaigns?: Prisma.CampaignUncheckedCreateNestedManyWithoutOrganizationInput
+  partnerRequests?: Prisma.PartnerRequestUncheckedCreateNestedManyWithoutOrganizationInput
+  agents?: Prisma.AgentUncheckedCreateNestedManyWithoutOrganizationInput
+  bootstrapTokens?: Prisma.AgentBootstrapTokenUncheckedCreateNestedManyWithoutOrganizationInput
+  channelConnections?: Prisma.ChannelConnectionUncheckedCreateNestedManyWithoutOrganizationInput
+  attributionTokens?: Prisma.AttributionTokenUncheckedCreateNestedManyWithoutOrganizationInput
+  leadEvents?: Prisma.LeadEventUncheckedCreateNestedManyWithoutOrganizationInput
+  invoices?: Prisma.InvoiceUncheckedCreateNestedManyWithoutOrganizationInput
+  payouts?: Prisma.PayoutUncheckedCreateNestedManyWithoutOrganizationInput
+  auditEvents?: Prisma.AuditEventUncheckedCreateNestedManyWithoutOrganizationInput
+  killSwitches?: Prisma.KillSwitchUncheckedCreateNestedManyWithoutOrganizationInput
+  billingProfiles?: Prisma.BillingProfileUncheckedCreateNestedManyWithoutOrganizationInput
+  brands?: Prisma.BrandUncheckedCreateNestedManyWithoutOrganizationInput
+  partnerPolicies?: Prisma.PartnerPolicyUncheckedCreateNestedManyWithoutOrganizationInput
+  deliveryBatches?: Prisma.DeliveryBatchUncheckedCreateNestedManyWithoutOrganizationInput
+  notifications?: Prisma.NotificationUncheckedCreateNestedManyWithoutOrganizationInput
+  audienceGroups?: Prisma.AudienceGroupUncheckedCreateNestedManyWithoutOrganizationInput
+  partnerCapabilities?: Prisma.PartnerCapabilityUncheckedCreateNestedManyWithoutOrganizationInput
+  partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
+  reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
+  dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+}
+
+export type OrganizationCreateOrConnectWithoutSynonymAnswersInput = {
+  where: Prisma.OrganizationWhereUniqueInput
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutSynonymAnswersInput, Prisma.OrganizationUncheckedCreateWithoutSynonymAnswersInput>
+}
+
+export type OrganizationUpsertWithoutSynonymAnswersInput = {
+  update: Prisma.XOR<Prisma.OrganizationUpdateWithoutSynonymAnswersInput, Prisma.OrganizationUncheckedUpdateWithoutSynonymAnswersInput>
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutSynonymAnswersInput, Prisma.OrganizationUncheckedCreateWithoutSynonymAnswersInput>
+  where?: Prisma.OrganizationWhereInput
+}
+
+export type OrganizationUpdateToOneWithWhereWithoutSynonymAnswersInput = {
+  where?: Prisma.OrganizationWhereInput
+  data: Prisma.XOR<Prisma.OrganizationUpdateWithoutSynonymAnswersInput, Prisma.OrganizationUncheckedUpdateWithoutSynonymAnswersInput>
+}
+
+export type OrganizationUpdateWithoutSynonymAnswersInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumOrganizationTypeFieldUpdateOperationsInput | $Enums.OrganizationType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  domain?: Prisma.StringFieldUpdateOperationsInput | string
+  verificationStatus?: Prisma.EnumVerificationStatusFieldUpdateOperationsInput | $Enums.VerificationStatus
+  country?: Prisma.StringFieldUpdateOperationsInput | string
+  industry?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  taxId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  members?: Prisma.OrganizationMemberUpdateManyWithoutOrganizationNestedInput
+  partnerProfile?: Prisma.PartnerProfileUpdateOneWithoutOrganizationNestedInput
+  buyerProfile?: Prisma.BuyerProfileUpdateOneWithoutOrganizationNestedInput
+  sponsoredNetworks?: Prisma.NetworkUpdateManyWithoutSponsorNestedInput
+  networkMemberships?: Prisma.NetworkMembershipUpdateManyWithoutOrganizationNestedInput
+  segments?: Prisma.SegmentUpdateManyWithoutOrganizationNestedInput
+  placements?: Prisma.PlacementUpdateManyWithoutOrganizationNestedInput
+  campaigns?: Prisma.CampaignUpdateManyWithoutOrganizationNestedInput
+  partnerRequests?: Prisma.PartnerRequestUpdateManyWithoutOrganizationNestedInput
+  agents?: Prisma.AgentUpdateManyWithoutOrganizationNestedInput
+  bootstrapTokens?: Prisma.AgentBootstrapTokenUpdateManyWithoutOrganizationNestedInput
+  channelConnections?: Prisma.ChannelConnectionUpdateManyWithoutOrganizationNestedInput
+  attributionTokens?: Prisma.AttributionTokenUpdateManyWithoutOrganizationNestedInput
+  leadEvents?: Prisma.LeadEventUpdateManyWithoutOrganizationNestedInput
+  invoices?: Prisma.InvoiceUpdateManyWithoutOrganizationNestedInput
+  payouts?: Prisma.PayoutUpdateManyWithoutOrganizationNestedInput
+  auditEvents?: Prisma.AuditEventUpdateManyWithoutOrganizationNestedInput
+  killSwitches?: Prisma.KillSwitchUpdateManyWithoutOrganizationNestedInput
+  billingProfiles?: Prisma.BillingProfileUpdateManyWithoutOrganizationNestedInput
+  brands?: Prisma.BrandUpdateManyWithoutOrganizationNestedInput
+  partnerPolicies?: Prisma.PartnerPolicyUpdateManyWithoutOrganizationNestedInput
+  deliveryBatches?: Prisma.DeliveryBatchUpdateManyWithoutOrganizationNestedInput
+  notifications?: Prisma.NotificationUpdateManyWithoutOrganizationNestedInput
+  audienceGroups?: Prisma.AudienceGroupUpdateManyWithoutOrganizationNestedInput
+  partnerCapabilities?: Prisma.PartnerCapabilityUpdateManyWithoutOrganizationNestedInput
+  partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
+  reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
+  dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+}
+
+export type OrganizationUncheckedUpdateWithoutSynonymAnswersInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  type?: Prisma.EnumOrganizationTypeFieldUpdateOperationsInput | $Enums.OrganizationType
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  domain?: Prisma.StringFieldUpdateOperationsInput | string
+  verificationStatus?: Prisma.EnumVerificationStatusFieldUpdateOperationsInput | $Enums.VerificationStatus
+  country?: Prisma.StringFieldUpdateOperationsInput | string
+  industry?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  taxId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  members?: Prisma.OrganizationMemberUncheckedUpdateManyWithoutOrganizationNestedInput
+  partnerProfile?: Prisma.PartnerProfileUncheckedUpdateOneWithoutOrganizationNestedInput
+  buyerProfile?: Prisma.BuyerProfileUncheckedUpdateOneWithoutOrganizationNestedInput
+  sponsoredNetworks?: Prisma.NetworkUncheckedUpdateManyWithoutSponsorNestedInput
+  networkMemberships?: Prisma.NetworkMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  segments?: Prisma.SegmentUncheckedUpdateManyWithoutOrganizationNestedInput
+  placements?: Prisma.PlacementUncheckedUpdateManyWithoutOrganizationNestedInput
+  campaigns?: Prisma.CampaignUncheckedUpdateManyWithoutOrganizationNestedInput
+  partnerRequests?: Prisma.PartnerRequestUncheckedUpdateManyWithoutOrganizationNestedInput
+  agents?: Prisma.AgentUncheckedUpdateManyWithoutOrganizationNestedInput
+  bootstrapTokens?: Prisma.AgentBootstrapTokenUncheckedUpdateManyWithoutOrganizationNestedInput
+  channelConnections?: Prisma.ChannelConnectionUncheckedUpdateManyWithoutOrganizationNestedInput
+  attributionTokens?: Prisma.AttributionTokenUncheckedUpdateManyWithoutOrganizationNestedInput
+  leadEvents?: Prisma.LeadEventUncheckedUpdateManyWithoutOrganizationNestedInput
+  invoices?: Prisma.InvoiceUncheckedUpdateManyWithoutOrganizationNestedInput
+  payouts?: Prisma.PayoutUncheckedUpdateManyWithoutOrganizationNestedInput
+  auditEvents?: Prisma.AuditEventUncheckedUpdateManyWithoutOrganizationNestedInput
+  killSwitches?: Prisma.KillSwitchUncheckedUpdateManyWithoutOrganizationNestedInput
+  billingProfiles?: Prisma.BillingProfileUncheckedUpdateManyWithoutOrganizationNestedInput
+  brands?: Prisma.BrandUncheckedUpdateManyWithoutOrganizationNestedInput
+  partnerPolicies?: Prisma.PartnerPolicyUncheckedUpdateManyWithoutOrganizationNestedInput
+  deliveryBatches?: Prisma.DeliveryBatchUncheckedUpdateManyWithoutOrganizationNestedInput
+  notifications?: Prisma.NotificationUncheckedUpdateManyWithoutOrganizationNestedInput
+  audienceGroups?: Prisma.AudienceGroupUncheckedUpdateManyWithoutOrganizationNestedInput
+  partnerCapabilities?: Prisma.PartnerCapabilityUncheckedUpdateManyWithoutOrganizationNestedInput
+  partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
+  reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
+  dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutAudienceGroupsInput = {
@@ -5461,6 +5762,7 @@ export type OrganizationCreateWithoutAudienceGroupsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutAudienceGroupsInput = {
@@ -5501,6 +5803,7 @@ export type OrganizationUncheckedCreateWithoutAudienceGroupsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutAudienceGroupsInput = {
@@ -5557,6 +5860,7 @@ export type OrganizationUpdateWithoutAudienceGroupsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutAudienceGroupsInput = {
@@ -5597,6 +5901,7 @@ export type OrganizationUncheckedUpdateWithoutAudienceGroupsInput = {
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutPartnerMatchesInput = {
@@ -5637,6 +5942,7 @@ export type OrganizationCreateWithoutPartnerMatchesInput = {
   partnerCapabilities?: Prisma.PartnerCapabilityCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutPartnerMatchesInput = {
@@ -5677,6 +5983,7 @@ export type OrganizationUncheckedCreateWithoutPartnerMatchesInput = {
   partnerCapabilities?: Prisma.PartnerCapabilityUncheckedCreateNestedManyWithoutOrganizationInput
   reachEstimates?: Prisma.ReachEstimateUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutPartnerMatchesInput = {
@@ -5733,6 +6040,7 @@ export type OrganizationUpdateWithoutPartnerMatchesInput = {
   partnerCapabilities?: Prisma.PartnerCapabilityUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutPartnerMatchesInput = {
@@ -5773,6 +6081,7 @@ export type OrganizationUncheckedUpdateWithoutPartnerMatchesInput = {
   partnerCapabilities?: Prisma.PartnerCapabilityUncheckedUpdateManyWithoutOrganizationNestedInput
   reachEstimates?: Prisma.ReachEstimateUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutReachEstimatesInput = {
@@ -5813,6 +6122,7 @@ export type OrganizationCreateWithoutReachEstimatesInput = {
   partnerCapabilities?: Prisma.PartnerCapabilityCreateNestedManyWithoutOrganizationInput
   partnerMatches?: Prisma.PartnerMatchSnapshotCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutReachEstimatesInput = {
@@ -5853,6 +6163,7 @@ export type OrganizationUncheckedCreateWithoutReachEstimatesInput = {
   partnerCapabilities?: Prisma.PartnerCapabilityUncheckedCreateNestedManyWithoutOrganizationInput
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedCreateNestedManyWithoutOrganizationInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedCreateNestedOneWithoutOrganizationInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutReachEstimatesInput = {
@@ -5909,6 +6220,7 @@ export type OrganizationUpdateWithoutReachEstimatesInput = {
   partnerCapabilities?: Prisma.PartnerCapabilityUpdateManyWithoutOrganizationNestedInput
   partnerMatches?: Prisma.PartnerMatchSnapshotUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutReachEstimatesInput = {
@@ -5949,6 +6261,7 @@ export type OrganizationUncheckedUpdateWithoutReachEstimatesInput = {
   partnerCapabilities?: Prisma.PartnerCapabilityUncheckedUpdateManyWithoutOrganizationNestedInput
   partnerMatches?: Prisma.PartnerMatchSnapshotUncheckedUpdateManyWithoutOrganizationNestedInput
   dataQuality?: Prisma.PartnerDataQualityUncheckedUpdateOneWithoutOrganizationNestedInput
+  synonymAnswers?: Prisma.SynonymContributionUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 
@@ -5982,6 +6295,7 @@ export type OrganizationCountOutputType = {
   partnerCapabilities: number
   partnerMatches: number
   reachEstimates: number
+  synonymAnswers: number
 }
 
 export type OrganizationCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -6010,6 +6324,7 @@ export type OrganizationCountOutputTypeSelect<ExtArgs extends runtime.Types.Exte
   partnerCapabilities?: boolean | OrganizationCountOutputTypeCountPartnerCapabilitiesArgs
   partnerMatches?: boolean | OrganizationCountOutputTypeCountPartnerMatchesArgs
   reachEstimates?: boolean | OrganizationCountOutputTypeCountReachEstimatesArgs
+  synonymAnswers?: boolean | OrganizationCountOutputTypeCountSynonymAnswersArgs
 }
 
 /**
@@ -6197,6 +6512,13 @@ export type OrganizationCountOutputTypeCountReachEstimatesArgs<ExtArgs extends r
   where?: Prisma.ReachEstimateWhereInput
 }
 
+/**
+ * OrganizationCountOutputType without action
+ */
+export type OrganizationCountOutputTypeCountSynonymAnswersArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.SynonymContributionWhereInput
+}
+
 
 export type OrganizationSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -6237,6 +6559,7 @@ export type OrganizationSelect<ExtArgs extends runtime.Types.Extensions.Internal
   partnerMatches?: boolean | Prisma.Organization$partnerMatchesArgs<ExtArgs>
   reachEstimates?: boolean | Prisma.Organization$reachEstimatesArgs<ExtArgs>
   dataQuality?: boolean | Prisma.Organization$dataQualityArgs<ExtArgs>
+  synonymAnswers?: boolean | Prisma.Organization$synonymAnswersArgs<ExtArgs>
   _count?: boolean | Prisma.OrganizationCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["organization"]>
 
@@ -6309,6 +6632,7 @@ export type OrganizationInclude<ExtArgs extends runtime.Types.Extensions.Interna
   partnerMatches?: boolean | Prisma.Organization$partnerMatchesArgs<ExtArgs>
   reachEstimates?: boolean | Prisma.Organization$reachEstimatesArgs<ExtArgs>
   dataQuality?: boolean | Prisma.Organization$dataQualityArgs<ExtArgs>
+  synonymAnswers?: boolean | Prisma.Organization$synonymAnswersArgs<ExtArgs>
   _count?: boolean | Prisma.OrganizationCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type OrganizationIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {}
@@ -6345,6 +6669,7 @@ export type $OrganizationPayload<ExtArgs extends runtime.Types.Extensions.Intern
     partnerMatches: Prisma.$PartnerMatchSnapshotPayload<ExtArgs>[]
     reachEstimates: Prisma.$ReachEstimatePayload<ExtArgs>[]
     dataQuality: Prisma.$PartnerDataQualityPayload<ExtArgs> | null
+    synonymAnswers: Prisma.$SynonymContributionPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -6782,6 +7107,7 @@ export interface Prisma__OrganizationClient<T, Null = never, ExtArgs extends run
   partnerMatches<T extends Prisma.Organization$partnerMatchesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$partnerMatchesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$PartnerMatchSnapshotPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   reachEstimates<T extends Prisma.Organization$reachEstimatesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$reachEstimatesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ReachEstimatePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   dataQuality<T extends Prisma.Organization$dataQualityArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$dataQualityArgs<ExtArgs>>): Prisma.Prisma__PartnerDataQualityClient<runtime.Types.Result.GetResult<Prisma.$PartnerDataQualityPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+  synonymAnswers<T extends Prisma.Organization$synonymAnswersArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$synonymAnswersArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$SynonymContributionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -7868,6 +8194,30 @@ export type Organization$dataQualityArgs<ExtArgs extends runtime.Types.Extension
    */
   include?: Prisma.PartnerDataQualityInclude<ExtArgs> | null
   where?: Prisma.PartnerDataQualityWhereInput
+}
+
+/**
+ * Organization.synonymAnswers
+ */
+export type Organization$synonymAnswersArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the SynonymContribution
+   */
+  select?: Prisma.SynonymContributionSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the SynonymContribution
+   */
+  omit?: Prisma.SynonymContributionOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.SynonymContributionInclude<ExtArgs> | null
+  where?: Prisma.SynonymContributionWhereInput
+  orderBy?: Prisma.SynonymContributionOrderByWithRelationInput | Prisma.SynonymContributionOrderByWithRelationInput[]
+  cursor?: Prisma.SynonymContributionWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.SynonymContributionScalarFieldEnum | Prisma.SynonymContributionScalarFieldEnum[]
 }
 
 /**

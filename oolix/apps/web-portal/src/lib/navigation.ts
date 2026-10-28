@@ -96,6 +96,7 @@ const NETWORK: NavItem[] = [
 const ADMIN: NavItem[] = [
   { label: 'Operations', href: '/admin', permissions: ['admin:operate'] },
   { label: 'Organizations', href: '/admin/organizations', permissions: ['admin:operate'] },
+  { label: 'Shared synonyms', href: '/admin/synonyms', permissions: ['admin:operate'] },
   { label: 'Audit', href: '/admin/audit', permissions: ['audit:read', 'admin:operate'] },
 ];
 

@@ -61,6 +61,9 @@ type Suggestion struct {
 	NeedsReview bool
 	// Unrecognised lists values of a list attribute that mapped to no code.
 	Unrecognised []ValueCount
+	// Outside counts values that are places Oolix does not list; they are
+	// not in Sampled.
+	Outside int
 	// Reason explains the suggestion in plain words.
 	Reason string
 }
@@ -99,6 +102,24 @@ func Suggest(columns []Column, samples map[string][]any, now time.Time) []Sugges
 		}
 		chosen[c.attr] = c.s
 		taken[c.col] = true
+	}
+	// A pincode column gives both the city and the state, so it may serve
+	// both, and either one no better column did.
+	if pin := pincodeColumn(columns, samples); pin != "" {
+		for _, key := range []string{"city", "state_region"} {
+			if _, done := chosen[key]; done {
+				continue
+			}
+			a, _ := standard.ByKey(key)
+			s := measure(a, standard.FormNative, Column{Name: pin}, samples[pin], now)
+			if s.Sampled == 0 {
+				continue
+			}
+			s.Score = 0.5 + 0.4*s.Readable
+			s.NeedsReview = s.Readable < 0.9 || len(s.Unrecognised) > 0
+			s.Reason = "pincodes, read through India Post's directory; " + readableText(s)
+			chosen[key] = s
+		}
 	}
 
 	out := make([]Suggestion, 0, len(standard.Attributes))
@@ -191,6 +212,9 @@ func score(a standard.Attribute, c Column, values []any, now time.Time) (Suggest
 		s.Score = 0.5
 		s.NeedsReview = true
 		s.Reason = "the name fits, but the sample was empty"
+		if s.Outside > 0 {
+			s.Reason = "the name fits, but every sampled value is a place outside Oolix's list"
+		}
 		return s, true
 	}
 	switch {
@@ -282,13 +306,22 @@ func measure(a standard.Attribute, f standard.Form, c Column, values []any, now 
 		}
 		misses := map[string]int{}
 		for _, v := range nonEmpty {
-			if _, ok := m.Map(v); ok {
+			switch _, ok := m.Map(v); {
+			case ok:
 				good++
-			} else {
+			case m.Outside(v):
+				// A place Oolix does not list (226001, Lucknow): left empty,
+				// as the sync will, and no mark against the column.
+				s.Outside++
+			default:
 				misses[strings.TrimSpace(clean.Text(v))]++
 			}
 		}
+		s.Sampled -= s.Outside
 		s.Unrecognised = topValues(misses, 10)
+		if s.Sampled == 0 {
+			return s
+		}
 	case standard.KindBool:
 		for _, v := range nonEmpty {
 			if _, ok := clean.ParseBool(v); ok {
@@ -332,6 +365,41 @@ func readsAs(f standard.Form, v any, now time.Time) bool {
 		return ok
 	}
 	return false
+}
+
+// pincodeHints are names of columns that hold pincodes.
+var pincodeHints = []string{"pincode", "pin_code", "pin", "zip", "zipcode", "zip_code", "postal_code",
+	"postcode", "post_code", "postalcode"}
+
+// pincodeColumn picks the column holding pincodes: most of its sampled
+// values are pincodes India Post knows, and its name says so or nearly all
+// of them are.
+func pincodeColumn(columns []Column, samples map[string][]any) string {
+	best, bestScore := "", 0.0
+	for _, c := range columns {
+		filled, known := 0, 0
+		for _, v := range samples[c.Name] {
+			if strings.TrimSpace(clean.Text(v)) == "" {
+				continue
+			}
+			filled++
+			if _, _, ok := clean.Pincode(v); ok {
+				known++
+			}
+		}
+		if filled == 0 {
+			continue
+		}
+		share := float64(known) / float64(filled)
+		name := nameScore(c.Name, pincodeHints)
+		if share < 0.8 || (name == 0 && (share < 0.95 || filled < 20)) {
+			continue
+		}
+		if s := name + share; s > bestScore {
+			best, bestScore = c.Name, s
+		}
+	}
+	return best
 }
 
 // SuggestID picks the column most likely to be the customer id: a name that

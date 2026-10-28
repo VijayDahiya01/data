@@ -135,6 +135,7 @@ const BY_HREF: Record<string, Glyph> = {
 
   '/admin': GLYPHS.gauge,
   '/admin/organizations': GLYPHS.grid,
+  '/admin/synonyms': GLYPHS.link,
   '/admin/audit': GLYPHS.doc,
 };
 

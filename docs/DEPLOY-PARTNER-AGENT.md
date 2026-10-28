@@ -118,8 +118,21 @@ database login. To choose the password yourself, set `OOLIX_SETUP_PASSWORD`
    value will be stored: `14/04/1992`, `14-04-1993` and `1992-04-13T18:30:00Z`
    all become 14 April 1992; `Bombay` becomes `MUMBAI`; `M`, `1` and `male`
    become `MALE`. Whether `03/04/1990` is 3 April or March 4 is settled from
-   the rest of the column when it can be, and asked when it cannot. Values it
-   cannot place are listed for you to answer, never guessed.
+   the rest of the column when it can be, and asked when it cannot. A pincode
+   column gives both the city and the state (`400001` is Mumbai,
+   Maharashtra), from India Post's directory as GeoNames publishes it, built
+   into the Agent; places Oolix does not list (`Lucknow`, `226001`) are left
+   empty rather than asked about. Values it cannot place are listed for you
+   to answer, never guessed: where a meaning is likely — a misspelling
+   (`Gurgoan`), a name in another script (`गुरुग्राम`), a part of a city
+   (`South Delhi`) — it is chosen for you to check before you save.
+
+   Two more kinds of help are your choice. If your Oolix offers it, **Ask
+   Oolix to suggest meanings** sends the open values listed — those, never a
+   customer — to Oolix, which asks an AI model and shows its answers chosen
+   the same way. And **Share my answers** sends Oolix the meanings you give
+   (`Kurtis` means FASHION): once an Oolix reviewer approves one, every
+   Partner's Agent understands it. Unticking it withdraws them all.
 
    Age may be a date of birth, a year of birth (`1992`), an age (`25`) or an
    age group (`25-45`, `60+`, `under 25`); the last purchase may be a date, a

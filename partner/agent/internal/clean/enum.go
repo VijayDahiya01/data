@@ -29,6 +29,9 @@ var synonyms = map[string]map[string]string{
 	"country": {
 		"in": "IN", "ind": "IN", "india": "IN", "bharat": "IN", "republic of india": "IN",
 	},
+	// States and cities are also written in Hindi and in their own
+	// languages, which cannot mean anything else either; other spellings in
+	// those scripts are suggested (see Suggest).
 	"state_region": {
 		"dl": "DL", "delhi": "DL", "new delhi": "DL", "nct of delhi": "DL", "nct delhi": "DL",
 		"hr": "HR", "haryana": "HR",
@@ -40,6 +43,10 @@ var synonyms = map[string]map[string]string{
 		"gj": "GJ", "gujarat": "GJ",
 		"wb": "WB", "west bengal": "WB",
 		"rj": "RJ", "rajasthan": "RJ",
+		"दिल्ली": "DL", "हरियाणा": "HR", "उत्तर प्रदेश": "UP", "कर्नाटक": "KA", "ಕರ್ನಾಟಕ": "KA",
+		"महाराष्ट्र": "MH", "तमिलनाडु": "TN", "तमिल नाडु": "TN", "தமிழ்நாடு": "TN", "तेलंगाना": "TG",
+		"తెలంగాణ": "TG", "गुजरात": "GJ", "ગુજરાત": "GJ", "पश्चिम बंगाल": "WB", "পশ্চিমবঙ্গ": "WB",
+		"राजस्थान": "RJ",
 	},
 	"city": {
 		"delhi": "DELHI", "new delhi": "DELHI", "delhi ncr": "DELHI",
@@ -52,6 +59,11 @@ var synonyms = map[string]map[string]string{
 		"pune": "PUNE", "poona": "PUNE",
 		"kolkata": "KOLKATA", "calcutta": "KOLKATA",
 		"ahmedabad": "AHMEDABAD", "amdavad": "AHMEDABAD", "ahmadabad": "AHMEDABAD",
+		"दिल्ली": "DELHI", "नई दिल्ली": "DELHI", "गुरुग्राम": "GURUGRAM", "नोएडा": "NOIDA",
+		"मुंबई": "MUMBAI", "मुम्बई": "MUMBAI", "बेंगलुरु": "BENGALURU", "बेंगलूरु": "BENGALURU",
+		"ಬೆಂಗಳೂರು": "BENGALURU", "चेन्नई": "CHENNAI", "சென்னை": "CHENNAI", "हैदराबाद": "HYDERABAD",
+		"హైదరాబాద్": "HYDERABAD", "पुणे": "PUNE", "कोलकाता": "KOLKATA", "কলকাতা": "KOLKATA",
+		"अहमदाबाद": "AHMEDABAD", "અમદાવાદ": "AHMEDABAD",
 	},
 	"purchase_category": {
 		"footwear": "FOOTWEAR", "shoes": "FOOTWEAR", "sneakers": "FOOTWEAR",
@@ -99,8 +111,10 @@ var synonyms = map[string]map[string]string{
 
 // EnumMapper turns raw values into one attribute's standard codes.
 type EnumMapper struct {
+	key       string
 	allowed   map[string]bool
 	synonyms  map[string]string
+	shared    map[string]string
 	overrides map[string]string
 }
 
@@ -112,8 +126,10 @@ func NewEnumMapper(attr standard.Attribute, overrides map[string]string) (*EnumM
 		return nil, fmt.Errorf("%s is not a list-of-values attribute", attr.Key)
 	}
 	m := &EnumMapper{
+		key:       attr.Key,
 		allowed:   map[string]bool{},
 		synonyms:  synonyms[attr.Key],
+		shared:    sharedFor(attr.Key),
 		overrides: map[string]string{},
 	}
 	for _, code := range attr.Allowed {
@@ -128,11 +144,51 @@ func NewEnumMapper(attr standard.Attribute, overrides map[string]string) (*EnumM
 	return m, nil
 }
 
-// Ignored reports whether the Partner said to leave this value out: it is
-// treated as empty rather than reported as unrecognised again.
+// Ignored reports whether a value is treated as empty rather than reported as
+// unrecognised: the Partner said to leave it out, or it is a place Oolix does
+// not list (see Outside).
 func (m *EnumMapper) Ignored(raw any) bool {
-	code, ok := m.overrides[Normalize(Text(raw))]
-	return ok && code == ""
+	key := Normalize(Text(raw))
+	if code, ok := m.overrides[key]; ok {
+		return code == ""
+	}
+	return m.outside(key)
+}
+
+// Outside reports a value recognised as a place in India that Oolix does not
+// list: a pincode, district or state elsewhere -- 226001, Lucknow, Kerala.
+// There is nothing to ask the Partner about it, so it is left empty, as if
+// blank, and counted rather than listed.
+func (m *EnumMapper) Outside(raw any) bool {
+	key := Normalize(Text(raw))
+	if _, ok := m.overrides[key]; ok {
+		return false
+	}
+	return m.outside(key)
+}
+
+func (m *EnumMapper) outside(key string) bool {
+	if key == "" {
+		return false
+	}
+	if _, ok := m.lookup(key); ok {
+		return false
+	}
+	if code, known := m.pincode(key); known {
+		return code == ""
+	}
+	switch m.key {
+	case "city":
+		if _, ok := m.partOf(key); ok {
+			return false // Bangalore North: asked about, with a suggestion
+		}
+		city, known := knownPlace(key)
+		return known && !m.allowed[city]
+	case "state_region":
+		code, known := otherStates[key]
+		return known && !m.allowed[code]
+	}
+	return false
 }
 
 // Map returns the standard code for a raw value, or false when there is none.
@@ -144,6 +200,19 @@ func (m *EnumMapper) Map(raw any) (string, bool) {
 	if code, ok := m.overrides[key]; ok {
 		return code, code != ""
 	}
+	if code, ok := m.lookup(key); ok {
+		return code, true
+	}
+	if code, _ := m.pincode(key); code != "" {
+		return code, true
+	}
+	return "", false
+}
+
+// lookup finds a normalised value's code by name: the code itself, a
+// built-in synonym, a shared one, or another state's name once Oolix lists
+// that state.
+func (m *EnumMapper) lookup(key string) (string, bool) {
 	// Already a code: "MUMBAI", "credit_card", "Credit Card".
 	if code := strings.ToUpper(strings.ReplaceAll(key, " ", "_")); m.allowed[code] {
 		return code, true
@@ -151,7 +220,35 @@ func (m *EnumMapper) Map(raw any) (string, bool) {
 	if code, ok := m.synonyms[key]; ok {
 		return code, true
 	}
+	if code, ok := m.shared[key]; ok && m.allowed[code] {
+		return code, true
+	}
+	if m.key == "state_region" {
+		if code, ok := otherStates[key]; ok && m.allowed[code] {
+			return code, true
+		}
+	}
 	return "", false
+}
+
+// pincode reads a city or state from a pincode: known is true for any
+// pincode in the directory, and code is "" when its place is not listed.
+func (m *EnumMapper) pincode(key string) (code string, known bool) {
+	if m.key != "city" && m.key != "state_region" {
+		return "", false
+	}
+	state, city, known := Pincode(key)
+	if !known {
+		return "", false
+	}
+	code = state
+	if m.key == "city" {
+		code = city
+	}
+	if !m.allowed[code] {
+		code = ""
+	}
+	return code, true
 }
 
 // Normalize folds case, punctuation and spacing so that "Credit-Card",

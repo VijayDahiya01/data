@@ -315,6 +315,9 @@ export class AgentRegistryService {
       // The version the Partner Connect bundle now runs, so an Agent can tell
       // its Partner it is behind. The Partner decides when to update.
       latest_agent_version: latestAgentVersion(this.config.PARTNER_AGENT_IMAGE),
+      // Whether the setup page may offer suggested meanings for values the
+      // Agent could not read (docs/DESIGN-PARTNER-DATA.md §5.6).
+      suggestions_available: Boolean(this.config.ANTHROPIC_API_KEY),
     };
   }
 

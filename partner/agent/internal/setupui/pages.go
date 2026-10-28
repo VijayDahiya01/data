@@ -809,6 +809,8 @@ type answer struct {
 	Raw   string
 	Count int
 	Code  string // "" undecided, "-" ignore, or a code
+	// Why says why Code is offered, for a value not yet answered.
+	Why string
 }
 
 type attrRow struct {
@@ -841,6 +843,10 @@ type attrRow struct {
 	DayChoices []int
 	// BandAnswers asks for age groups in words rather than codes.
 	BandAnswers bool
+	// CanAsk offers to ask Oolix about the open values; Places says they are
+	// place names, which the button says before anything is sent.
+	CanAsk bool
+	Places bool
 }
 
 // formLabels name each form for the Partner, per attribute.
@@ -902,6 +908,8 @@ type reviewData struct {
 	// are read whole.
 	TimeColumns   []string
 	UpdatedColumn string
+	// Help is what the page may offer for values the Agent could not read.
+	Help helpState
 }
 
 func (s *Server) reviewPage(w http.ResponseWriter, r *http.Request, sess *session) {
@@ -923,7 +931,7 @@ func (s *Server) reviewPage(w http.ResponseWriter, r *http.Request, sess *sessio
 		s.render(w, "review.html", v)
 		return
 	}
-	v.Data = s.reviewData(p, st.draft)
+	v.Data = s.reviewData(ctx, p, st.draft)
 	if e := r.URL.Query().Get("problem"); e == "id" {
 		v.Error = "Choose the column that holds the customer ID."
 	} else if e == "none" {
@@ -947,9 +955,10 @@ func uniqueShare(values []any) int {
 	return percent(len(seen), filled)
 }
 
-func (s *Server) reviewData(p *preview, m *managed.Mapping) reviewData {
+func (s *Server) reviewData(ctx context.Context, p *preview, m *managed.Mapping) reviewData {
 	now := s.opts.Now()
-	d := reviewData{Table: p.table, IDColumn: m.IDColumn, UpdatedColumn: m.UpdatedColumn, Joins: m.Joins}
+	d := reviewData{Table: p.table, IDColumn: m.IDColumn, UpdatedColumn: m.UpdatedColumn, Joins: m.Joins,
+		Help: s.helpState(ctx)}
 	for _, c := range p.columns {
 		d.Columns = append(d.Columns, columnOption{Name: c.Name, Type: c.Type})
 		d.Sampled = max(d.Sampled, len(p.sample[c.Name]))
@@ -1012,22 +1021,31 @@ func (s *Server) reviewData(p *preview, m *managed.Mapping) reviewData {
 				}
 				row.Measure, row.Percent = ms, ms.Percent()
 				// The Partner's earlier answers first, then what is still open.
-				for _, raw := range sortedKeys(am.Overrides) {
-					code := am.Overrides[raw]
-					if code == "" {
-						code = "-"
-					}
-					row.Answers = append(row.Answers, answer{Raw: raw, Code: code})
-				}
-				for _, u := range ms.Unrecognised {
-					row.Answers = append(row.Answers, answer{Raw: u.Value, Count: u.Count})
-				}
+				row.Answers = answersFor(a, am.Overrides, ms, d.Help.Asked[key])
+				row.CanAsk = d.Help.CanAsk && a.Kind == standard.KindEnum && len(askable(row.Answers)) > 0
+				row.Places = key == "city" || key == "state_region"
 			}
 			rg.Rows = append(rg.Rows, row)
 		}
 		d.Groups = append(d.Groups, rg)
 	}
 	return d
+}
+
+// askAbout asks Oolix about the open values of one attribute in the customer
+// table, as the review page lists them.
+func (s *Server) askAbout(ctx context.Context, p *preview, m managed.Mapping, key string) error {
+	a, ok := standard.ByKey(key)
+	am := m.Attributes[key]
+	if !ok || a.Kind != standard.KindEnum || am.Column == "" {
+		return errNothingToAsk
+	}
+	ms, err := managed.Measure(a, am, "", p.sample, s.opts.Now())
+	if err != nil {
+		return err
+	}
+	asked, _ := s.settings.SuggestedCodes(ctx)
+	return s.ask(ctx, key, answersFor(a, am.Overrides, ms, asked[key]))
 }
 
 // formQuestions fills in what the review page asks about an attribute's form:
@@ -1164,6 +1182,14 @@ func (s *Server) saveReview(w http.ResponseWriter, r *http.Request, sess *sessio
 	}
 	f := r.PostFormValue
 	m := *st.draft
+	wasSharing, _ := s.settings.Sharing(ctx)
+	sharing := f("share_answers") == "on"
+	if sharing != wasSharing {
+		if err := s.settings.SaveSharing(ctx, sharing); err != nil {
+			s.fail(w, err)
+			return
+		}
+	}
 	if id := f("id_column"); known[id] {
 		m.IDColumn = id
 	} else {
@@ -1210,6 +1236,13 @@ func (s *Server) saveReview(w http.ResponseWriter, r *http.Request, sess *sessio
 	}
 	if err := s.settings.SaveDraft(ctx, m); err != nil {
 		s.fail(w, err)
+		return
+	}
+	s.syncSharing(m, wasSharing, sharing)
+	if key, ok := strings.CutPrefix(f("action"), "ask:"); ok {
+		// Asking Oolix about one attribute's open values: the page is saved
+		// first, so nothing typed is lost.
+		redirect(w, r, "/review?notice="+s.askNotice(key, s.askAbout(ctx, p, m, key))+"#attr-"+key)
 		return
 	}
 	if f("action") != "next" {

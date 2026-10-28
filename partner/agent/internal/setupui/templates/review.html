@@ -40,7 +40,7 @@
     <h2>{{$g.Name}}</h2>
     {{range $g.Rows}}
     {{$key := .Key}}{{$col := .Column}}{{$codes := .Codes}}
-    <div class="attr{{if .Column}} mapped{{end}}">
+    <div class="attr{{if .Column}} mapped{{end}}" id="attr-{{.Key}}">
       <div class="attr-head">
         <label for="col_{{.Key}}"><strong>{{.Label}}</strong></label>
         <span class="muted">{{.Expects}}</span>
@@ -130,6 +130,11 @@
           <tbody>{{range .}}<tr><td><code>{{.Raw}}</code></td><td>{{.Clean}}</td></tr>{{end}}</tbody>
         </table>
         {{end}}
+        {{with .Measure}}{{if .Outside}}
+        <p class="muted">{{num .Outside}} sampled value{{if gt .Outside 1}}s are places{{else}} is a place{{end}}
+          outside Oolix's list ({{range $i, $e := .OutsideExamples}}{{if $i}}, {{end}}{{$e.Value}}{{end}});
+          {{if gt .Outside 1}}they are{{else}}it is{{end}} left empty, with nothing to answer.</p>
+        {{end}}{{end}}
 
         {{if and .Answers .BandAnswers}}
         <div class="question ask">
@@ -150,12 +155,14 @@
         </div>
         {{else if .Answers}}
         <div class="question ask">
-          <p>These values do not match a known {{lower .Label}}. What does each one mean?</p>
+          <p>These values do not match a known {{lower .Label}}. What does each one mean? Where a meaning is
+            likely it is already chosen &mdash; check it before you save.</p>
           <table class="answers">
             <tbody>
               {{range $i, $a := .Answers}}
               <tr>
                 <td><code>{{$a.Raw}}</code>{{if $a.Count}} <span class="muted">&times; {{$a.Count}}</span>{{end}}
+                  {{if $a.Why}}<span class="tag hint">suggested: {{$a.Why}}</span>{{end}}
                   <input type="hidden" name="raw_{{$key}}_{{$i}}" value="{{$a.Raw}}"></td>
                 <td>
                   <select name="code_{{$key}}_{{$i}}" aria-label="Meaning of {{$a.Raw}}">
@@ -168,6 +175,15 @@
               {{end}}
             </tbody>
           </table>
+          {{if .CanAsk}}
+          <p class="ask-oolix">
+            <button type="submit" name="action" value="ask:{{$key}}" class="secondary">Ask Oolix to suggest
+              meanings</button>
+            <span class="muted">Saves this page, then sends Oolix only the open values listed above{{if .Places}}
+              &mdash; place names{{end}}, never your customers. An AI model suggests a code for each, which you
+              check before saving again.</span>
+          </p>
+          {{end}}
         </div>
         {{end}}
 
@@ -180,6 +196,12 @@
     {{end}}
   </section>
   {{end}}
+
+  <label class="check"><input type="checkbox" name="share_answers"{{if $d.Help.Sharing}} checked{{end}}>
+    Share my answers with Oolix to improve matching for every Partner</label>
+  <p class="muted">Only each value and the code you chose are sent ("Kurtis" means FASHION) &mdash; never a
+    customer, a count or a row. An Oolix reviewer checks them before any other Partner's Agent uses them.
+    Unticking withdraws everything you shared.</p>
 
   <div class="actions">
     <button type="submit" name="action" value="check" class="secondary">Check again</button>

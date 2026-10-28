@@ -81,12 +81,14 @@
       </div>
       {{if $f.Answers}}
       <div class="question ask">
-        <p>These values do not match anything known. What does each one mean?</p>
+        <p>These values do not match anything known. What does each one mean? Where a meaning is likely it is
+          already chosen &mdash; check it before you save.</p>
         <table class="answers">
           <tbody>
             {{range $i, $a := $f.Answers}}
             <tr>
               <td><code>{{$a.Raw}}</code>{{if $a.Count}} <span class="muted">&times; {{$a.Count}}</span>{{end}}
+                {{if $a.Why}}<span class="tag hint">suggested: {{$a.Why}}</span>{{end}}
                 <input type="hidden" name="{{$k}}_raw_{{$f.Key}}_{{$i}}" value="{{$a.Raw}}"></td>
               <td>
                 <select name="{{$k}}_code_{{$f.Key}}_{{$i}}" aria-label="Meaning of {{$a.Raw}}">
@@ -99,6 +101,14 @@
             {{end}}
           </tbody>
         </table>
+        {{if $f.CanAsk}}
+        <p class="ask-oolix">
+          <button type="submit" name="action" value="ask:{{$k}}:{{$f.Key}}" class="secondary">Ask Oolix to
+            suggest meanings</button>
+          <span class="muted">Saves this page, then sends Oolix only the open values listed above, never your
+            customers. An AI model suggests a code for each, which you check before saving again.</span>
+        </p>
+        {{end}}
       </div>
       {{end}}
       {{end}}

@@ -337,6 +337,11 @@ th.num {
   border: 1px solid var(--warn-line);
   text-decoration: none;
 }
+.tag.hint {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
 
 .attr {
   border-top: 1px solid var(--line);

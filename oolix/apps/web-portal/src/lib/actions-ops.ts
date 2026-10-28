@@ -377,6 +377,35 @@ export async function reconcileActivation(
  * be. It does not approve a campaign on a Data Partner's behalf, and
  * OOLIX_ADMIN still holds no permission that could.
  */
+/**
+ * Approve a value Partners shared, with the code it means, or reject it
+ * (docs/DESIGN-PARTNER-DATA.md §5.6). An approved value goes to every Agent;
+ * the API records the decision in the audit trail and allows it to
+ * OOLIX_ADMIN alone.
+ */
+export async function decideSharedSynonym(
+  attributeKey: string,
+  valueKey: string,
+  status: 'APPROVED' | 'REJECTED',
+  _prev: ActionState,
+  fd: FormData,
+): Promise<ActionState> {
+  const code = str(fd, 'code');
+  if (!code) return { error: 'Choose the code this value means.' };
+
+  try {
+    await api('/v1/admin/synonyms/decisions', {
+      method: 'POST',
+      body: { attribute_key: attributeKey, value_key: valueKey, code, status },
+    });
+  } catch (err) {
+    return toState(err);
+  }
+
+  revalidatePath('/admin/synonyms');
+  return { ok: true };
+}
+
 export async function verifyOrganization(
   orgId: string,
   _prev: ActionState,

@@ -307,6 +307,21 @@ export type PartnerCapability = Prisma.PartnerCapabilityModel
  */
 export type PartnerDataQuality = Prisma.PartnerDataQualityModel
 /**
+ * Model SynonymContribution
+ * A Partner's answer for a value its Agent could not read -- "Kurtis" means
+ * FASHION -- shared because the Partner chose to, so every Partner's Agent
+ * can learn it (docs/DESIGN-PARTNER-DATA.md §5.6). A value and a code only:
+ * never a customer, a count or a row. One row per Partner, attribute and
+ * value; a later answer replaces the earlier one.
+ */
+export type SynonymContribution = Prisma.SynonymContributionModel
+/**
+ * Model SharedSynonym
+ * An Oolix admin's decision on a shared value: APPROVED sends value -> code
+ * to every Agent; REJECTED keeps the value out of review until changed.
+ */
+export type SharedSynonym = Prisma.SharedSynonymModel
+/**
  * Model AudienceGroup
  * v6 §3: a reusable Buyer-defined audience intent.
  */

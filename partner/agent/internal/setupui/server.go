@@ -27,6 +27,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/oolix/partner-agent/internal/clean"
@@ -83,6 +84,9 @@ type Server struct {
 	pages    map[string]*template.Template
 	static   http.Handler
 
+	// helper is Oolix, once the Agent can reach it; see help.go.
+	helper atomic.Pointer[helperBox]
+
 	mu       sync.Mutex
 	sessions map[string]*session
 	failures map[string][]time.Time
@@ -104,6 +108,27 @@ type preview struct {
 	takenAt time.Time
 }
 
+// parsePages parses every page with the layout around it.
+func parsePages() (map[string]*template.Template, error) {
+	pages := map[string]*template.Template{}
+	names, err := fs.Glob(assets, "templates/*.html")
+	if err != nil {
+		return nil, err
+	}
+	for _, name := range names {
+		base := strings.TrimPrefix(name, "templates/")
+		if base == "layout.html" {
+			continue
+		}
+		t, err := template.New(base).Funcs(funcs).ParseFS(assets, "templates/layout.html", name)
+		if err != nil {
+			return nil, fmt.Errorf("setup page %s: %w", base, err)
+		}
+		pages[base] = t
+	}
+	return pages, nil
+}
+
 // New prepares the pages and makes sure there is a setup password.
 func New(ctx context.Context, opts Options) (*Server, error) {
 	if opts.HTTPClient == nil {
@@ -118,28 +143,17 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
-	s := &Server{
-		opts:     opts,
-		settings: managed.Settings{Store: opts.Store},
-		pages:    map[string]*template.Template{},
-		sessions: map[string]*session{},
-		failures: map[string][]time.Time{},
-		previews: map[string]*preview{},
-	}
-	names, err := fs.Glob(assets, "templates/*.html")
+	pages, err := parsePages()
 	if err != nil {
 		return nil, err
 	}
-	for _, name := range names {
-		base := strings.TrimPrefix(name, "templates/")
-		if base == "layout.html" {
-			continue
-		}
-		t, err := template.New(base).Funcs(funcs).ParseFS(assets, "templates/layout.html", name)
-		if err != nil {
-			return nil, fmt.Errorf("setup page %s: %w", base, err)
-		}
-		s.pages[base] = t
+	s := &Server{
+		opts:     opts,
+		settings: managed.Settings{Store: opts.Store},
+		pages:    pages,
+		sessions: map[string]*session{},
+		failures: map[string][]time.Time{},
+		previews: map[string]*preview{},
 	}
 	static, err := fs.Sub(assets, "static")
 	if err != nil {
@@ -474,6 +488,10 @@ var notices = map[string]string{
 	"queued":     "A refresh is already waiting to start.",
 	"deleted":    "All copied data has been deleted, and your attributes have been withdrawn from Oolix.",
 	"forgotten":  "All copied data, your database login and your choices have been deleted.",
+	"asked":      "Oolix's suggestions are chosen below, marked as suggested. Check each one, then save.",
+	"nothingtoask": "Nothing was sent: every value listed already has an answer or a suggestion, or looks " +
+		"like something other than a name.",
+	"notasked": "Oolix could not suggest meanings just now; your answers were saved. Try again in a minute.",
 }
 
 var funcs = template.FuncMap{
@@ -493,6 +511,8 @@ var funcs = template.FuncMap{
 	"percent": percent,
 	"join":    strings.Join,
 	"inc":     func(i int) int { return i + 1 },
+	// The credit the built-in pincode data's licence asks for.
+	"placeCredit": func() string { return clean.PlaceDataCredit },
 	"deref": func(t *time.Time) time.Time {
 		if t == nil {
 			return time.Time{}

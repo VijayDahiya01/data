@@ -113,6 +113,12 @@ export const ConfigSchema = z
     // Partner agrees at approval is still recorded, and money is settled
     // outside Oolix for now. Off, every /v1/billing route answers 404.
     FEATURE_BILLING_ENABLED: bool.default(false),
+
+    // Suggested meanings for values a Partner's Agent could not read
+    // (docs/DESIGN-PARTNER-DATA.md §5.6). Off unless a key is set; the
+    // Partner then asks for each set of suggestions on the setup page.
+    ANTHROPIC_API_KEY: z.string().min(1).optional(),
+    SUGGESTIONS_MODEL: z.string().min(1).default('claude-opus-5-5'),
   })
   .superRefine((c, ctx) => {
     // A deployment that cannot send email cannot let anyone sign up, verify an

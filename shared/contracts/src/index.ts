@@ -45,6 +45,12 @@ export const RATE_LIMITS = {
   catalogueSearch: 120,
   agentControl: 120,
   agentReporting: 60,
+  /**
+   * An Agent asking for suggested meanings of values it could not read. Each
+   * request is a call to a language model that Oolix pays for, so the budget
+   * is what a person clicking a button needs, and no more.
+   */
+  codeSuggestions: 6,
   crmLeadEvents: 120,
   signup: 5,
   // Sign-in and account recovery, all counted per client IP because the

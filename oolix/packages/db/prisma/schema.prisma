@@ -570,6 +570,7 @@ model Organization {
   partnerMatches      PartnerMatchSnapshot[]
   reachEstimates      ReachEstimate[]
   dataQuality         PartnerDataQuality?
+  synonymAnswers      SynonymContribution[]
 
   @@index([type, verificationStatus])
   @@index([domain])
@@ -1551,6 +1552,46 @@ model PartnerDataQuality {
   organization Organization @relation(fields: [partnerOrgId], references: [id], onDelete: Cascade)
 
   @@map("partner_data_quality")
+}
+
+/// A Partner's answer for a value its Agent could not read -- "Kurtis" means
+/// FASHION -- shared because the Partner chose to, so every Partner's Agent
+/// can learn it (docs/DESIGN-PARTNER-DATA.md §5.6). A value and a code only:
+/// never a customer, a count or a row. One row per Partner, attribute and
+/// value; a later answer replaces the earlier one.
+model SynonymContribution {
+  id           String   @id @default(uuid()) @db.Uuid
+  partnerOrgId String   @map("partner_org_id") @db.Uuid
+  attributeKey String   @map("attribute_key")
+  /// The value as the Agent compares it: lower case, punctuation as spaces.
+  valueKey     String   @map("value_key")
+  /// The value as the Partner's data writes it, for the reviewer.
+  value        String
+  code         String
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [partnerOrgId], references: [id], onDelete: Cascade)
+
+  @@unique([partnerOrgId, attributeKey, valueKey], map: "synonym_contributions_org_value_key")
+  @@index([attributeKey, valueKey], map: "synonym_contributions_value_idx")
+  @@map("synonym_contributions")
+}
+
+/// An Oolix admin's decision on a shared value: APPROVED sends value -> code
+/// to every Agent; REJECTED keeps the value out of review until changed.
+model SharedSynonym {
+  id           String   @id @default(uuid()) @db.Uuid
+  attributeKey String   @map("attribute_key")
+  valueKey     String   @map("value_key")
+  code         String
+  /// APPROVED | REJECTED
+  status       String
+  decidedBy    String   @map("decided_by") @db.Uuid
+  decidedAt    DateTime @default(now()) @map("decided_at") @db.Timestamptz(6)
+
+  @@unique([attributeKey, valueKey], map: "shared_synonyms_value_key")
+  @@index([status, decidedAt], map: "shared_synonyms_status_idx")
+  @@map("shared_synonyms")
 }
 
 /// v6 §3: a reusable Buyer-defined audience intent.

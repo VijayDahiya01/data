@@ -25,6 +25,12 @@ const (
 	keyMark     = "watermark"
 	keyPublish  = "published"
 	keyLatest   = "latest_agent_version"
+	// docs/DESIGN-PARTNER-DATA.md §5.6: help with values the Agent could
+	// not read.
+	keySuggestOn = "suggestions_available"
+	keySuggested = "suggested_codes"
+	keySharing   = "share_answers"
+	keyShared    = "shared_synonyms"
 )
 
 // Identity is what registering with Oolix produced. The private key it goes
@@ -270,7 +276,8 @@ func (s Settings) Publish(ctx context.Context, m Mapping, at time.Time) error {
 // Forget removes the database login and every choice made on the setup page.
 // The registration with Oolix is kept.
 func (s Settings) Forget(ctx context.Context) error {
-	for _, key := range []string{keySource, keyMapping, keyDraft, keyPublish, keyMark, keyLastFull} {
+	for _, key := range []string{keySource, keyMapping, keyDraft, keyPublish, keyMark, keyLastFull,
+		keySuggested, keySharing} {
 		if err := s.Store.Delete(ctx, key); err != nil {
 			return err
 		}
@@ -333,4 +340,103 @@ func (s Settings) LatestVersion(ctx context.Context) (string, error) {
 	var v string
 	_, err := s.Store.Get(ctx, keyLatest, &v)
 	return v, err
+}
+
+// SaveSuggestionsAvailable records whether this Oolix deployment offers
+// suggested meanings, as each heartbeat says.
+func (s Settings) SaveSuggestionsAvailable(ctx context.Context, on bool) error {
+	return s.Store.Put(ctx, keySuggestOn, on)
+}
+
+// SuggestionsAvailable is whether the setup page may offer to ask Oolix.
+func (s Settings) SuggestionsAvailable(ctx context.Context) (bool, error) {
+	var on bool
+	_, err := s.Store.Get(ctx, keySuggestOn, &on)
+	return on, err
+}
+
+// SuggestedCodes are the codes Oolix suggested when the Partner asked, by
+// attribute and raw value; shown chosen until the Partner answers.
+func (s Settings) SuggestedCodes(ctx context.Context) (map[string]map[string]string, error) {
+	out := map[string]map[string]string{}
+	_, err := s.Store.Get(ctx, keySuggested, &out)
+	return out, err
+}
+
+// SaveSuggestedCodes adds Oolix's suggestions for one attribute.
+func (s Settings) SaveSuggestedCodes(ctx context.Context, attribute string, codes map[string]string) error {
+	all, err := s.SuggestedCodes(ctx)
+	if err != nil {
+		return err
+	}
+	if all[attribute] == nil {
+		all[attribute] = map[string]string{}
+	}
+	for v, c := range codes {
+		all[attribute][v] = c
+	}
+	return s.Store.Put(ctx, keySuggested, all)
+}
+
+// Sharing is whether the Partner chose to share its answers with Oolix, to
+// improve matching for every Partner. Off until they say so.
+func (s Settings) Sharing(ctx context.Context) (bool, error) {
+	var on bool
+	_, err := s.Store.Get(ctx, keySharing, &on)
+	return on, err
+}
+
+func (s Settings) SaveSharing(ctx context.Context, on bool) error {
+	return s.Store.Put(ctx, keySharing, on)
+}
+
+// SharedSynonyms are the synonyms Oolix approved for every Agent, as last
+// downloaded: by attribute, value -> code, with the list's version.
+type SharedSynonyms struct {
+	Version string                       `json:"version"`
+	ByAttr  map[string]map[string]string `json:"by_attribute"`
+}
+
+func (s Settings) SharedSynonyms(ctx context.Context) (SharedSynonyms, error) {
+	var out SharedSynonyms
+	_, err := s.Store.Get(ctx, keyShared, &out)
+	return out, err
+}
+
+func (s Settings) SaveSharedSynonyms(ctx context.Context, v SharedSynonyms) error {
+	return s.Store.Put(ctx, keyShared, v)
+}
+
+// Answers are every answer the Partner gave for a value the Agent could not
+// read, in the customer table and in orders or bookings: by attribute, raw
+// value -> code. Answers to leave a value out ("") are not answers to share.
+func Answers(m Mapping) map[string]map[string]string {
+	out := map[string]map[string]string{}
+	add := func(attr string, overrides map[string]string) {
+		for raw, code := range overrides {
+			if code == "" {
+				continue
+			}
+			if out[attr] == nil {
+				out[attr] = map[string]string{}
+			}
+			out[attr][raw] = code
+		}
+	}
+	for key, am := range m.Attributes {
+		if a, ok := standard.ByKey(key); ok && a.Kind == standard.KindEnum {
+			add(key, am.Overrides)
+		}
+	}
+	for _, act := range []*ActivityMapping{m.Orders, m.Bookings} {
+		if act == nil {
+			continue
+		}
+		for key, overrides := range act.Overrides {
+			if key != standard.OrderChannel.Key {
+				add(key, overrides)
+			}
+		}
+	}
+	return out
 }

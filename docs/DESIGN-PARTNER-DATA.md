@@ -1,6 +1,7 @@
 # Partner data platform — design for scale
 
-**Status:** proposal, for review. **Builds on:** Partner Connect (branch
+**Status:** phases 0–5 of the roadmap (§9) are built on `feat/partner-connect`;
+phases 6 and 7 are next. **Builds on:** Partner Connect (branch
 `feat/partner-connect`), described for non-engineers in
 [`PARTNER-CONNECT.md`](PARTNER-CONNECT.md).
 
@@ -344,16 +345,36 @@ to thousands of Partners with thousands of category names:
    every release).
 2. **Fuzzy and transliterated matching** — `Gurgoan`, `गुरुग्राम` and
    `Gurugram` are one city; offered as suggestions the Partner confirms.
+   _Built:_ text in the nine Brahmic scripts is romanised (one table serves
+   them all, with north Indian schwa deletion), spellings are folded
+   (`ee`/`i`, `ph`/`f`, doubled letters, `ai`/`e`), and a value within a
+   letter or two of exactly one code is suggested. A value that is itself
+   another place, or nearer one, is never suggested as a listed city:
+   `Mangalore` is not a misspelled `Bangalore`. Parts of a city (`South Delhi`,
+   `Bangalore North`, `Secunderabad`) are suggested as the city.
 3. **Reference data** — the India Post pincode directory (~19,000 pincodes →
    district and state) turns a pincode column into city and state with no
-   questions.
+   questions. _Built_ from GeoNames' copy (CC BY 4.0, credited on the setup
+   page): a pincode gives its state, and its city only when every post office
+   under it lies in the city — the postal district, with Thane, Manesar and
+   Noida's villages carved out by name. Known places outside Oolix's list
+   (`Lucknow`, `226001`, `Kerala`) are left empty and counted, not asked
+   about.
 4. **AI-assisted suggestions, opt-in** — for long-tail categories ("Running
    shoes" → FOOTWEAR), the Agent can send **distinct values only** — never rows,
    never customers — to a suggestion service and show the answers for the
    Partner to accept. Category names are not personal data; city names and
-   anything else is excluded unless the Partner allows it.
+   anything else is excluded unless the Partner allows it. _Built:_ off unless
+   the deployment sets `ANTHROPIC_API_KEY`; the Partner presses a button per
+   attribute, which names what will be sent (place names included); values
+   that look like an address, a phone number or an ID never leave; every
+   answer is checked against the attribute's codes; six requests a minute
+   per Agent.
 5. **Learning, opt-in** — value → code answers that Partners confirm can be
-   pooled (values only) to improve the shared synonyms for everyone.
+   pooled (values only) to improve the shared synonyms for everyone. _Built:_
+   the Partner ticks **Share my answers**; an Oolix admin approves each value
+   (Partners counted, never named) before any Agent downloads it; unticking
+   withdraws everything.
 
 ### 5.7 Identity: the ID the website sends
 

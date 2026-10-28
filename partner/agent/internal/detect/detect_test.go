@@ -89,9 +89,11 @@ func TestSuggestReportsWhatNeedsAPerson(t *testing.T) {
 	cols, samples := messyTable()
 	got := byAttr(Suggest(cols, samples, now))
 
+	// Thane is a place, just not one Oolix lists: it is left empty and
+	// counted, not put to the Partner as a question with no answer.
 	city := got["city"]
-	if !city.NeedsReview || len(city.Unrecognised) == 0 || city.Unrecognised[0].Value != "Thane" {
-		t.Errorf("city: unrecognised values should be listed for the Partner, got %+v", city)
+	if city.Outside != 5 || len(city.Unrecognised) != 0 || city.Readable != 1 || city.Sampled != 25 {
+		t.Errorf("city: Thane should be counted as outside the list, got %+v", city)
 	}
 	tier := got["loyalty_tier"]
 	if len(tier.Unrecognised) == 0 || tier.Unrecognised[0].Value != "Elite" {

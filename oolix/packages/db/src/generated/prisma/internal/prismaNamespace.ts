@@ -441,6 +441,8 @@ export const ModelName = {
   AttributeDefinition: 'AttributeDefinition',
   PartnerCapability: 'PartnerCapability',
   PartnerDataQuality: 'PartnerDataQuality',
+  SynonymContribution: 'SynonymContribution',
+  SharedSynonym: 'SharedSynonym',
   AudienceGroup: 'AudienceGroup',
   AudienceGroupVersion: 'AudienceGroupVersion',
   PartnerMatchSnapshot: 'PartnerMatchSnapshot',
@@ -461,7 +463,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "authToken" | "authSession" | "organization" | "organizationMember" | "network" | "networkMembership" | "partnerProfile" | "partnerPolicy" | "buyerProfile" | "brand" | "billingProfile" | "segment" | "segmentOffer" | "placement" | "campaign" | "creative" | "creativeVersion" | "partnerRequest" | "channelRequest" | "approval" | "partnerCreativeDecision" | "activation" | "manifest" | "agent" | "agentBootstrapToken" | "channelConnection" | "externalResource" | "attributionToken" | "leadEvent" | "aggregateMetric" | "deliveryBatch" | "reconciliation" | "commercialTerms" | "financialEvent" | "invoice" | "payout" | "auditEvent" | "notification" | "idempotencyRecord" | "killSwitch" | "attributeDefinition" | "partnerCapability" | "partnerDataQuality" | "audienceGroup" | "audienceGroupVersion" | "partnerMatchSnapshot" | "reachEstimate" | "campaignAudienceLink"
+    modelProps: "user" | "authToken" | "authSession" | "organization" | "organizationMember" | "network" | "networkMembership" | "partnerProfile" | "partnerPolicy" | "buyerProfile" | "brand" | "billingProfile" | "segment" | "segmentOffer" | "placement" | "campaign" | "creative" | "creativeVersion" | "partnerRequest" | "channelRequest" | "approval" | "partnerCreativeDecision" | "activation" | "manifest" | "agent" | "agentBootstrapToken" | "channelConnection" | "externalResource" | "attributionToken" | "leadEvent" | "aggregateMetric" | "deliveryBatch" | "reconciliation" | "commercialTerms" | "financialEvent" | "invoice" | "payout" | "auditEvent" | "notification" | "idempotencyRecord" | "killSwitch" | "attributeDefinition" | "partnerCapability" | "partnerDataQuality" | "synonymContribution" | "sharedSynonym" | "audienceGroup" | "audienceGroupVersion" | "partnerMatchSnapshot" | "reachEstimate" | "campaignAudienceLink"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -3721,6 +3723,154 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    SynonymContribution: {
+      payload: Prisma.$SynonymContributionPayload<ExtArgs>
+      fields: Prisma.SynonymContributionFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.SynonymContributionFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SynonymContributionPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.SynonymContributionFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SynonymContributionPayload>
+        }
+        findFirst: {
+          args: Prisma.SynonymContributionFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SynonymContributionPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.SynonymContributionFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SynonymContributionPayload>
+        }
+        findMany: {
+          args: Prisma.SynonymContributionFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SynonymContributionPayload>[]
+        }
+        create: {
+          args: Prisma.SynonymContributionCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SynonymContributionPayload>
+        }
+        createMany: {
+          args: Prisma.SynonymContributionCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.SynonymContributionCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SynonymContributionPayload>[]
+        }
+        delete: {
+          args: Prisma.SynonymContributionDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SynonymContributionPayload>
+        }
+        update: {
+          args: Prisma.SynonymContributionUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SynonymContributionPayload>
+        }
+        deleteMany: {
+          args: Prisma.SynonymContributionDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.SynonymContributionUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.SynonymContributionUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SynonymContributionPayload>[]
+        }
+        upsert: {
+          args: Prisma.SynonymContributionUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SynonymContributionPayload>
+        }
+        aggregate: {
+          args: Prisma.SynonymContributionAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateSynonymContribution>
+        }
+        groupBy: {
+          args: Prisma.SynonymContributionGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.SynonymContributionGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.SynonymContributionCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.SynonymContributionCountAggregateOutputType> | number
+        }
+      }
+    }
+    SharedSynonym: {
+      payload: Prisma.$SharedSynonymPayload<ExtArgs>
+      fields: Prisma.SharedSynonymFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.SharedSynonymFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SharedSynonymPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.SharedSynonymFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SharedSynonymPayload>
+        }
+        findFirst: {
+          args: Prisma.SharedSynonymFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SharedSynonymPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.SharedSynonymFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SharedSynonymPayload>
+        }
+        findMany: {
+          args: Prisma.SharedSynonymFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SharedSynonymPayload>[]
+        }
+        create: {
+          args: Prisma.SharedSynonymCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SharedSynonymPayload>
+        }
+        createMany: {
+          args: Prisma.SharedSynonymCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.SharedSynonymCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SharedSynonymPayload>[]
+        }
+        delete: {
+          args: Prisma.SharedSynonymDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SharedSynonymPayload>
+        }
+        update: {
+          args: Prisma.SharedSynonymUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SharedSynonymPayload>
+        }
+        deleteMany: {
+          args: Prisma.SharedSynonymDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.SharedSynonymUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.SharedSynonymUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SharedSynonymPayload>[]
+        }
+        upsert: {
+          args: Prisma.SharedSynonymUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SharedSynonymPayload>
+        }
+        aggregate: {
+          args: Prisma.SharedSynonymAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateSharedSynonym>
+        }
+        groupBy: {
+          args: Prisma.SharedSynonymGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.SharedSynonymGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.SharedSynonymCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.SharedSynonymCountAggregateOutputType> | number
+        }
+      }
+    }
     AudienceGroup: {
       payload: Prisma.$AudienceGroupPayload<ExtArgs>
       fields: Prisma.AudienceGroupFieldRefs
@@ -4860,6 +5010,32 @@ export const PartnerDataQualityScalarFieldEnum = {
 export type PartnerDataQualityScalarFieldEnum = (typeof PartnerDataQualityScalarFieldEnum)[keyof typeof PartnerDataQualityScalarFieldEnum]
 
 
+export const SynonymContributionScalarFieldEnum = {
+  id: 'id',
+  partnerOrgId: 'partnerOrgId',
+  attributeKey: 'attributeKey',
+  valueKey: 'valueKey',
+  value: 'value',
+  code: 'code',
+  updatedAt: 'updatedAt'
+} as const
+
+export type SynonymContributionScalarFieldEnum = (typeof SynonymContributionScalarFieldEnum)[keyof typeof SynonymContributionScalarFieldEnum]
+
+
+export const SharedSynonymScalarFieldEnum = {
+  id: 'id',
+  attributeKey: 'attributeKey',
+  valueKey: 'valueKey',
+  code: 'code',
+  status: 'status',
+  decidedBy: 'decidedBy',
+  decidedAt: 'decidedAt'
+} as const
+
+export type SharedSynonymScalarFieldEnum = (typeof SharedSynonymScalarFieldEnum)[keyof typeof SharedSynonymScalarFieldEnum]
+
+
 export const AudienceGroupScalarFieldEnum = {
   id: 'id',
   buyerOrgId: 'buyerOrgId',
@@ -5949,6 +6125,8 @@ export type GlobalOmitConfig = {
   attributeDefinition?: Prisma.AttributeDefinitionOmit
   partnerCapability?: Prisma.PartnerCapabilityOmit
   partnerDataQuality?: Prisma.PartnerDataQualityOmit
+  synonymContribution?: Prisma.SynonymContributionOmit
+  sharedSynonym?: Prisma.SharedSynonymOmit
   audienceGroup?: Prisma.AudienceGroupOmit
   audienceGroupVersion?: Prisma.AudienceGroupVersionOmit
   partnerMatchSnapshot?: Prisma.PartnerMatchSnapshotOmit

@@ -46,6 +46,9 @@ type Options struct {
 	// OnLatestVersion hears the Agent version Oolix's Partner Connect bundle
 	// now runs, from each heartbeat; nil to ignore it.
 	OnLatestVersion func(version string)
+	// OnSuggestions hears whether this Oolix deployment offers suggested
+	// meanings for unread values, from each heartbeat; nil to ignore it.
+	OnSuggestions func(available bool)
 }
 
 // Syncer maintains the Agent's verified view of what it may serve.
@@ -410,11 +413,18 @@ func (s *Syncer) sendHeartbeat(ctx context.Context) error {
 	}
 	defer res.Body.Close()
 	var ack struct {
-		LatestAgentVersion string `json:"latest_agent_version"`
+		LatestAgentVersion   string `json:"latest_agent_version"`
+		SuggestionsAvailable *bool  `json:"suggestions_available"`
 	}
-	if res.StatusCode == http.StatusOK && json.NewDecoder(io.LimitReader(res.Body, 64*1024)).Decode(&ack) == nil &&
-		ack.LatestAgentVersion != "" && s.opts.OnLatestVersion != nil {
-		s.opts.OnLatestVersion(ack.LatestAgentVersion)
+	// Any success: the API answers this POST with 201 Created.
+	if res.StatusCode >= 200 && res.StatusCode < 300 &&
+		json.NewDecoder(io.LimitReader(res.Body, 64*1024)).Decode(&ack) == nil {
+		if ack.LatestAgentVersion != "" && s.opts.OnLatestVersion != nil {
+			s.opts.OnLatestVersion(ack.LatestAgentVersion)
+		}
+		if ack.SuggestionsAvailable != nil && s.opts.OnSuggestions != nil {
+			s.opts.OnSuggestions(*ack.SuggestionsAvailable)
+		}
 	}
 	io.Copy(io.Discard, res.Body)
 	return nil

@@ -270,6 +270,8 @@ type serving struct {
 	pusher httpapi.Pusher
 	// latestVersion hears the newest Agent version from heartbeats; may be nil.
 	latestVersion func(string)
+	// suggestions hears whether Oolix offers suggested meanings; may be nil.
+	suggestions func(bool)
 }
 
 // serve runs the parts both modes share: the decision engine, the private
@@ -317,6 +319,7 @@ func serve(ctx context.Context, cfg *config.Config, logger *slog.Logger, parts s
 		HTTPClient:       httpClient,
 		Logger:           logger,
 		OnLatestVersion:  parts.latestVersion,
+		OnSuggestions:    parts.suggestions,
 	})
 
 	tokens := attribution.NewIssuer(httpClient, cfg.Oolix.APIBaseURL, cfg.Oolix.AgentID, syncer.AccessToken)
@@ -821,13 +824,20 @@ func runManaged(ctx context.Context, cfg *config.Config, logger *slog.Logger) er
 	})
 	logger.Info("managed mode serving from the local copy", "agent_id", id.AgentID)
 
+	settings := managed.Settings{Store: store}
+	// Synonyms Oolix approved for every Agent, as last downloaded.
+	managed.UseSharedSynonyms(ctx, settings)
+
 	return serve(ctx, cfg, logger, serving{
 		conn:      managed.ScrambledConnector{Connector: view, Scramble: store.ScrambleID},
 		evaluator: evaluator,
 		index:     managed.ScrambledAudience{AudienceIndex: evaluator, Scramble: store.ScrambleID},
 		pusher:    pushAPI{store: store, runner: runner},
 		latestVersion: func(v string) {
-			_ = managed.Settings{Store: store}.SaveLatestVersion(context.Background(), v)
+			_ = settings.SaveLatestVersion(context.Background(), v)
+		},
+		suggestions: func(on bool) {
+			_ = settings.SaveSuggestionsAvailable(context.Background(), on)
 		},
 		onSyncer: func(s *controlsync.Syncer) {
 			runner.SetQualityReporter(func(ctx context.Context, q managed.Quality) error {
@@ -838,6 +848,10 @@ func runManaged(ctx context.Context, cfg *config.Config, logger *slog.Logger) er
 			go runner.SetPublisher(ctx, func(ctx context.Context, c managed.Capabilities) error {
 				return s.PublishCapabilities(ctx, c)
 			})
+			// Help with values the Agent could not read, on the setup page,
+			// and the synonyms other Partners taught it.
+			ui.SetHelper(s)
+			go managed.KeepSharedSynonyms(ctx, settings, 6*time.Hour, logger, s.SharedSynonyms)
 		},
 	})
 }

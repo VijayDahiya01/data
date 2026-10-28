@@ -31,6 +31,11 @@ type Measurement struct {
 	Examples []Example
 	// Unrecognised are list values that matched no code, most common first.
 	Unrecognised []detect.ValueCount
+	// Outside counts values that are places Oolix does not list (226001,
+	// Lucknow), left empty; OutsideExamples are the commonest. They are not
+	// in Sampled.
+	Outside         int
+	OutsideExamples []detect.ValueCount
 }
 
 // Percent is the readable share of non-empty values.
@@ -51,17 +56,21 @@ func Measure(a standard.Attribute, am AttributeMapping, loc string, sample map[s
 		return Measurement{}, err
 	}
 	var out Measurement
-	misses := map[string]int{}
+	misses, outside := map[string]int{}, map[string]int{}
 	shown := map[string]bool{}
 	for _, row := range Rows(sample) {
 		raw := row[am.Column]
 		asOf := c.asOf(row, now)
 		v, present, ok := c.value(raw, asOf, now)
+		text := strings.TrimSpace(clean.Text(raw))
 		if !present {
+			if c.enums != nil && c.enums.Outside(raw) {
+				out.Outside++
+				outside[text]++
+			}
 			continue
 		}
 		out.Sampled++
-		text := strings.TrimSpace(clean.Text(raw))
 		if !ok {
 			if a.Kind == standard.KindEnum || am.Form == standard.FormAgeBand {
 				misses[text]++
@@ -87,6 +96,7 @@ func Measure(a standard.Attribute, am AttributeMapping, loc string, sample map[s
 		}
 	}
 	out.Unrecognised = top(misses, 10)
+	out.OutsideExamples = top(outside, 3)
 	return out, nil
 }
 

@@ -95,6 +95,8 @@ export const ModelName = {
   AttributeDefinition: 'AttributeDefinition',
   PartnerCapability: 'PartnerCapability',
   PartnerDataQuality: 'PartnerDataQuality',
+  SynonymContribution: 'SynonymContribution',
+  SharedSynonym: 'SharedSynonym',
   AudienceGroup: 'AudienceGroup',
   AudienceGroupVersion: 'AudienceGroupVersion',
   PartnerMatchSnapshot: 'PartnerMatchSnapshot',
@@ -846,6 +848,32 @@ export const PartnerDataQualityScalarFieldEnum = {
 } as const
 
 export type PartnerDataQualityScalarFieldEnum = (typeof PartnerDataQualityScalarFieldEnum)[keyof typeof PartnerDataQualityScalarFieldEnum]
+
+
+export const SynonymContributionScalarFieldEnum = {
+  id: 'id',
+  partnerOrgId: 'partnerOrgId',
+  attributeKey: 'attributeKey',
+  valueKey: 'valueKey',
+  value: 'value',
+  code: 'code',
+  updatedAt: 'updatedAt'
+} as const
+
+export type SynonymContributionScalarFieldEnum = (typeof SynonymContributionScalarFieldEnum)[keyof typeof SynonymContributionScalarFieldEnum]
+
+
+export const SharedSynonymScalarFieldEnum = {
+  id: 'id',
+  attributeKey: 'attributeKey',
+  valueKey: 'valueKey',
+  code: 'code',
+  status: 'status',
+  decidedBy: 'decidedBy',
+  decidedAt: 'decidedAt'
+} as const
+
+export type SharedSynonymScalarFieldEnum = (typeof SharedSynonymScalarFieldEnum)[keyof typeof SharedSynonymScalarFieldEnum]
 
 
 export const AudienceGroupScalarFieldEnum = {

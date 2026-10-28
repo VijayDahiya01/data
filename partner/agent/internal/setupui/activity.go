@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/oolix/partner-agent/internal/clean"
 	"github.com/oolix/partner-agent/internal/detect"
@@ -34,6 +35,8 @@ type activityField struct {
 	Percent                     int
 	Codes                       []string
 	Answers                     []answer
+	// CanAsk offers to ask Oolix about the open values.
+	CanAsk bool
 }
 
 type offeredAttr struct {
@@ -188,6 +191,7 @@ func (s *Server) activityCard(ctx context.Context, st state, kind string, tables
 		c.InWindow = percent(inWindow, ms.Readable)
 	}
 
+	help := s.helpState(ctx)
 	for _, def := range activityFieldDefs(kind) {
 		f := activityField{Key: def.key, Label: def.label, Expects: def.expects, Column: fieldColumn(am, def.key)}
 		a := standard.OrderChannel
@@ -201,7 +205,9 @@ func (s *Server) activityCard(ctx context.Context, st state, kind string, tables
 				"", p.sample, now)
 			if err == nil {
 				f.Measure, f.Percent = ms, ms.Percent()
-				f.Answers = answersFor(overrides, ms)
+				f.Answers = answersFor(a, overrides, ms, help.Asked[def.key])
+				// Where an order was placed is not an attribute Oolix knows.
+				f.CanAsk = help.CanAsk && def.key != standard.OrderChannel.Key && len(askable(f.Answers)) > 0
 			}
 		}
 		c.Fields = append(c.Fields, f)
@@ -222,8 +228,12 @@ func (s *Server) activityCard(ctx context.Context, st state, kind string, tables
 	return c
 }
 
-// answersFor lists the Partner's earlier answers, then the values still open.
-func answersFor(overrides map[string]string, ms managed.Measurement) []answer {
+// answersFor lists the Partner's earlier answers, then the values still open,
+// each with the likely code chosen where there is one (Gurgoan, गुरुग्राम) --
+// the Agent's own suggestion, or else what Oolix suggested when asked:
+// saving the page is what makes it an answer.
+func answersFor(a standard.Attribute, overrides map[string]string, ms managed.Measurement,
+	asked map[string]string) []answer {
 	var out []answer
 	for _, raw := range sortedKeys(overrides) {
 		code := overrides[raw]
@@ -232,8 +242,20 @@ func answersFor(overrides map[string]string, ms managed.Measurement) []answer {
 		}
 		out = append(out, answer{Raw: raw, Code: code})
 	}
+	var m *clean.EnumMapper
+	if a.Kind == standard.KindEnum {
+		m, _ = clean.NewEnumMapper(a, overrides)
+	}
 	for _, u := range ms.Unrecognised {
-		out = append(out, answer{Raw: u.Value, Count: u.Count})
+		ans := answer{Raw: u.Value, Count: u.Count}
+		if m != nil {
+			if sg, ok := m.Suggest(u.Value); ok {
+				ans.Code, ans.Why = sg.Code, sg.Why
+			} else if code := asked[u.Value]; code != "" && slices.Contains(a.Allowed, code) {
+				ans.Code, ans.Why = code, "by Oolix's AI helper"
+			}
+		}
+		out = append(out, ans)
 	}
 	return out
 }
@@ -273,6 +295,22 @@ func (s *Server) saveActivity(w http.ResponseWriter, r *http.Request, sess *sess
 	}
 	if err := s.settings.SaveDraft(ctx, m); err != nil {
 		s.fail(w, err)
+		return
+	}
+	if sharing, _ := s.settings.Sharing(ctx); sharing {
+		s.syncSharing(m, true, true)
+	}
+	if rest, ok := strings.CutPrefix(r.PostFormValue("action"), "ask:"); ok {
+		// ask:orders:purchase_category -- the page is saved first.
+		kind, key, _ := strings.Cut(rest, ":")
+		st.draft = &m
+		err := errNothingToAsk
+		for _, f := range s.activityCard(ctx, st, kind, tables).Fields {
+			if f.Key == key && f.CanAsk {
+				err = s.ask(ctx, key, f.Answers)
+			}
+		}
+		redirect(w, r, "/activity?notice="+s.askNotice(key, err))
 		return
 	}
 	if r.PostFormValue("action") != "next" {
