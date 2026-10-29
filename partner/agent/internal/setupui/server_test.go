@@ -199,9 +199,11 @@ func TestSetupFromSignInToPublishedCopy(t *testing.T) {
 	if at != "/review" {
 		t.Fatalf("table choice ended at %s", at)
 	}
-	// 4. The review shows the suggestions, the cleaning and the open question.
+	// 4. The review shows the suggestions, the cleaning and the open question
+	// -- and Thane, a city of its own that Oolix does not list, set aside
+	// rather than asked about or taken for Mumbai.
 	for _, want := range []string{`<option value="customer_id" selected>`, `name="col_age"`,
-		`<code>14/04/1992</code>`, "14 Apr 1992 (age 34)", `<code>Thane</code>`, `<code>Elite</code>`} {
+		`<code>14/04/1992</code>`, "14 Apr 1992 (age 34)", "outside Oolix's list (Thane)", `<code>Elite</code>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("review page lacks %q", want)
 		}
@@ -215,9 +217,7 @@ func TestSetupFromSignInToPublishedCopy(t *testing.T) {
 	if _, at, _ := h.post("/review", form); at != "/review?notice=saved" {
 		t.Fatalf("check ended at %s", at)
 	}
-	// Answer the open question: Thane counts as Mumbai here; Elite is ignored.
-	form.Set("raw_city_0", "Thane")
-	form.Set("code_city_0", "MUMBAI")
+	// Answer the open question: Elite is ignored.
 	form.Set("raw_loyalty_tier_0", "Elite")
 	form.Set("code_loyalty_tier_0", "-")
 	form.Set("action", "next")
@@ -226,8 +226,9 @@ func TestSetupFromSignInToPublishedCopy(t *testing.T) {
 		t.Fatalf("review ended at %s", at)
 	}
 	draft, _ := managed.Settings{Store: h.store}.Draft(ctx)
-	if draft.Attributes["city"].Overrides["Thane"] != "MUMBAI" || draft.Attributes["loyalty_tier"].Overrides["Elite"] != "" {
-		t.Errorf("answers not kept: %+v", draft.Attributes)
+	elite, answered := draft.Attributes["loyalty_tier"].Overrides["Elite"]
+	if !answered || elite != "" || len(draft.Attributes["city"].Overrides) != 0 {
+		t.Errorf("answers not kept as given: %+v", draft.Attributes)
 	}
 
 	// 5. Consent, then publish.
@@ -249,7 +250,8 @@ func TestSetupFromSignInToPublishedCopy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// C1, C2, C3 and C6 (Thane, now Mumbai); C4 is a child, C5 said no, C7 withdrew.
+	// C1, C2, C3 and C6 (whose city, Thane, is left empty); C4 is a child, C5
+	// said no, C7 withdrew.
 	if rep.Customers != 4 || rep.UnderAge != 1 || rep.NotConsented != 2 {
 		t.Errorf("sync: %+v", rep)
 	}
@@ -258,8 +260,9 @@ func TestSetupFromSignInToPublishedCopy(t *testing.T) {
 	}
 	var mumbai int
 	_ = h.store.Pool.QueryRow(ctx, `SELECT count(*) FROM oolix_audience_attributes WHERE city = 'MUMBAI'`).Scan(&mumbai)
-	if mumbai != 3 {
-		t.Errorf("customers in Mumbai after the answer: %d", mumbai)
+	// Bombay and Mumbai; Thane is not taken for Mumbai.
+	if mumbai != 2 {
+		t.Errorf("customers in Mumbai: %d", mumbai)
 	}
 
 	_, body = h.get("/")

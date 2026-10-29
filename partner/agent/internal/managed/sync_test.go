@@ -111,8 +111,9 @@ func TestSyncCleansAndCopiesAMessyTable(t *testing.T) {
 		rep.Customers != 4 || rep.NotConsented != 3 {
 		t.Errorf("counts: %+v", rep)
 	}
-	// Thane and Elite are not codes: reported for the Partner, not guessed.
-	if u := rep.Attributes["city"].Unrecognised; len(u) != 1 || u[0].Value != "Thane" {
+	// Elite is not a code: reported for the Partner, not guessed. Thane is a
+	// city Oolix does not list: left empty, neither guessed nor asked about.
+	if u := rep.Attributes["city"].Unrecognised; len(u) != 0 {
 		t.Errorf("unrecognised cities: %+v", u)
 	}
 	if u := rep.Attributes["loyalty_tier"].Unrecognised; len(u) != 1 || u[0].Value != "Elite" {

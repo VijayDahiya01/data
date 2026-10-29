@@ -68,10 +68,11 @@ func TestRunnerChoosesFullOrIncrementalAndReportsQuality(t *testing.T) {
 	}
 
 	// Nothing to build on yet: in full, and the Partner hears how complete
-	// the copy is -- one of two customers has a known city.
+	// the copy is -- one of two customers has a known city. Thane is read: a
+	// city Oolix does not list, so empty rather than unreadable.
 	sync(ModeFull)
 	if len(reports) != 1 || reports[0].CustomersBucket != "UNDER_10K" || len(reports[0].Attributes) != 1 ||
-		reports[0].Attributes[0].CoveragePct != 50 || reports[0].Attributes[0].UnreadablePct != 50 {
+		reports[0].Attributes[0].CoveragePct != 50 || reports[0].Attributes[0].UnreadablePct != 0 {
 		t.Fatalf("quality: %+v", reports)
 	}
 

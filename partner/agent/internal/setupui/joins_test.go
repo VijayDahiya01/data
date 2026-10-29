@@ -26,6 +26,14 @@ func TestMoreTablesJoinedOnTheSetupPage(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
+	// Dropped afterwards too: locally this database is shared with the
+	// API's privacy checks.
+	t.Cleanup(func() {
+		if db, err := sql.Open("pgx", dsn); err == nil {
+			_, _ = db.Exec(`DROP TABLE IF EXISTS shop_users, shop_profiles, shop_usermeta`)
+			_ = db.Close()
+		}
+	})
 	for _, st := range []string{
 		`DROP TABLE IF EXISTS shop_users, shop_profiles, shop_usermeta`,
 		`CREATE TABLE shop_users (id integer PRIMARY KEY, email text, opted_in boolean)`,

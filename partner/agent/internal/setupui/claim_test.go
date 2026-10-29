@@ -34,8 +34,10 @@ func TestAHostedAgentIsClaimedWithAOneTimeCode(t *testing.T) {
 		t.Fatal(err)
 	}
 	var registered []managed.Identity
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	s, err := New(ctx, Options{
-		Store: store, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		// The overview, where a claimed Agent lands, shows the refresh.
+		Store: store, Runner: managed.NewRunner(store, logger), Logger: logger,
 		APIBaseURL: "https://oolix.example.test", KeyPath: filepath.Join(t.TempDir(), "agent-key.pem"),
 		Claim:        true,
 		OnRegistered: func(id managed.Identity) { registered = append(registered, id) },

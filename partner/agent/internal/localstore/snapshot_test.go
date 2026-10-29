@@ -2,19 +2,19 @@ package localstore
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/oolix/partner-agent/internal/testdb"
 )
 
 // A snapshot carries the settings and the withdrawals to a store that has
 // neither, as an enclave's store is after a restart.
 func TestASnapshotRestoresSettingsAndWithdrawals(t *testing.T) {
-	dsn := os.Getenv("OOLIX_TEST_LOCALSTORE_URL")
-	if dsn == "" {
-		t.Skip("OOLIX_TEST_LOCALSTORE_URL not set")
-	}
+	// A database of this package's own: a store opened on the shared one
+	// would leave its tables where the API's privacy checks look.
+	dsn := testdb.URL(t, "localstore")
 	ctx := context.Background()
 	s, err := Open(ctx, dsn, filepath.Join(t.TempDir(), "local.key"))
 	if err != nil {

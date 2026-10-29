@@ -50,6 +50,9 @@ func TestPostgresSource(t *testing.T) {
 	if url == "" {
 		t.Skip("OOLIX_TEST_POSTGRES_URL not set")
 	}
+	// Dropped afterwards too: locally this database is shared with the
+	// API's privacy checks.
+	t.Cleanup(func() { sqlFixture(t, "pgx", url, `DROP TABLE IF EXISTS crm_customers`) })
 	sqlFixture(t, "pgx", url,
 		`DROP TABLE IF EXISTS crm_customers`,
 		`CREATE TABLE crm_customers (id text PRIMARY KEY, "DOB" text, sex text, "Last Login" timestamp,
