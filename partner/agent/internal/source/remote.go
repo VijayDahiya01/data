@@ -19,7 +19,8 @@ import (
 // folder, an S3 or Google Cloud Storage bucket, an Azure Blob container. The
 // Agent lists the folder, downloads only the file a table needs into a
 // temporary folder of its own, and reads it as it reads local files -- CSV,
-// Excel, JSON lines, daily exports as one series. Nothing is written back.
+// Excel, JSON lines, Parquet, daily exports as one series. Nothing is written
+// back.
 
 const (
 	SFTP      Kind = "sftp"
@@ -103,7 +104,7 @@ func (s *remoteSource) dataFiles(ctx context.Context) (map[string]remoteFile, er
 	out := map[string]remoteFile{}
 	for _, f := range listed {
 		switch strings.ToLower(path.Ext(f.Name)) {
-		case ".csv", ".tsv", ".txt", ".jsonl", ".ndjson", ".xlsx", ".xlsm":
+		case ".csv", ".tsv", ".txt", ".jsonl", ".ndjson", ".parquet", ".xlsx", ".xlsm":
 			out[f.Name] = f
 		}
 	}

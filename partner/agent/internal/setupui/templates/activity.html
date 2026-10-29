@@ -30,6 +30,15 @@
           {{range $c.Columns}}<option value="{{.Name}}"{{if eq .Name $c.Customer}} selected{{end}}>{{.Name}}</option>{{end}}
         </select>
         <p class="muted">The same ID as in your customer table.</p>
+        {{if $c.KeyColumns}}
+        <label for="{{$k}}_customer_key">&hellip;which is the customer table's</label>
+        <select id="{{$k}}_customer_key" name="{{$k}}_customer_key" data-recheck>
+          <option value="">customer ID ({{$c.IDColumn}})</option>
+          {{range $c.KeyColumns}}<option value="{{.}}"{{if eq . $c.CustomerKey}} selected{{end}}>{{.}}</option>{{end}}
+        </select>
+        <p class="muted">Usually the customer ID itself. If this table names customers by another number, choose
+          that column of your customer table: the Agent finds each customer's ID through it.</p>
+        {{end}}
       </div>
       <div class="grow">
         <label for="{{$k}}_date">Date of the {{if eq $k "orders"}}order{{else}}booking{{end}}</label>
@@ -63,6 +72,32 @@
     </table>
     {{end}}
     {{end}}
+
+    {{$one := "order"}}{{if eq $k "bookings"}}{{$one = "booking"}}{{end}}
+    <label for="{{$k}}_status">Status</label>
+    <select id="{{$k}}_status" name="{{$k}}_status" data-recheck>
+      <option value="">No status column: every {{$one}} counts</option>
+      {{range $c.Columns}}<option value="{{.Name}}"{{if eq .Name $c.Status}} selected{{end}}>{{.Name}}</option>{{end}}
+    </select>
+    {{if $c.Statuses}}
+    <div class="question">
+      <p>Tick the statuses that count as a real {{$one}}: a cancelled, failed or refunded {{$one}} is not one.
+        Where the word is plain the tick is already set &mdash; check them before you save.</p>
+      <ul class="plain">
+        {{range $c.Statuses}}
+        <li>
+          <input type="hidden" name="{{$k}}_status_shown" value="{{.Value}}">
+          <label class="check"><input type="checkbox" name="{{$k}}_status_counted" value="{{.Value}}"{{if .Counted}} checked{{end}}>
+            <span><code>{{.Value}}</code> <span class="muted">&times; {{.Count}}{{if .Since}}, found by the last
+              refresh{{end}}</span></span></label>
+        </li>
+        {{end}}
+      </ul>
+      <p class="muted">A status not listed here counts only if its word says so (delivered, paid); the next refresh
+        lists it here for you to decide.</p>
+    </div>
+    {{end}}
+    {{range $c.Only}}<p class="muted">Read {{.}}, as the platform's layout says.</p>{{end}}
 
     {{range $f := $c.Fields}}
     <div class="attr{{if $f.Column}} mapped{{end}}">

@@ -2377,6 +2377,12 @@ paths:
             Acknowledged, with config freshness, the newest released Agent
             (`latest_agent_version`) and whether the setup page may offer
             suggested meanings for unread values (`suggestions_available`).
+            `agent_update` offers that release for the Agent to install
+            itself -- `{version, url}`, where `url` holds the signed
+            `release.json` -- once a staged rollout has reached this Agent,
+            else null; the Agent installs it only if its Partner allows.
+            `agent_supported` is false for a version Oolix no longer
+            supports, null when no supported versions are set.
 
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/RateLimited' }
@@ -2838,7 +2844,10 @@ paths:
       parameters:
         - $ref: '#/components/parameters/AgentId'
       responses:
-        '200': { description: 'Tasks: run_id, kind (OVERLAP or JOINT), role (base or other), attestation' }
+        '200':
+          {
+            description: 'Tasks: run_id, kind (OVERLAP or JOINT), role (base or other), attestation',
+          }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /agent/v1/cleanroom/tasks/{runId}/parts/{index}:

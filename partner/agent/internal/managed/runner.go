@@ -166,6 +166,9 @@ func nextRun(after time.Time, hour int, loc *time.Location) time.Time {
 	return next
 }
 
+// TimeZone is the zone the Partner's times are written in, and their night.
+func (m Mapping) TimeZone() *time.Location { return location(m.Location) }
+
 func location(name string) *time.Location {
 	if name != "" && name != "Asia/Kolkata" {
 		if l, err := time.LoadLocation(name); err == nil {

@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -45,6 +46,7 @@ import (
 	"github.com/oolix/partner-agent/internal/netx"
 	"github.com/oolix/partner-agent/internal/setupui"
 	"github.com/oolix/partner-agent/internal/state"
+	"github.com/oolix/partner-agent/internal/update"
 )
 
 func main() {
@@ -94,13 +96,19 @@ func main() {
 		return
 	}
 
+	// An update the Partner allowed, kept in the state folder, runs in place
+	// of this binary once it checks out again.
+	if *managedMode {
+		launchKept()
+	}
+
 	// Installed as a Windows service, the service manager starts and stops it.
 	handled, err := runAsService(func(ctx context.Context) error {
 		baseContext = func() context.Context { return ctx }
-		return run(*configPath, *managedMode)
+		return restartOnUpdate(run(*configPath, *managedMode))
 	})
 	if !handled && err == nil {
-		err = run(*configPath, *managedMode)
+		err = restartOnUpdate(run(*configPath, *managedMode))
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent failed: %v\n", err)
@@ -291,6 +299,9 @@ type serving struct {
 	latestVersion func(string)
 	// suggestions hears whether Oolix offers suggested meanings; may be nil.
 	suggestions func(bool)
+	// heartbeat hears every answered heartbeat: the update offered, if any;
+	// may be nil.
+	heartbeat func(controlsync.HeartbeatReply)
 	// listen replaces the private API's TCP listener: TLS on a vsock port
 	// when the Agent is hosted in an enclave. nil listens on ListenAddr.
 	listen func() (net.Listener, error)
@@ -342,6 +353,7 @@ func serve(ctx context.Context, cfg *config.Config, logger *slog.Logger, parts s
 		Logger:           logger,
 		OnLatestVersion:  parts.latestVersion,
 		OnSuggestions:    parts.suggestions,
+		OnHeartbeat:      parts.heartbeat,
 	})
 
 	tokens := attribution.NewIssuer(httpClient, cfg.Oolix.APIBaseURL, cfg.Oolix.AgentID, syncer.AccessToken)
@@ -776,6 +788,16 @@ func runManaged(ctx context.Context, cfg *config.Config, logger *slog.Logger) er
 	runner := managed.NewRunner(store, logger)
 	go runner.Run(ctx)
 
+	// Updates the Partner allows stop the Agent, which then starts again as
+	// the new release.
+	ctx, stopFor := context.WithCancelCause(ctx)
+	defer stopFor(nil)
+	updater := update.New(update.Options{StateDir: cfg.Managed.StateDir, Version: controlsync.Version,
+		Client: netx.Client(10 * time.Minute), Logger: logger, Hosted: hosted != nil,
+		Restart: func() { stopFor(errRestart) }})
+	settings := managed.Settings{Store: store}
+	go autoUpdate(ctx, updater, settings, 5*time.Minute, time.Now, logger)
+
 	keyPath := filepath.Join(cfg.Managed.StateDir, "agent-key.pem")
 	registered := make(chan managed.Identity, 1)
 	ui, err := setupui.New(ctx, setupui.Options{
@@ -785,6 +807,7 @@ func runManaged(ctx context.Context, cfg *config.Config, logger *slog.Logger) er
 		ImportFolder: cfg.Managed.ImportFolder,
 		Password:     os.Getenv("OOLIX_SETUP_PASSWORD"),
 		Claim:        hosted != nil,
+		Updates:      updater,
 		OnRegistered: func(id managed.Identity) {
 			select {
 			case registered <- id:
@@ -892,7 +915,6 @@ func runManaged(ctx context.Context, cfg *config.Config, logger *slog.Logger) er
 	})
 	logger.Info("managed mode serving from the local copy", "agent_id", id.AgentID)
 
-	settings := managed.Settings{Store: store}
 	// Synonyms Oolix approved for every Agent, as last downloaded.
 	managed.UseSharedSynonyms(ctx, settings)
 
@@ -900,7 +922,8 @@ func runManaged(ctx context.Context, cfg *config.Config, logger *slog.Logger) er
 	if hosted != nil {
 		listen = func() (net.Listener, error) { return hosted.listen(enclaveAPIPort) }
 	}
-	return serve(ctx, cfg, logger, serving{
+	var reachedOolix sync.Once
+	err = serve(ctx, cfg, logger, serving{
 		conn:      managed.ScrambledConnector{Connector: view, Scramble: store.ScrambleID},
 		evaluator: evaluator,
 		index:     managed.ScrambledAudience{AudienceIndex: evaluator, Scramble: store.ScrambleID},
@@ -911,6 +934,16 @@ func runManaged(ctx context.Context, cfg *config.Config, logger *slog.Logger) er
 		},
 		suggestions: func(on bool) {
 			_ = settings.SaveSuggestionsAvailable(context.Background(), on)
+		},
+		heartbeat: func(r controlsync.HeartbeatReply) {
+			var offer *update.Offer
+			if r.UpdateVersion != "" {
+				offer = &update.Offer{Version: r.UpdateVersion, URL: r.UpdateURL}
+			}
+			updater.Hear(offer, r.Supported)
+			// Started and reached Oolix: an update this binary is no longer
+			// needs to prove itself.
+			reachedOolix.Do(func() { update.Healthy(cfg.Managed.StateDir) })
 		},
 		onSyncer: func(s *controlsync.Syncer) {
 			runner.SetQualityReporter(func(ctx context.Context, q managed.Quality) error {
@@ -932,6 +965,10 @@ func runManaged(ctx context.Context, cfg *config.Config, logger *slog.Logger) er
 			go cleanRoom.Run(ctx, 2*time.Minute)
 		},
 	})
+	if errors.Is(context.Cause(ctx), errRestart) {
+		return errRestart
+	}
+	return err
 }
 
 // trustedCleanRooms are the clean room images this Agent will seal

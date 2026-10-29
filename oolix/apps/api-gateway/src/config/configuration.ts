@@ -123,6 +123,22 @@ export const ConfigSchema = z
     // The cross-Partner clean room (docs/DESIGN-PARTNER-DATA.md phase 7):
     // where its enclave answers, through its host. Off when unset.
     CLEANROOM_URL: z.string().url().optional(),
+
+    // Agent updates (docs/DEPLOY-PARTNER-AGENT.md, "Updates"). Where the
+    // releases CI signs are published, {version} standing for the version
+    // PARTNER_AGENT_IMAGE names. Unset, Agents are only told that a newer
+    // version exists; set, those whose Partner allows it install it.
+    AGENT_RELEASE_URL: z
+      .string()
+      .url()
+      .refine((u) => u.startsWith('https://'), 'releases are published over HTTPS')
+      .optional(),
+    // The share of Agents, 0-100, offered that release: start small, raise it
+    // as the release proves itself.
+    AGENT_ROLLOUT_PERCENT: int(100).pipe(z.number().min(0).max(100)),
+    // The versions Oolix supports, comma-separated: the last three releases.
+    // An Agent on another is told to update. The newest is always supported.
+    AGENT_SUPPORTED_VERSIONS: z.string().optional(),
   })
   .superRefine((c, ctx) => {
     // A deployment that cannot send email cannot let anyone sign up, verify an

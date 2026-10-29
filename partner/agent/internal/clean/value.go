@@ -30,12 +30,15 @@ func Text(raw any) string {
 }
 
 var (
-	truthy = map[string]bool{"1": true, "y": true, "yes": true, "true": true, "t": true, "on": true}
-	falsy  = map[string]bool{"0": true, "n": true, "no": true, "false": true, "f": true, "off": true}
+	truthy = map[string]bool{"1": true, "y": true, "yes": true, "true": true, "t": true, "on": true,
+		"subscribed": true, "opted in": true, "opt in": true, "optin": true}
+	falsy = map[string]bool{"0": true, "n": true, "no": true, "false": true, "f": true, "off": true,
+		"unsubscribed": true, "opted out": true, "opt out": true, "optout": true}
 )
 
 // ParseBool reads yes/no in the forms databases actually use: booleans, 1/0,
-// Y/N, yes/no, true/false. Anything else is unknown rather than false.
+// Y/N, yes/no, true/false -- and the subscribed/unsubscribed of email tools
+// such as MailPoet. Anything else is unknown rather than false.
 func ParseBool(raw any) (value bool, ok bool) {
 	switch v := raw.(type) {
 	case bool:

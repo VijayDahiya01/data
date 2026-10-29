@@ -51,6 +51,20 @@ type Options struct {
 	// OnSuggestions hears whether this Oolix deployment offers suggested
 	// meanings for unread values, from each heartbeat; nil to ignore it.
 	OnSuggestions func(available bool)
+	// OnHeartbeat hears every heartbeat Oolix answered, with what the answer
+	// said about updates; nil to ignore it.
+	OnHeartbeat func(HeartbeatReply)
+}
+
+// HeartbeatReply is what a heartbeat's answer says about updates.
+type HeartbeatReply struct {
+	// UpdateVersion and UpdateURL name a release offered to this Agent: the
+	// rollout has reached it, and the release is published under the URL.
+	// Empty when none is.
+	UpdateVersion, UpdateURL string
+	// Supported is false when Oolix no longer supports this version, nil
+	// when it did not say.
+	Supported *bool
 }
 
 // Syncer maintains the Agent's verified view of what it may serve.
@@ -417,6 +431,11 @@ func (s *Syncer) sendHeartbeat(ctx context.Context) error {
 	var ack struct {
 		LatestAgentVersion   string `json:"latest_agent_version"`
 		SuggestionsAvailable *bool  `json:"suggestions_available"`
+		AgentUpdate          *struct {
+			Version string `json:"version"`
+			URL     string `json:"url"`
+		} `json:"agent_update"`
+		AgentSupported *bool `json:"agent_supported"`
 	}
 	// Any success: the API answers this POST with 201 Created.
 	if res.StatusCode >= 200 && res.StatusCode < 300 &&
@@ -426,6 +445,13 @@ func (s *Syncer) sendHeartbeat(ctx context.Context) error {
 		}
 		if ack.SuggestionsAvailable != nil && s.opts.OnSuggestions != nil {
 			s.opts.OnSuggestions(*ack.SuggestionsAvailable)
+		}
+		if s.opts.OnHeartbeat != nil {
+			reply := HeartbeatReply{Supported: ack.AgentSupported}
+			if u := ack.AgentUpdate; u != nil && u.Version != "" && u.URL != "" {
+				reply.UpdateVersion, reply.UpdateURL = u.Version, u.URL
+			}
+			s.opts.OnHeartbeat(reply)
 		}
 	}
 	io.Copy(io.Discard, res.Body)

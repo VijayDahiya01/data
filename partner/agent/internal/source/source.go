@@ -62,7 +62,7 @@ func (k Kind) Label() string {
 	case MongoDB:
 		return "MongoDB"
 	case File:
-		return "CSV, Excel or JSON-lines files"
+		return "CSV, Excel, JSON-lines or Parquet files"
 	case SFTP:
 		return "Files on an SFTP server"
 	case S3:
@@ -73,6 +73,12 @@ func (k Kind) Label() string {
 		return "Files in Azure Blob Storage"
 	}
 	return string(k)
+}
+
+// CanJoin says whether the Agent can join this kind's tables in its own query:
+// the SQL databases.
+func (k Kind) CanJoin() bool {
+	return k == Postgres || k == MySQL || k == SQLServer || k == Oracle
 }
 
 // DefaultPort is the usual port for a kind, or 0.

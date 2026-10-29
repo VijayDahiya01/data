@@ -29,6 +29,7 @@ import { AgentKeyService } from '../../keys/agent-key.service.js';
 import { CONFIG, type OolixConfig } from '../../config/configuration.js';
 import { toBytes } from '../../common/bytes.js';
 import { renderPartnerCompose } from './partner-compose.js';
+import { agentSupported, agentUpdate } from './agent-updates.js';
 
 export const RegisterAgentSchema = z.object({
   bootstrap_token: z.string().min(20),
@@ -304,6 +305,7 @@ export class AgentRegistryService {
     // even when it cannot reach the Oolix dashboards.
     const configStale = input.config_age_seconds > 300;
     const configCritical = input.config_age_seconds > this.config.CONTROL_STALE_GRACE_SEC;
+    const latest = latestAgentVersion(this.config.PARTNER_AGENT_IMAGE);
 
     return {
       acknowledged: true,
@@ -314,7 +316,23 @@ export class AgentRegistryService {
       server_time: new Date().toISOString(),
       // The version the Partner Connect bundle now runs, so an Agent can tell
       // its Partner it is behind. The Partner decides when to update.
-      latest_agent_version: latestAgentVersion(this.config.PARTNER_AGENT_IMAGE),
+      latest_agent_version: latest,
+      // That release, offered for the Agent to install itself once the
+      // rollout reaches it -- if its Partner allows; null when not offered.
+      agent_update: agentUpdate(
+        agentId,
+        input.agent_version,
+        latest,
+        this.config.AGENT_RELEASE_URL,
+        this.config.AGENT_ROLLOUT_PERCENT,
+      ),
+      // Whether Oolix still supports the version the Agent runs; null when no
+      // supported versions are set.
+      agent_supported: agentSupported(
+        input.agent_version,
+        latest,
+        this.config.AGENT_SUPPORTED_VERSIONS,
+      ),
       // Whether the setup page may offer suggested meanings for values the
       // Agent could not read (docs/DESIGN-PARTNER-DATA.md §5.6).
       suggestions_available: Boolean(this.config.ANTHROPIC_API_KEY),

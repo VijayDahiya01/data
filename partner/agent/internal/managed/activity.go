@@ -25,7 +25,14 @@ type ActivityReport struct {
 	RowsRead int    `json:"rows_read"`
 	// Used counts rows that went into a customer's sums.
 	Used int `json:"used"`
-	// WithoutCustomer counts rows with no customer id.
+	// NotCounted counts rows whose status, or a platform layout's condition,
+	// says they are not an order or booking that counts: cancelled,
+	// refunded...
+	NotCounted int `json:"not_counted,omitempty"`
+	// Undecided are statuses the Partner was not asked about, with how many
+	// rows had each; they counted only if their words said so.
+	Undecided map[string]int `json:"undecided,omitempty"`
+	// WithoutCustomer counts rows with no customer id: guest checkouts.
 	WithoutCustomer int `json:"without_customer"`
 	// UnreadableDates counts rows whose date could not be read, or lay in the
 	// future.
@@ -95,6 +102,9 @@ func attr(key string) standard.Attribute {
 }
 
 func newActivityCleaner(kind string, am ActivityMapping, loc *time.Location) (*activityCleaner, error) {
+	if am.DateInUTC {
+		loc = time.UTC
+	}
 	c := &activityCleaner{kind: kind, am: am, opts: clean.DateOptions{Order: am.Order, Location: loc}}
 	mapper := func(column, key string) (*clean.EnumMapper, error) {
 		if column == "" {
@@ -120,12 +130,55 @@ func newActivityCleaner(kind string, am ActivityMapping, loc *time.Location) (*a
 
 func (c *activityCleaner) columns() []string {
 	cols := []string{c.am.CustomerColumn, c.am.DateColumn}
-	for _, col := range []string{c.am.CategoryColumn, c.am.PaymentColumn, c.am.ChannelColumn, c.am.TripColumn} {
+	extra := []string{c.am.CategoryColumn, c.am.PaymentColumn, c.am.ChannelColumn, c.am.TripColumn}
+	if c.am.Status != nil {
+		extra = append(extra, c.am.Status.Column)
+	}
+	for _, f := range c.am.Only {
+		extra = append(extra, f.Column)
+	}
+	for _, col := range extra {
 		if col != "" && !contains(cols, col) {
 			cols = append(cols, col)
 		}
 	}
 	return cols
+}
+
+// maxUndecided caps the statuses reported: a column of free text chosen as
+// the status would otherwise list every value.
+const maxUndecided = 30
+
+// counts says whether a row is an order or booking that counts, noting a
+// status the Partner was not asked about.
+func (c *activityCleaner) counts(row source.Row, ar *ActivityReport) bool {
+	for _, f := range c.am.Only {
+		if !f.Keeps(row[f.Column]) {
+			return false
+		}
+	}
+	st := c.am.Status
+	if st == nil || st.Column == "" {
+		return true
+	}
+	counts, decided := st.Decide(row[st.Column])
+	if !decided {
+		if s := strings.TrimSpace(clean.Text(row[st.Column])); s != "" {
+			if ar.Undecided == nil {
+				ar.Undecided = map[string]int{}
+			}
+			if _, ok := ar.Undecided[s]; ok || len(ar.Undecided) < maxUndecided {
+				ar.Undecided[s]++
+			}
+		}
+	}
+	return counts
+}
+
+// noCustomer says an id names nobody: empty, or 0, which WooCommerce and many
+// shops record for a guest checkout.
+func noCustomer(id string) bool {
+	return id == "" || id == "0"
 }
 
 func contains(list []string, s string) bool {
@@ -157,8 +210,10 @@ func code(m *clean.EnumMapper, raw any, key string, rep *Report, unrecognised ma
 }
 
 // stageActivity reads one orders or bookings table into the staging table.
+// customers and idColumn are the customer table and its ID column, which a
+// CustomerKey is looked up in.
 func stageActivity(ctx context.Context, src source.Source, store *localstore.Store, kind string,
-	am ActivityMapping, loc *time.Location, now time.Time, rep *Report,
+	am ActivityMapping, customers, idColumn string, loc *time.Location, now time.Time, rep *Report,
 	unrecognised map[string]map[string]int) error {
 	c, err := newActivityCleaner(kind, am, loc)
 	if err != nil {
@@ -168,12 +223,23 @@ func stageActivity(ctx context.Context, src source.Source, store *localstore.Sto
 	oldest := now.AddDate(0, 0, -standard.HistoryDays)
 	rowKind := strings.TrimSuffix(kind, "s") // "order", "booking"
 
+	idField := am.CustomerColumn
 	stream := func(fn func(source.Row) error) error {
 		return src.Stream(ctx, am.Table, c.columns(), fn)
 	}
-	// A large table is read from the start of the window only, when its date
-	// column is one the database can compare.
-	if ss, ok := src.(source.SinceStreamer); ok && nativeDate(ctx, src, am.Table, am.DateColumn) {
+	switch ss, ok := src.(source.SinceStreamer); {
+	case am.CustomerKey != "" && am.CustomerKey != idColumn:
+		// The orders name customers by another column of the customer
+		// table: read each order with its customer's ID beside it.
+		idField = customers + "." + idColumn
+		via := []source.Join{{Table: customers, Key: am.CustomerKey}}
+		stream = func(fn func(source.Row) error) error {
+			return source.StreamJoined(ctx, src, am.Table, am.CustomerColumn,
+				append(c.columns(), idField), via, fn)
+		}
+	case ok && nativeDate(ctx, src, am.Table, am.DateColumn):
+		// A large table is read from the start of the window only, when its
+		// date column is one the database can compare.
 		stream = func(fn func(source.Row) error) error {
 			return ss.StreamSince(ctx, am.Table, c.columns(), am.DateColumn, oldest, fn)
 		}
@@ -195,8 +261,12 @@ func stageActivity(ctx context.Context, src source.Source, store *localstore.Sto
 
 	err = stream(func(row source.Row) error {
 		ar.RowsRead++
-		id := strings.TrimSpace(clean.Text(row[am.CustomerColumn]))
-		if id == "" {
+		if !c.counts(row, &ar) {
+			ar.NotCounted++
+			return nil
+		}
+		id := strings.TrimSpace(clean.Text(row[idField]))
+		if noCustomer(id) {
 			ar.WithoutCustomer++
 			return nil
 		}

@@ -18,10 +18,10 @@ import (
 	"github.com/oolix/partner-agent/internal/detect"
 )
 
-// fileSource reads CSV and Excel exports from a folder the Partner drops them
-// into -- for a Partner who cannot give the Agent database access at all.
-// Each CSV is a table; each sheet of an Excel workbook is one, named
-// "workbook.xlsx:Sheet1". The first row holds the column names.
+// fileSource reads exports from a folder the Partner drops them into -- for a
+// Partner who cannot give the Agent database access at all. Each CSV, JSON
+// lines or Parquet file is a table; each sheet of an Excel workbook is one,
+// named "workbook.xlsx:Sheet1". A CSV's first row holds the column names.
 type fileSource struct {
 	folder string
 }
@@ -58,7 +58,7 @@ func (s *fileSource) Tables(context.Context) ([]Table, error) {
 		}
 		name := e.Name()
 		switch strings.ToLower(filepath.Ext(name)) {
-		case ".csv", ".tsv", ".txt", ".jsonl", ".ndjson":
+		case ".csv", ".tsv", ".txt", ".jsonl", ".ndjson", ".parquet":
 			plain = append(plain, name)
 		case ".xlsx", ".xlsm":
 			f, err := excelize.OpenFile(filepath.Join(s.folder, name))
@@ -132,6 +132,8 @@ func (s *fileSource) each(ctx context.Context, table string, fn func(header []st
 	switch strings.ToLower(filepath.Ext(name)) {
 	case ".jsonl", ".ndjson":
 		return eachJSONLines(ctx, path, fn)
+	case ".parquet":
+		return eachParquet(ctx, path, fn)
 	}
 	return eachCSV(ctx, path, fn)
 }

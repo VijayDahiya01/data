@@ -3,6 +3,7 @@ package setupui
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"sort"
@@ -50,10 +51,21 @@ type activityCard struct {
 	Tables            []tableRow
 	Columns           []columnOption
 	Customer, Date    string
-	AskOrder          bool
-	Order, OrderNote  string
-	DateMeasure       managed.Measurement
-	DatePercent       int
+	// CustomerKey is the customer table's column the customer column holds,
+	// "" for its ID; KeyColumns are the choices, offered when the database
+	// can join tables.
+	CustomerKey string
+	KeyColumns  []string
+	IDColumn    string
+	// Status is the column saying whether each row counts, and Statuses
+	// the values it holds; Only describes a platform layout's conditions.
+	Status           string
+	Statuses         []statusOption
+	Only             []string
+	AskOrder         bool
+	Order, OrderNote string
+	DateMeasure      managed.Measurement
+	DatePercent      int
 	// InWindow is the share of readable dates within the last two years.
 	InWindow  int
 	Fields    []activityField
@@ -64,6 +76,59 @@ type activityCard struct {
 
 type activityData struct {
 	Cards []activityCard
+}
+
+// statusOption is one status, ticked when it counts. Since marks one seen
+// only by the last refresh, not in the sample.
+type statusOption struct {
+	Value   string
+	Count   int
+	Counted bool
+	Since   bool
+}
+
+// maxStatuses is how many statuses the page lists.
+const maxStatuses = 40
+
+// statusOptions lists the statuses in the sample, then those the last refresh
+// met that the Partner was not asked about, each ticked as it is decided now.
+func statusOptions(f managed.StatusFilter, sample []any, undecided map[string]int) []statusOption {
+	counts := map[string]int{}
+	var order []string
+	for _, v := range sample {
+		s := strings.TrimSpace(clean.Text(v))
+		if s == "" {
+			continue
+		}
+		if counts[s] == 0 {
+			order = append(order, s)
+		}
+		counts[s]++
+	}
+	var out []statusOption
+	for _, s := range order {
+		counted, _ := f.Decide(s)
+		out = append(out, statusOption{Value: s, Count: counts[s], Counted: counted})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Count > out[j].Count })
+	for _, s := range slices.Sorted(maps.Keys(undecided)) {
+		if counts[s] > 0 || slices.ContainsFunc(out, func(o statusOption) bool {
+			return clean.NormalStatus(o.Value) == clean.NormalStatus(s)
+		}) {
+			continue
+		}
+		counted, _ := f.Decide(s)
+		out = append(out, statusOption{Value: s, Count: undecided[s], Counted: counted, Since: true})
+	}
+	if len(out) > maxStatuses {
+		out = out[:maxStatuses]
+	}
+	return out
+}
+
+// describeFilter says what a platform layout's condition keeps.
+func describeFilter(f managed.RowFilter) string {
+	return "only rows whose " + f.Column + " is " + strings.Join(f.Values, " or ")
 }
 
 var activityDate = standard.Attribute{Key: "activity_date", Kind: standard.KindTimestamp}
@@ -158,6 +223,21 @@ func (s *Server) activityCard(ctx context.Context, st state, kind string, tables
 		c.Columns = append(c.Columns, columnOption{Name: col.Name, Type: col.Type})
 	}
 	c.Customer, c.Date, c.AllOnline = am.CustomerColumn, am.DateColumn, am.AllOnline
+	c.IDColumn, c.CustomerKey = st.draft.IDColumn, am.CustomerKey
+	if st.source != nil && st.source.Kind.CanJoin() {
+		c.KeyColumns = s.customerKeyColumns(ctx, st)
+	}
+	if am.Status != nil && am.Status.Column != "" {
+		var undecided map[string]int
+		if rep, err := s.settings.LastSync(ctx); err == nil && rep != nil && rep.Activity[kind].Table == am.Table {
+			undecided = rep.Activity[kind].Undecided
+		}
+		c.Status = am.Status.Column
+		c.Statuses = statusOptions(*am.Status, p.sample[am.Status.Column], undecided)
+	}
+	for _, f := range am.Only {
+		c.Only = append(c.Only, describeFilter(f))
+	}
 
 	if am.DateColumn != "" {
 		values := p.sample[am.DateColumn]
@@ -226,6 +306,22 @@ func (s *Server) activityCard(ctx context.Context, st state, kind string, tables
 			Offered: !slices.Contains(am.Withhold, key)})
 	}
 	return c
+}
+
+// customerKeyColumns are the customer table's columns other than its ID: what
+// an orders table may name customers by instead.
+func (s *Server) customerKeyColumns(ctx context.Context, st state) []string {
+	p, err := s.previewOf(ctx, st, st.draft.Table)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, col := range p.columns {
+		if col.Name != st.draft.IDColumn {
+			out = append(out, col.Name)
+		}
+	}
+	return out
 }
 
 // answersFor lists the Partner's earlier answers, then the values still open,
@@ -358,8 +454,12 @@ func (s *Server) readActivityForm(ctx context.Context, st state, r *http.Request
 	if prev == nil || prev.Table != table {
 		// A table newly chosen: start from what the tool found.
 		sg := detect.SuggestActivity(kind, p.columns, p.sample, st.draft.IDColumn, s.opts.Now())
+		var status *managed.StatusFilter
+		if sg.StatusColumn != "" {
+			status = &managed.StatusFilter{Column: sg.StatusColumn}
+		}
 		return &managed.ActivityMapping{Table: table, CustomerColumn: sg.CustomerColumn,
-			DateColumn: sg.DateColumn, Order: sg.Order, CategoryColumn: sg.CategoryColumn,
+			DateColumn: sg.DateColumn, Order: sg.Order, Status: status, CategoryColumn: sg.CategoryColumn,
 			PaymentColumn: sg.PaymentColumn, ChannelColumn: sg.ChannelColumn, TripColumn: sg.TripColumn}, "", nil
 	}
 	col := func(name string) string {
@@ -369,7 +469,35 @@ func (s *Server) readActivityForm(ctx context.Context, st state, r *http.Request
 		return ""
 	}
 	am := &managed.ActivityMapping{Table: table, CustomerColumn: col("customer"), DateColumn: col("date"),
-		Overrides: map[string]map[string]string{}}
+		Overrides: map[string]map[string]string{}, Only: prev.Only}
+	// Set by a platform's layout for its date column, and kept with it.
+	am.DateInUTC = prev.DateInUTC && am.DateColumn == prev.DateColumn
+	if key := f("customer_key"); key != "" && st.source.Kind.CanJoin() &&
+		slices.Contains(s.customerKeyColumns(ctx, st), key) {
+		am.CustomerKey = key
+	}
+	if column := col("status"); column != "" {
+		am.Status = &managed.StatusFilter{Column: column}
+		if prev.Status != nil && prev.Status.Column == column {
+			// The statuses shown are answered by the ticks; answers for
+			// those not shown this time stay.
+			shown, ticked := r.PostForm[kind+"_status_shown"], r.PostForm[kind+"_status_counted"]
+			same := func(list []string) func(string) bool {
+				return func(v string) bool {
+					return slices.ContainsFunc(list, func(w string) bool { return clean.NormalStatus(w) == clean.NormalStatus(v) })
+				}
+			}
+			am.Status.Counted = slices.DeleteFunc(slices.Clone(prev.Status.Counted), same(shown))
+			am.Status.NotCounted = slices.DeleteFunc(slices.Clone(prev.Status.NotCounted), same(shown))
+			for _, v := range shown {
+				if same(ticked)(v) {
+					am.Status.Counted = append(am.Status.Counted, v)
+				} else {
+					am.Status.NotCounted = append(am.Status.NotCounted, v)
+				}
+			}
+		}
+	}
 	switch f("order") {
 	case "day":
 		am.Order = clean.DayFirst

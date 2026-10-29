@@ -72,9 +72,15 @@ func TestPlacesOutsideTheListAreLeftEmpty(t *testing.T) {
 			t.Errorf("city %q should be outside the list", raw)
 		}
 	}
-	for _, raw := range []string{"Kerala", "Orissa", "Jammu & Kashmir"} {
+	// Names, and codes as WooCommerce keeps them -- its older OR and CT too.
+	for _, raw := range []string{"Kerala", "Orissa", "Jammu & Kashmir", "KL", "ap", "OR", "CT", "DN"} {
 		if !state.Outside(raw) {
 			t.Errorf("state %q should be outside the list", raw)
+		}
+	}
+	for raw, want := range map[string]string{"MH": "MH", "ka": "KA", "TS": "TG"} {
+		if code, ok := state.Map(raw); !ok || code != want {
+			t.Errorf("state %q read as %q, want %s", raw, code, want)
 		}
 	}
 	// Not places at all, a listed city's part, and an answer the Partner gave:

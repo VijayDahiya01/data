@@ -20,6 +20,7 @@ import (
 	"github.com/oolix/partner-agent/internal/managed"
 	"github.com/oolix/partner-agent/internal/source"
 	"github.com/oolix/partner-agent/internal/standard"
+	"github.com/oolix/partner-agent/internal/update"
 )
 
 // --- steps -------------------------------------------------------------------
@@ -186,8 +187,78 @@ type overviewData struct {
 	PushToken   string
 	IDColumn    string
 	PushColumns []string
-	// UpdateTo is a newer Agent version Oolix's bundle runs, if any.
-	UpdateTo string
+	// UpdateTo is a newer Agent version Oolix's bundle runs, if any; shown
+	// with the commands to update by hand when the Agent cannot itself.
+	UpdateTo     string
+	ManualUpdate bool
+	Updates      *updatesView
+}
+
+// updatesView is the overview's Updates section.
+type updatesView struct {
+	Version, Offered   string
+	Newer, Unsupported bool
+	CanInstall         bool
+	WhyNot             string
+	Installing         bool
+	LastError          string
+	Auto               bool
+	// Window is when automatic updates install, in the Partner's time.
+	Window string
+}
+
+// shortVersion shows a commit as its first twelve characters.
+func shortVersion(v string) string {
+	if len(v) > 12 {
+		return v[:12]
+	}
+	return v
+}
+
+func (s *Server) updatesView(ctx context.Context, live *managed.Mapping) *updatesView {
+	if s.opts.Updates == nil {
+		return nil
+	}
+	st := s.opts.Updates.Status()
+	v := &updatesView{Version: shortVersion(st.Version), Newer: st.Newer, CanInstall: st.CanInstall,
+		WhyNot: st.WhyNot, Installing: st.Installing, LastError: st.LastError,
+		Unsupported: st.Supported != nil && !*st.Supported}
+	if st.Offer != nil {
+		v.Offered = shortVersion(st.Offer.Version)
+	}
+	v.Auto, _ = s.settings.AutoUpdate(ctx)
+	hour := 2
+	if live != nil {
+		hour = live.SyncHour
+	}
+	h := update.NightHour(hour)
+	v.Window = fmt.Sprintf("%02d:00 and %02d:00", h, (h+1)%24)
+	return v
+}
+
+// saveUpdates keeps the Partner's choice of automatic updates, and installs
+// the version offered when they ask: in the background, since the Agent
+// restarts into it.
+func (s *Server) saveUpdates(w http.ResponseWriter, r *http.Request, _ *session) {
+	if s.opts.Updates == nil {
+		redirect(w, r, "/")
+		return
+	}
+	if err := s.settings.SaveAutoUpdate(r.Context(), r.PostFormValue("auto") == "on"); err != nil {
+		s.fail(w, err)
+		return
+	}
+	if r.PostFormValue("action") != "now" {
+		redirect(w, r, "/?notice=saved")
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+		defer cancel()
+		// Failures are kept by the updater and shown on the overview.
+		_ = s.opts.Updates.Install(ctx)
+	}()
+	redirect(w, r, "/?notice=updating")
 }
 
 type activityStatus struct {
@@ -268,6 +339,8 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request, sess *session)
 	if latest, err := s.settings.LatestVersion(ctx); err == nil && latest != "" && latest != controlsync.Version {
 		d.UpdateTo = latest
 	}
+	d.Updates = s.updatesView(ctx, st.live)
+	d.ManualUpdate = d.UpdateTo != "" && (d.Updates == nil || !d.Updates.CanInstall)
 	v := s.view(r, sess, st, "Overview", "/")
 	v.Data = d
 	if d.Running != nil {
@@ -378,7 +451,7 @@ func (s *Server) sourceData(cfg source.Config) sourceData {
 	if entries, err := os.ReadDir(s.opts.ImportFolder); err == nil {
 		for _, e := range entries {
 			ext := strings.ToLower(filepath.Ext(e.Name()))
-			if !e.IsDir() && slices.Contains([]string{".csv", ".tsv", ".txt", ".jsonl", ".ndjson", ".xlsx", ".xlsm"}, ext) {
+			if !e.IsDir() && slices.Contains([]string{".csv", ".tsv", ".txt", ".jsonl", ".ndjson", ".parquet", ".xlsx", ".xlsm"}, ext) {
 				d.Files = append(d.Files, e.Name())
 			}
 		}
@@ -652,8 +725,36 @@ func (s *Server) tablePage(w http.ResponseWriter, r *http.Request, sess *session
 	}
 	// Past ten million rows a read replica is worth suggesting.
 	large := slices.ContainsFunc(rows, func(t tableRow) bool { return t.Rows > 10_000_000 })
-	v.Data = map[string]any{"Tables": rows, "Kind": st.source.Kind.Label(), "Large": large}
+	data := map[string]any{"Tables": rows, "Kind": st.source.Kind.Label(), "Large": large}
+	if l, ok := managed.DetectLayout(tables); ok {
+		data["Layout"], data["LayoutSteps"] = l, l.Explain()
+	}
+	v.Data = data
 	s.render(w, "table.html", v)
+}
+
+// useLayout starts the draft from a known platform's layout: the customer
+// table's own suggestions, then the platform's choices on top.
+func (s *Server) useLayout(w http.ResponseWriter, r *http.Request, st state, tables []source.Table) {
+	ctx := r.Context()
+	l, ok := managed.DetectLayout(tables)
+	if !ok {
+		redirect(w, r, "/table")
+		return
+	}
+	p, err := s.takePreview(ctx, *st.source, l.Table)
+	if err != nil {
+		redirect(w, r, "/table")
+		return
+	}
+	d := suggestMapping(p, st.draft, s.opts.Now())
+	l.Apply(&d)
+	if err := s.settings.SaveDraft(ctx, d); err != nil {
+		s.fail(w, err)
+		return
+	}
+	s.clearPreview()
+	redirect(w, r, "/review?notice=layout")
 }
 
 func (s *Server) chooseTable(w http.ResponseWriter, r *http.Request, sess *session) {
@@ -669,6 +770,10 @@ func (s *Server) chooseTable(w http.ResponseWriter, r *http.Request, sess *sessi
 	}
 	table := r.PostFormValue("table")
 	tables, err := s.tables(ctx, *st.source)
+	if err == nil && r.PostFormValue("action") == "layout" {
+		s.useLayout(w, r, st, tables)
+		return
+	}
 	if err != nil || !slices.ContainsFunc(tables, func(t source.Table) bool { return t.Name == table }) {
 		redirect(w, r, "/table")
 		return

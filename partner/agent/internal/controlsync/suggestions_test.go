@@ -24,7 +24,8 @@ func TestHelpWithUnreadValues(t *testing.T) {
 	})
 	mux.HandleFunc("POST /agent/v1/heartbeat", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"latest_agent_version":"1.4.0","suggestions_available":true}`))
+		_, _ = w.Write([]byte(`{"latest_agent_version":"1.4.0","suggestions_available":true,` +
+			`"agent_update":{"version":"1.4.0","url":"https://downloads.example/agent/1.4.0/"},"agent_supported":false}`))
 	})
 	mux.HandleFunc("POST /agent/v1/suggestions/codes", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer t" || r.Header.Get("X-Agent-Id") != "agent-1" {
@@ -54,21 +55,27 @@ func TestHelpWithUnreadValues(t *testing.T) {
 	priv, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	var latest string
 	var available bool
+	var reply *HeartbeatReply
 	s := New(Options{
 		APIBaseURL: srv.URL, AgentID: "agent-1", ClientID: "client-1", PartnerOrgID: testPartner,
 		PrivateKey: priv, StaleGrace: time.Hour, HTTPClient: srv.Client(), Logger: quiet(),
 		OnLatestVersion: func(v string) { latest = v },
 		OnSuggestions:   func(on bool) { available = on },
+		OnHeartbeat:     func(r HeartbeatReply) { reply = &r },
 	})
 	ctx := context.Background()
 
-	// The heartbeat's 201 is read: the update notice and the suggestions
-	// button both depend on it.
+	// The heartbeat's 201 is read: the update notice, the update offered and
+	// the suggestions button all depend on it.
 	if err := s.sendHeartbeat(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if latest != "1.4.0" || !available {
 		t.Errorf("heartbeat: latest %q, suggestions %v", latest, available)
+	}
+	if reply == nil || reply.UpdateVersion != "1.4.0" || reply.UpdateURL != "https://downloads.example/agent/1.4.0/" ||
+		reply.Supported == nil || *reply.Supported {
+		t.Errorf("heartbeat reply %+v", reply)
 	}
 
 	codes, err := s.SuggestCodes(ctx, "purchase_category", []string{"Kurtis", "Toys"})

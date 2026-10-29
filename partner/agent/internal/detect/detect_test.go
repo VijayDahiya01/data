@@ -166,7 +166,8 @@ func TestWords(t *testing.T) {
 
 func TestSuggestActivityForAnOrdersTable(t *testing.T) {
 	cols := []Column{{Name: "id", PrimaryKey: true}, {Name: "customer_id"}, {Name: "order_date"},
-		{Name: "category"}, {Name: "pay_mode"}, {Name: "channel"}, {Name: "amount"}}
+		{Name: "category"}, {Name: "pay_mode"}, {Name: "channel"}, {Name: "amount"},
+		{Name: "payment_status"}, {Name: "orderStatus"}, {Name: "status_note"}}
 	s := map[string][]any{}
 	for i := 0; i < 30; i++ {
 		s["id"] = append(s["id"], fmt.Sprintf("O%d", i))
@@ -176,10 +177,14 @@ func TestSuggestActivityForAnOrdersTable(t *testing.T) {
 		s["pay_mode"] = append(s["pay_mode"], []any{"GPay", "COD", "Credit Card"}[i%3])
 		s["channel"] = append(s["channel"], []any{"App", "Store"}[i%2])
 		s["amount"] = append(s["amount"], int64(100+i))
+		// The order's own status beats its payment's; a note is no status.
+		s["payment_status"] = append(s["payment_status"], []any{"paid", "pending"}[i%2])
+		s["orderStatus"] = append(s["orderStatus"], []any{"Delivered", "Cancelled", "RTO"}[i%3])
+		s["status_note"] = append(s["status_note"], fmt.Sprintf("called the customer %d times", i))
 	}
 	got := SuggestActivity("orders", cols, s, "customer_id", now)
 	want := ActivitySuggestion{CustomerColumn: "customer_id", DateColumn: "order_date", Order: clean.DayFirst,
-		CategoryColumn: "category", PaymentColumn: "pay_mode", ChannelColumn: "channel"}
+		StatusColumn: "orderStatus", CategoryColumn: "category", PaymentColumn: "pay_mode", ChannelColumn: "channel"}
 	if got != want {
 		t.Errorf("got %+v\nwant %+v", got, want)
 	}

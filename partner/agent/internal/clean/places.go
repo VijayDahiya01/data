@@ -131,11 +131,21 @@ var stateNames = map[string][]string{
 	"UK": {"uttarakhand", "uttaranchal"},
 }
 
+// stateCodeAliases are other codes systems write for a state: WooCommerce's
+// older ones (OR for Odisha, CT for Chhattisgarh) and those of the two
+// territories merged in 2020.
+var stateCodeAliases = map[string][]string{"OD": {"or"}, "CG": {"ct"}, "DH": {"dn", "dd"}, "UK": {"ut"}}
+
 var otherStates = func() map[string]string {
 	out := map[string]string{}
 	for code, names := range stateNames {
+		// A state column of codes, as WooCommerce keeps it: KL, AP...
+		out[strings.ToLower(code)] = code
 		for _, n := range names {
 			out[n] = code
+		}
+		for _, a := range stateCodeAliases[code] {
+			out[a] = code
 		}
 	}
 	return out

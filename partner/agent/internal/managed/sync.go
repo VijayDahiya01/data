@@ -411,7 +411,7 @@ func run(ctx context.Context, src source.Source, store *localstore.Store, m Mapp
 		am   *ActivityMapping
 	}{{kindOrders, m.Orders}, {kindBookings, m.Bookings}} {
 		if err == nil && act.am != nil && act.am.Table != "" && !opts.pushed {
-			err = stageActivity(ctx, src, store, act.kind, *act.am, loc, now, &rep, unrecognised)
+			err = stageActivity(ctx, src, store, act.kind, *act.am, m.Table, m.IDColumn, loc, now, &rep, unrecognised)
 		}
 	}
 	if err != nil {

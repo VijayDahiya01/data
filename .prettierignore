@@ -14,3 +14,7 @@ oolix/apps/api-gateway/src/generated/
 # Playwright output.
 test-results/
 playwright-report/
+
+# Helm templates are Go templates that render to YAML, not YAML: Prettier cannot
+# parse them. helm lint checks them in CI instead.
+partner/pack/helm/*/templates/

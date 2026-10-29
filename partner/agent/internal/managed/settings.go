@@ -5,6 +5,7 @@ package managed
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/oolix/partner-agent/internal/clean"
@@ -31,6 +32,8 @@ const (
 	keySuggested = "suggested_codes"
 	keySharing   = "share_answers"
 	keyShared    = "shared_synonyms"
+	// The Partner's choice to install updates automatically, at night.
+	keyAutoUpdate = "auto_update"
 )
 
 // Identity is what registering with Oolix produced. The private key it goes
@@ -106,9 +109,24 @@ type ActivityMapping struct {
 	Table string `json:"table"`
 	// CustomerColumn holds the same customer id as the customer table.
 	CustomerColumn string `json:"customer_column"`
+	// CustomerKey, when set, is the customer table's column CustomerColumn
+	// holds, when that is not the customer ID itself: WooCommerce's order
+	// statistics name a customer by its lookup table's own number, while
+	// the website knows the WordPress user ID. The Agent joins the two in
+	// its read-only query (SQL databases only).
+	CustomerKey string `json:"customer_key,omitempty"`
 	// DateColumn is when the order was placed or the booking made.
 	DateColumn string      `json:"date_column"`
 	Order      clean.Order `json:"order,omitempty"`
+	// DateInUTC says the date column is written in UTC whatever the
+	// Partner's time zone, as WooCommerce's date_created_gmt is.
+	DateInUTC bool `json:"date_in_utc,omitempty"`
+	// Status says which rows count, by their status: a cancelled, failed or
+	// refunded order is not a purchase. Nil: every row counts.
+	Status *StatusFilter `json:"status,omitempty"`
+	// Only are further conditions every row read must meet, set by a
+	// platform's layout: WooCommerce keeps refunds beside its orders.
+	Only []RowFilter `json:"only,omitempty"`
 	// Orders only: what was bought and how it was paid for.
 	CategoryColumn string `json:"category_column,omitempty"`
 	PaymentColumn  string `json:"payment_column,omitempty"`
@@ -125,6 +143,51 @@ type ActivityMapping struct {
 	// chose not to offer to advertisers. Everything else it supplies is
 	// offered.
 	Withhold []string `json:"withhold,omitempty"`
+}
+
+// StatusFilter keeps the orders or bookings whose status counts. Counted and
+// NotCounted are the Partner's answers for the statuses they were shown; any
+// other status counts only if its words say so plainly (delivered, paid --
+// clean.StatusCounts) and is reported, for the Partner to decide.
+type StatusFilter struct {
+	Column     string   `json:"column"`
+	Counted    []string `json:"counted,omitempty"`
+	NotCounted []string `json:"not_counted,omitempty"`
+}
+
+// Decide says whether a status counts, and whether the Partner decided it.
+func (f StatusFilter) Decide(raw any) (counts, decided bool) {
+	s := clean.NormalStatus(raw)
+	for _, v := range f.Counted {
+		if clean.NormalStatus(v) == s {
+			return true, true
+		}
+	}
+	for _, v := range f.NotCounted {
+		if clean.NormalStatus(v) == s {
+			return false, true
+		}
+	}
+	counts, _ = clean.StatusCounts(raw)
+	return counts, false
+}
+
+// RowFilter keeps the rows whose column holds one of the values, compared as
+// text without regard to case.
+type RowFilter struct {
+	Column string   `json:"column"`
+	Values []string `json:"values"`
+}
+
+// Keeps says whether a row's value passes the filter.
+func (f RowFilter) Keeps(raw any) bool {
+	v := strings.TrimSpace(clean.Text(raw))
+	for _, want := range f.Values {
+		if strings.EqualFold(v, strings.TrimSpace(want)) {
+			return true
+		}
+	}
+	return false
 }
 
 // Mapping is everything the setup page decided.
@@ -280,7 +343,7 @@ func (s Settings) Publish(ctx context.Context, m Mapping, at time.Time) error {
 // The registration with Oolix is kept.
 func (s Settings) Forget(ctx context.Context) error {
 	for _, key := range []string{keySource, keyMapping, keyDraft, keyPublish, keyMark, keyLastFull,
-		keySuggested, keySharing} {
+		keySuggested, keySharing, keyAutoUpdate} {
 		if err := s.Store.Delete(ctx, key); err != nil {
 			return err
 		}
@@ -391,6 +454,18 @@ func (s Settings) Sharing(ctx context.Context) (bool, error) {
 
 func (s Settings) SaveSharing(ctx context.Context, on bool) error {
 	return s.Store.Put(ctx, keySharing, on)
+}
+
+// AutoUpdate says whether the Partner lets the Agent install updates by
+// itself, at night. Off until they turn it on.
+func (s Settings) AutoUpdate(ctx context.Context) (bool, error) {
+	var on bool
+	_, err := s.Store.Get(ctx, keyAutoUpdate, &on)
+	return on, err
+}
+
+func (s Settings) SaveAutoUpdate(ctx context.Context, on bool) error {
+	return s.Store.Put(ctx, keyAutoUpdate, on)
 }
 
 // SharedSynonyms are the synonyms Oolix approved for every Agent, as last

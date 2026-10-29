@@ -42,10 +42,10 @@ ever sees counts.
    | Step                      | What the Partner does                                                                                                                                                                         |
    | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
    | Connect to Oolix          | Paste a one-time code from the portal                                                                                                                                                         |
-   | Connect your database     | Give a **read-only** login: PostgreSQL, MySQL/MariaDB, SQL Server, Oracle, MongoDB, BigQuery, Snowflake; a Shopify store; a Google Sheet; or exports (CSV, Excel, JSON lines) in a folder, on SFTP, or in S3, Cloud Storage or Azure |
-   | Choose the customer table | Pick the table with one row per customer                                                                                                                                                      |
+   | Connect your database     | Give a **read-only** login: PostgreSQL, MySQL/MariaDB, SQL Server, Oracle, MongoDB, BigQuery, Snowflake; a Shopify store; a Google Sheet; or exports (CSV, Excel, JSON lines, Parquet) in a folder, on SFTP, or in S3, Cloud Storage or Azure |
+   | Choose the customer table | Pick the table with one row per customer. A WooCommerce store gets its layout filled in, to confirm                                                                                         |
    | Check the matches         | Confirm what the tool found. It shows real rows cleaned: `14/04/1992` → 14 Apr 1992 (age 34), `Bombay` → MUMBAI, `25-45` → age 25 to 45. An age, an age group or a number of days is asked about once: kept up to date, or true on another date such as sign-up. Values it cannot place are listed for the Partner to answer, never guessed |
-   | Orders and bookings       | Optional: pick a table with one row per order or per booking                                                                                                                                  |
+   | Orders and bookings       | Optional: pick a table with one row per order or per booking, and tick which statuses count — a cancelled or refunded order is not a purchase                                                |
    | Consent and publish       | Choose the column that records agreement to marketing, then **Publish**                                                                                                                       |
 
 That is all the data work: no SQL jobs, no mapping files, nothing created in
@@ -135,6 +135,8 @@ The Partner does almost nothing:
   instantly.
 - The setup page shows exactly what is stored, and has **Delete all copied
   data**, which also withdraws their attributes from Oolix.
+- New versions of the Agent, signed by Oolix, install themselves at night if
+  the Partner turns that on — or when they press **Update now**.
 
 A Partner with a technical team can still set the Agent up by hand, against
 tables they prepare themselves — the _advanced_ path in the deployment guide.

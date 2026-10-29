@@ -105,7 +105,7 @@ database login. To choose the password yourself, set `OOLIX_SETUP_PASSWORD`
    | Snowflake | A user with key-pair sign-in whose role can only SELECT |
    | Shopify | A custom app's Admin API token with `read_customers`, `read_orders` |
    | Google Sheets | A service-account key; share the sheet with it as a viewer |
-   | Exports in a folder, on SFTP, in S3 (or MinIO, R2, Wasabi), Cloud Storage or Azure Blob | Read and list rights on that folder. CSV, Excel and JSON lines; daily exports with the date in the name are read as one table, newest first. SFTP pins the server's key on first connection |
+   | Exports in a folder, on SFTP, in S3 (or MinIO, R2, Wasabi), Cloud Storage or Azure Blob | Read and list rights on that folder. CSV, Excel, JSON lines and Parquet; daily exports with the date in the name are read as one table, newest first. SFTP pins the server's key on first connection |
 
    Every password, key and token is stored encrypted on this server.
 3. **Choose the customer table** — the one with a row per customer. If some
@@ -236,10 +236,11 @@ column so the nightly read covers only the customers who changed.
 
 ### Keeping it running
 
-- **Upgrade:** `docker compose pull && docker compose up -d`. The copy, your
-  choices and the Agent's identity live in Docker volumes and survive. The
-  setup page says when Oolix runs a newer Agent than yours; you choose when
-  to update.
+- **Upgrade:** the Agent can install new versions itself, if you allow it
+  ([Updates](#updates)). By hand: `docker compose pull && docker compose up -d`.
+  The copy, your choices and the Agent's identity live in Docker volumes and
+  survive. The setup page says when Oolix runs a newer Agent than yours; you
+  choose when to update.
 - **Nothing to back up** that cannot be rebuilt — the copy is rebuilt every
   night. Keep the `agent-state` volume to avoid registering again.
 - **Logs:** `docker compose logs -f agent`. They never contain a customer ID
@@ -288,6 +289,59 @@ it.
   in `C:\ProgramData\Oolix\Agent\agent.log`, readable by administrators only.
 
 In both, the setup page listens on this server only (`127.0.0.1:8083`).
+
+### Updates
+
+The Agent installs new versions itself -- only if you allow it, and only
+versions Oolix has signed.
+
+- **Your choice.** On the setup page, under **Updates**: tick _Install new
+  versions automatically_ and the Agent installs one in the hour before the
+  nightly refresh (01:00-02:00 with the default 2 am refresh, your time), or
+  press **Update now**. Off until you turn it on.
+- **Checked twice.** Before installing, the Agent checks the release's
+  signature against the key built into it and the binary's SHA-256 against
+  the signed list, and refuses a version older than itself. At every start it
+  checks the kept version again before running it.
+- **Your install stays.** The new binary is kept in the state folder
+  (`updates/`) and runs in place of the one you installed, which is never
+  touched -- in Docker and on Kubernetes too, where the image stays as it is.
+  If the new version fails three times to start and reach Oolix, the Agent
+  goes back to yours and sets that version aside. On Windows the service's
+  program is swapped, the old one kept as `oolix-agent.exe.old` and put back
+  the same way. A newer image or binary you install yourself always wins.
+- **A few Agents at a time.** Oolix offers each version to a share of Agents
+  first, and widens it as the version proves itself.
+- **Supported versions.** Oolix supports the last three; the setup page says
+  when yours is older.
+- An Agent Oolix hosts in an enclave is never changed from inside: Oolix
+  publishes a new enclave image ([DEPLOY-ENCLAVE.md](DEPLOY-ENCLAVE.md),
+  Upgrading).
+
+**For Oolix's operators, once:**
+
+1. In `partner/agent`, `go run ./cmd/release keygen`. Put
+   `AGENT_RELEASE_SIGNING_KEY` in the repository's secrets and
+   `AGENT_RELEASE_PUBLIC_KEY` in its variables. From then on CI builds Agents
+   that can update themselves and, on `main`, signs each release:
+   `release.json` and `release.json.sig` in the `oolix-agent-binaries`
+   artifact. Without the secret CI says the release is unsigned, and no Agent
+   installs it.
+2. Publish each release where Agents can download it over HTTPS: set the
+   variable `AGENT_RELEASES_ON_GITHUB=true` (public repository) for a GitHub
+   release `agent-<version>`, or copy the artifact's `oolix-agent-*`,
+   `release.json` and `release.json.sig` to a folder of your own per version.
+3. On the API: `AGENT_RELEASE_URL`, with `{version}` for the version
+   (`https://github.com/<owner>/<repo>/releases/download/agent-{version}/`, or
+   your own); `AGENT_ROLLOUT_PERCENT`, starting at 5-10 and raised to 100 over
+   a few days; `AGENT_SUPPORTED_VERSIONS`, the last three releases. Agents are
+   offered the version `PARTNER_AGENT_IMAGE` names.
+4. To check a release by hand:
+   `go run ./cmd/release verify -key <public key> release.json release.json.sig`.
+
+Agents trust only the key they were built with. To change keys, ship one
+release built with the new public key but signed with the old private key;
+sign the releases after it with the new one.
 
 ---
 

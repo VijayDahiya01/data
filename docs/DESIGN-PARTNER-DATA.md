@@ -102,10 +102,10 @@ same normalised copy.
 | 1   | **Read-only database login**            | Run the 2–4 lines of SQL the setup page shows | Most Partners                                               | Done                                           |
 | 2   | Same login, on a **read replica**       | Point the login at the replica                | Tables over ~10M rows, busy production databases            | Advise in UI                                   |
 | 3   | **A view** with only the needed columns | One `CREATE VIEW`                             | Privacy-strict Partners who want to hide columns themselves | Works today                                    |
-| 4   | **File exports**                        | Schedule an export they already make          | No database access; SMBs; Excel/Tally users                 | Local folder done; buckets, SFTP, Parquet next |
-| 5   | **Warehouse** service account           | Create a read-only service account            | Partners whose data lives in BigQuery, Snowflake, Redshift  | Planned                                        |
-| 6   | **SaaS platform** sign-in               | Click "Allow" (OAuth)                         | Shopify, WooCommerce, Salesforce, HubSpot, Zoho             | Planned                                        |
-| 7   | **Push API** to their own Agent         | Their system calls their Agent                | Anything we cannot read; **instant consent withdrawal**     | Planned                                        |
+| 4   | **File exports**                        | Schedule an export they already make          | No database access; SMBs; Excel/Tally users                 | Done: a folder, SFTP, S3, GCS, Azure Blob      |
+| 5   | **Warehouse** service account           | Create a read-only service account            | Partners whose data lives in BigQuery, Snowflake, Redshift  | Done: BigQuery, Snowflake                      |
+| 6   | **SaaS platform** sign-in               | Click "Allow" (OAuth)                         | Shopify, WooCommerce, Salesforce, HubSpot, Zoho             | Shopify done (an app token); WooCommerce by its database, with a template |
+| 7   | **Push API** to their own Agent         | Their system calls their Agent                | Anything we cannot read; **instant consent withdrawal**     | Done                                           |
 | 8   | **Change stream (CDC)**                 | Grant a replication role                      | Very large or fast-changing tables                          | Later                                          |
 
 Rung 7 deserves a note: it turns "we cannot read your system" into "send us what
@@ -124,9 +124,9 @@ covers most of the market:
 | MySQL               | MariaDB, Aurora MySQL, TiDB, PlanetScale, SingleStore, **WooCommerce, Magento**                                                                  | Done                 |
 | SQL Server          | Azure SQL, Amazon RDS for SQL Server                                                                                                             | Done (CI to confirm) |
 | MongoDB             | Atlas, Amazon DocumentDB, Azure Cosmos DB (Mongo API)                                                                                            | Done                 |
-| Files               | CSV, TSV, Excel today; Parquet, JSON lines next; from a folder, S3, GCS, Azure Blob, SFTP                                                        | Partly               |
-| Oracle              | Oracle Cloud, on-premise — banks, insurers, large enterprises                                                                                    | Next                 |
-| BigQuery, Snowflake | Their warehouses                                                                                                                                 | Next                 |
+| Files               | CSV, TSV, Excel, JSON lines, Parquet; from a folder, S3, GCS, Azure Blob, SFTP                                                                   | Done                 |
+| Oracle              | Oracle Cloud, on-premise — banks, insurers, large enterprises                                                                                    | Done (CI to confirm) |
+| BigQuery, Snowflake | Their warehouses                                                                                                                                 | Done                 |
 | DynamoDB, Firestore | App-first companies on AWS / Firebase                                                                                                            | Later                |
 | Long tail           | An optional adapter that runs existing open-source (Airbyte-protocol) source connectors beside the Agent — 300+ sources without writing each one | Later, opt-in        |
 
@@ -154,15 +154,15 @@ What a Partner's database administrator will ask about first:
 
 - **Read-only, enforced twice** — the login, and a read-only session (done).
 - **Only the mapped columns** are read (done).
-- **Chunked, resumable reads (to build):** read in slices of ~10,000 rows by
+- **Chunked, resumable reads (done):** read in slices of ~10,000 rows by
   primary key (`WHERE id > last ORDER BY id LIMIT 10000`) instead of one long
   query. No long transaction on their primary, a failed sync resumes where it
   stopped, and the load is steady and small.
 - **Time window, speed limit, time limit:** the refresh runs at 2 am in the
-  Partner's time zone by default (done). To build: a rows-per-second limit,
-  and a per-query time limit (`statement_timeout`, `max_execution_time`,
-  `maxTimeMS`) so a slow read is stopped before it can slow their application.
-- **Replica advice (to build):** when a table is over ~10M rows, the setup page
+  Partner's time zone by default, a rows-per-second limit the Partner can set,
+  and a per-query time limit (`statement_timeout`, or a deadline) so a slow
+  read is stopped before it can slow their application (all done).
+- **Replica advice (done):** when a table is over ~10M rows, the setup page
   suggests pointing at a read replica.
 
 ### 3.5 How the data is laid out, not just which database
@@ -175,15 +175,18 @@ out inside it. Each layout maps onto the same standard copy:
 | One row per customer               | `customers(id, dob, city, …)`                                                      | Read directly                                                                                                                                                                       | Done                     |
 | Nested documents                   | MongoDB `{_id, profile: {DOB, city}}`                                              | Flattened to `profile.DOB`, `profile.city`                                                                                                                                          | Done                     |
 | One row per order or booking       | `orders(customer_id, ordered_at, …)`                                               | Summed up per customer                                                                                                                                                              | Done                     |
-| Customer details split over tables | `users` + `user_profiles` + `addresses`                                            | An "add another customer table" step joins them on the customer ID. Where one customer has several rows (addresses), the Partner picks which counts: the default one, or the latest | To build                 |
-| Key–value rows                     | WordPress `wp_usermeta(user_id, meta_key, meta_value)`; Magento's attribute tables | Pivoted: each `meta_key` the Partner picks becomes a column                                                                                                                         | To build                 |
-| Lists inside a document            | `interests: ["travel", "cricket"]`, `addresses: [{…}, {…}]`                        | A list of values becomes a set; a list of documents is read like a table of its own                                                                                                 | To build (skipped today) |
-| A folder of dated files            | `customers_2026-10-27.csv`                                                         | The newest file, or every file in date order                                                                                                                                        | To build                 |
+| Customer details split over tables | `users` + `user_profiles` + `addresses`                                            | An "add another customer table" step joins them on the customer ID. Where one customer has several rows (addresses), the Partner picks which counts: the default one, or the latest | Done                     |
+| Key–value rows                     | WordPress `wp_usermeta(user_id, meta_key, meta_value)`; Magento's attribute tables | Pivoted: each `meta_key` the Partner picks becomes a column                                                                                                                         | Done                     |
+| Lists inside a document            | `interests: ["travel", "cricket"]`, `addresses: [{…}, {…}]`                        | Read as the element marked default or primary, else the first; as a set, or as a table of its own: later                                                                           | Done (primary element)   |
+| A folder of dated files            | `customers_2026-10-27.csv`                                                         | The newest file, or every file in date order                                                                                                                                        | Done (the newest)        |
 
 Platform templates (§8) pre-fill these choices for known systems. WooCommerce,
 for example, keeps one row per customer in `wc_customer_lookup` and one per
-order in `wc_order_stats`, so a Partner on a known platform confirms rather
-than chooses.
+order in `wc_orders` (or, on older stores, `wc_order_stats`), so a Partner on
+a known platform confirms rather than chooses. Built for WooCommerce: the
+setup page offers its layout, counting only completed and processing orders,
+and MailPoet's subscriptions as consent where that plugin is installed.
+Every orders table can now say which statuses count.
 
 ---
 
@@ -192,10 +195,10 @@ than chooses.
 | Option                          | Partner's work                                   | Trust story                                                         | When                                                                                                                                       |
 | ------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Self-hosted, Docker Compose** | Three commands on any server with Docker         | Data never leaves their network                                     | Done — the default                                                                                                                         |
-| Self-hosted, **Kubernetes**     | `kubectl apply` today; `helm install` next       | Same                                                                | Larger Partners. A manifest exists for the advanced path (`partner/pack/k8s-partner-agent.yaml`); a Helm chart with the setup page is next |
-| Self-hosted, **single binary**  | Install a service (Linux or Windows)             | Same                                                                | Partners with no Docker — many Windows/SQL Server shops; next                                                                              |
+| Self-hosted, **Kubernetes**     | `helm install`                                   | Same                                                                | Done — larger Partners: a Helm chart with the setup page (`partner/pack/helm/oolix-agent`)                                                 |
+| Self-hosted, **single binary**  | Install a service (Linux or Windows)             | Same                                                                | Done — Partners with no Docker, many Windows/SQL Server shops                                                                              |
 | **Cloud marketplace image**     | One click in AWS/Azure into their VPC            | Same                                                                | Later                                                                                                                                      |
-| **Oolix-hosted, in a TEE**      | Allow one IP or a private link to their database | Runs in a hardware enclave; attestation proves Oolix cannot read it | Partners with no servers at all; later, premium                                                                                            |
+| **Oolix-hosted, in a TEE**      | Allow one IP or a private link to their database | Runs in a hardware enclave; attestation proves Oolix cannot read it | Built — Partners with no servers at all (`DEPLOY-ENCLAVE.md`)                                                                              |
 
 The last row is where the TEE work pays off twice: the same enclave technology
 that would later power cross-Partner matching also lets Oolix run a Partner's
@@ -415,7 +418,7 @@ A renamed or dropped column must never break serving:
 | Agents per Oolix deployment   | hundreds (30-second polling)                    | ~5,000                             | Long-poll or server-sent events for config; cached signed bundles                                                                                                                                                                                                                   |
 | Reach estimate wait           | up to 30 s (each Agent polls for estimate work) | Buyers building audiences live     | The same long-poll, so an Agent answers in a second or two; recent answers cached per rule set                                                                                                                                                                                      |
 | Partners onboarding per month | assisted by engineers                           | dozens                             | Self-serve funnel with step metrics (§7)                                                                                                                                                                                                                                            |
-| Agent versions in the field   | manual upgrades                                 | hundreds of Partners               | Signed releases, staged rollout, Partner-controlled auto-update, support for the last 3 versions                                                                                                                                                                                    |
+| Agent versions in the field   | manual upgrades                                 | hundreds of Partners               | Signed releases, staged rollout, Partner-controlled auto-update, support for the last 3 versions (done: `DEPLOY-PARTNER-AGENT.md`, "Updates")                                                                                                                                                                                    |
 | Taxonomy changes              | edited by hand                                  | new attributes monthly             | Versioned taxonomy; Agents declare the version they support. The local copy is rebuilt at every full refresh, so a new attribute needs no migration there                                                                                                                           |
 
 **Security that has to scale with trust:** builds are already reproducible —
@@ -499,19 +502,20 @@ reports, upgrades.
 | Question                            | Answer                                                                                                                                                    |
 | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Can Oolix see our customers?        | No. Data stays on your server; Oolix sees attribute names and count ranges.                                                                               |
-| Will it slow our database?          | Read-only, only the chosen columns, at night; use a replica if you have one. Small slices and a speed limit come in Phase 2.                              |
+| Will it slow our database?          | Read-only, only the chosen columns, at night, in small slices with a speed limit you can set; use a replica if you have one.                             |
 | What if we want out?                | Delete all copied data with one button; stop the containers. Nothing was created in your database.                                                        |
 | Who approves what runs on our site? | You do, campaign by campaign, and you can stop any campaign instantly.                                                                                    |
-| What about our customers' rights?   | Only those who agreed are copied. Withdrawals drop out at the next refresh, or at once with **Refresh now**; with the push API (Phase 2), within seconds. |
-| Who maintains it?                   | Oolix releases new versions; you apply them when you choose (`docker compose pull`, then `docker compose up -d`).                                         |
+| What about our customers' rights?   | Only those who agreed are copied. Withdrawals drop out at the next refresh, or at once with **Refresh now**; with the push API, within seconds.           |
+| Who maintains it?                   | Oolix releases signed versions. Turn on automatic updates and the Agent installs them at night; or press **Update now**, or apply them yourself.          |
 
 **Making it even less work:**
 
 - **Templates for known platforms.** If the tables look like WooCommerce,
   Shopify or Magento, every column is already mapped — the Partner just
-  confirms. Big win for D2C brands.
-- **No-Docker install** for Windows and Linux servers.
-- **The hosted tier** for Partners with no servers at all.
+  confirms. Big win for D2C brands. (Built: WooCommerce's layout, and the
+  Shopify connector, which maps itself; Magento later.)
+- **No-Docker install** for Windows and Linux servers (built).
+- **The hosted tier** for Partners with no servers at all (built).
 
 ---
 

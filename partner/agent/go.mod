@@ -4,7 +4,7 @@ module github.com/oolix/partner-agent
 // developer's local Go cannot silently compile with different semantics.
 go 1.26.0
 
-toolchain go1.27.0
+toolchain go1.27.3
 
 require (
 	github.com/fxamacker/cbor/v2 v2.9.6
@@ -15,18 +15,20 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/mdlayher/vsock v1.3.0
 	github.com/microsoft/go-mssqldb v1.11.2
+	github.com/parquet-go/parquet-go v0.32.0
 	github.com/pkg/sftp v1.13.12
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/sijms/go-ora/v2 v2.9.0
-	github.com/xuri/excelize/v2 v2.11.0
+	github.com/xuri/excelize/v2 v2.11.1-0.20260930021559-01a9ff32fb3c
 	go.mongodb.org/mongo-driver/v2 v2.9.1
-	golang.org/x/crypto v0.56.0
-	golang.org/x/sys v0.47.0
+	golang.org/x/crypto v0.57.0
+	golang.org/x/sys v0.48.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
 	filippo.io/edwards25519 v1.2.0 // indirect
+	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
@@ -37,20 +39,25 @@ require (
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mdlayher/socket v0.6.0 // indirect
-	github.com/richardlehane/mscfb v1.0.7 // indirect
+	github.com/parquet-go/bitpack v1.0.0 // indirect
+	github.com/parquet-go/jsonlite v1.0.0 // indirect
+	github.com/pierrec/lz4/v4 v4.1.21 // indirect
+	github.com/richardlehane/mscfb v1.0.8 // indirect
 	github.com/richardlehane/msoleps v1.0.6 // indirect
 	github.com/rogpeppe/go-internal v1.16.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/tiendc/go-deepcopy v1.7.2 // indirect
+	github.com/twpayne/go-geom v1.6.1 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.2.0 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect
-	github.com/xuri/efp v0.0.1 // indirect
+	github.com/xuri/efp v0.0.2 // indirect
 	github.com/xuri/nfp v0.0.2-0.20250530014748-2ddeb826f9a9 // indirect
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
-	golang.org/x/net v0.58.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
+	google.golang.org/protobuf v1.34.2 // indirect
 )

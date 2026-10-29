@@ -7,11 +7,15 @@
 <p><a class="button" href="{{$d.Next}}">{{if $d.Identity}}Continue{{else}}Start{{end}}</a></p>
 {{else}}
 <h1>Overview</h1>
-{{with $d.UpdateTo}}
+{{if $d.ManualUpdate}}
 <p class="notice" role="status">A newer version of the Agent is available. To update, on this server:
   <code>docker compose pull &amp;&amp; docker compose up -d</code> -- or <code>helm upgrade</code> on Kubernetes, or the
   new binary and a service restart without Docker. Your copy, your choices and the Agent's identity are kept.</p>
 {{end}}
+{{with $d.Updates}}{{if .Unsupported}}
+<p class="error" role="alert">Oolix no longer supports this version of the Agent. Update it soon: see Updates
+  below.</p>
+{{end}}{{end}}
 
 <section class="card">
   <h2>Your data</h2>
@@ -136,5 +140,33 @@
     </form>
   </details>
 </section>
+
+{{with $d.Updates}}
+<section class="card" id="updates">
+  <h2>Updates</h2>
+  <p>This Agent runs version <code>{{.Version}}</code>.{{if .Newer}} Version <code>{{.Offered}}</code> is
+    available.{{end}}</p>
+  {{if .CanInstall}}
+  {{if .Installing}}<p class="running" role="status">Installing version {{.Offered}}: the Agent restarts into it
+    once it checks out.</p>{{end}}
+  {{with .LastError}}<p class="error">The last update could not be installed: {{.}}</p>{{end}}
+  <form method="post" action="/updates" class="form">
+    <input type="hidden" name="csrf" value="{{$.CSRF}}">
+    <label class="check"><input type="checkbox" name="auto"{{if .Auto}} checked{{end}}>
+      <span>Install new versions automatically, between {{.Window}} at night (this server's refresh time
+        decides it)</span></label>
+    <div class="actions">
+      <button type="submit" name="action" value="auto" class="secondary">Save</button>
+      {{if and .Newer (not .Installing)}}<button type="submit" name="action" value="now">Update now</button>{{end}}
+    </div>
+  </form>
+  <p class="muted">Every version is signed by Oolix, and the Agent checks the signature before it installs or runs
+    one. Oolix offers a new version to a few Agents at a time. Your copy, your choices and the Agent's identity are
+    kept; if a new version fails to start three times, the Agent goes back to the one it had.</p>
+  {{else}}
+  <p class="muted">{{.WhyNot}}</p>
+  {{end}}
+</section>
+{{end}}
 {{end}}
 {{end}}

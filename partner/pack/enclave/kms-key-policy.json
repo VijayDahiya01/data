@@ -33,7 +33,10 @@
       "Resource": "*",
       "Condition": {
         "StringEqualsIgnoreCase": {
-          "kms:RecipientAttestation:ImageSha384": ["PCR0_OF_THE_CURRENT_RELEASE", "PCR0_OF_THE_NEXT_RELEASE"]
+          "kms:RecipientAttestation:ImageSha384": [
+            "PCR0_OF_THE_CURRENT_RELEASE",
+            "PCR0_OF_THE_NEXT_RELEASE"
+          ]
         }
       }
     }

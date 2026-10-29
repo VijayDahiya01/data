@@ -37,6 +37,7 @@ import (
 	"github.com/oolix/partner-agent/internal/managed"
 	"github.com/oolix/partner-agent/internal/netx"
 	"github.com/oolix/partner-agent/internal/source"
+	"github.com/oolix/partner-agent/internal/update"
 )
 
 //go:embed templates static
@@ -68,6 +69,15 @@ type Options struct {
 		capabilities []string) (*controlsync.RegistrationResult, error)
 	OpenSource func(ctx context.Context, cfg source.Config) (source.Source, error)
 	Now        func() time.Time
+	// Updates installs new releases of the Agent; nil leaves the page with
+	// the commands to update by hand.
+	Updates Updates
+}
+
+// Updates is what the setup page needs of the Agent's updater.
+type Updates interface {
+	Status() update.Status
+	Install(ctx context.Context) error
 }
 
 const (
@@ -194,6 +204,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /consent", s.auth(s.consentPage))
 	mux.HandleFunc("POST /consent", s.auth(s.saveConsent))
 	mux.HandleFunc("POST /sync", s.auth(s.syncNow))
+	mux.HandleFunc("POST /updates", s.auth(s.saveUpdates))
 	mux.HandleFunc("POST /delete", s.auth(s.deleteCopy))
 	return s.secure(mux)
 }
@@ -576,6 +587,10 @@ var notices = map[string]string{
 	"nothingtoask": "Nothing was sent: every value listed already has an answer or a suggestion, or looks " +
 		"like something other than a name.",
 	"notasked": "Oolix could not suggest meanings just now; your answers were saved. Try again in a minute.",
+	"layout": "Filled in from your platform's layout. Check the matches below, then the orders and consent " +
+		"steps that follow.",
+	"updating": "Installing the new version: the Agent checks its signature, then restarts into it. This " +
+		"page is back in a minute.",
 }
 
 var funcs = template.FuncMap{

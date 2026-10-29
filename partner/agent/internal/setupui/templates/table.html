@@ -2,6 +2,18 @@
 <h1>Choose the customer table</h1>
 <p class="lead">Pick the table with one row per customer. The Agent reads a sample of up to 1,000 rows to suggest
   matches; nothing is copied yet.</p>
+{{with .Data.Layout}}
+<section class="card">
+  <h2>This looks like a {{.Platform}} store</h2>
+  <p>Every {{.Platform}} store keeps its customers and orders in the same tables, so the Agent can fill in the next
+    steps for you. You still check each one before anything is copied.</p>
+  <ul>{{range $.Data.LayoutSteps}}<li>{{.}}</li>{{end}}</ul>
+  <form method="post" action="/table">
+    <input type="hidden" name="csrf" value="{{$.CSRF}}">
+    <button type="submit" name="action" value="layout">Use the {{.Platform}} layout</button>
+  </form>
+</section>
+{{end}}
 {{with .Data.Tables}}
 <form method="post" action="/table" class="card form">
   <input type="hidden" name="csrf" value="{{$.CSRF}}">

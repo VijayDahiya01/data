@@ -1,6 +1,7 @@
 package detect
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -14,6 +15,8 @@ type ActivitySuggestion struct {
 	CustomerColumn string
 	DateColumn     string
 	Order          clean.Order
+	// StatusColumn holds each row's status: completed, cancelled...
+	StatusColumn   string
 	CategoryColumn string
 	PaymentColumn  string
 	ChannelColumn  string
@@ -114,6 +117,7 @@ func SuggestActivity(kind string, columns []Column, samples map[string][]any, id
 		}
 		return chosen
 	}
+	s.StatusColumn = statusColumn(columns, samples, s.CustomerColumn, s.DateColumn)
 	if kind == "bookings" {
 		s.TripColumn = pick("domestic_international", standard.TripHints, 0.5)
 		return s
@@ -125,4 +129,38 @@ func SuggestActivity(kind string, columns []Column, samples map[string][]any, id
 	s.PaymentColumn = pick("payment_method", standard.PaymentHints, 0.5)
 	s.ChannelColumn = pick(standard.OrderChannel.Key, standard.OrderChannel.Hints, 0.5)
 	return s
+}
+
+// statusColumn picks the column holding each order's or booking's status: one
+// named for it whose sampled values are mostly statuses the words settle. The
+// order's own status beats its payment's or its shipment's.
+func statusColumn(columns []Column, samples map[string][]any, skip ...string) string {
+	chosen, top := "", 0.0
+	for _, c := range columns {
+		w := Words(c.Name)
+		if !strings.Contains(w, "status") || slices.Contains(skip, c.Name) {
+			continue
+		}
+		name := 0.7
+		if w == "status" || w == "order_status" || w == "booking_status" || w == "post_status" {
+			name = 1
+		}
+		known, filled := 0, 0
+		for _, v := range samples[c.Name] {
+			if strings.TrimSpace(clean.Text(v)) == "" {
+				continue
+			}
+			filled++
+			if _, ok := clean.StatusCounts(v); ok {
+				known++
+			}
+		}
+		if filled == 0 || float64(known)/float64(filled) < 0.5 {
+			continue
+		}
+		if score := name * float64(known) / float64(filled); score > top {
+			chosen, top = c.Name, score
+		}
+	}
+	return chosen
 }
