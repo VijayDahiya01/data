@@ -139,12 +139,17 @@ export default async function PartnerHomePage() {
         ) : (
           <ul className="plain-list">
             {pending.slice(0, 6).map((r) => (
-              <li key={r.request_id}>
-                <Link href={`/partner/requests/${r.request_id}`}>{r.campaign_name}</Link>{' '}
-                <span className="muted">
-                  · {r.buyer_name}
-                  {r.expires_at ? ` · decide ${relative(r.expires_at)}` : ''}
+              <li key={r.request_id} className="with-action">
+                <span>
+                  <Link href={`/partner/requests/${r.request_id}`}>{r.campaign_name}</Link>{' '}
+                  <span className="muted">
+                    · {r.buyer_name}
+                    {r.expires_at ? ` · decide ${relative(r.expires_at)}` : ''}
+                  </span>
                 </span>
+                <Link className="btn btn-primary btn-sm" href={`/partner/requests/${r.request_id}`}>
+                  Review
+                </Link>
               </li>
             ))}
           </ul>

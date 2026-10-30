@@ -1073,6 +1073,17 @@ details.advanced > summary {
   margin: 0.9rem 0 0;
 }
 
+/* A section a button at the top of the page jumps to: brought into view with
+ * room above it, and outlined while it is the one jumped to. */
+.anchor {
+  scroll-margin-top: 1.25rem;
+}
+
+.anchor:target > .card {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
 /* Long lists: the search row above, the pager below. */
 .list-search {
   display: flex;
@@ -1107,6 +1118,14 @@ details.advanced > summary {
 
 .plain-list > li:last-child {
   border-bottom: 0;
+}
+
+/* A list row with its action at the end: what it is, then what to do. */
+.plain-list > li.with-action {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
 }
 
 /* --- section tabs ------------------------------------------------------------

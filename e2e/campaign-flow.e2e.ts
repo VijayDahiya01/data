@@ -97,10 +97,22 @@ test.describe('Build and approve a campaign through the portal', () => {
     // Travel A's approver: the Partner chosen from the audience matches above.
     await signIn(page, 'partner.approver@example.test');
 
+    // Each waiting request has a Review button: the name alone, as a link, did
+    // not say there was anything to open, and a Partner who could see the
+    // request could not find where to decide on it.
     await page.goto(`${PORTAL}/partner/requests`);
-    const link = page.getByRole('link', { name: CAMPAIGN });
-    await expect(link).toBeVisible({ timeout: 20_000 });
-    await link.click();
+    const row = page.getByRole('row', { name: new RegExp(CAMPAIGN) });
+    await expect(row).toBeVisible({ timeout: 20_000 });
+    await row.getByRole('link', { name: 'Review' }).click();
+    await page.waitForURL(/\/partner\/requests\/[0-9a-f-]+$/, { timeout: 20_000 });
+
+    // The approver sees which rules their own data can answer. Reading the
+    // capability list takes a permission an approver does not hold, so this
+    // used to say "not declared" for every rule.
+    await expect(page.getByText('not declared')).toHaveCount(0);
+
+    // The decision is offered from the top of the page.
+    await page.locator('.page-header').getByRole('link', { name: 'Approve' }).click();
 
     // §41: everything needed to decide, on one screen.
     const body = page.locator('body');

@@ -76,7 +76,7 @@ export default async function PartnerRequestsPage({
     <Shell ctx={ctx}>
       <PageHeader
         title="Campaign requests"
-        lead="Each request is yours alone to decide. Nothing runs on your property until you approve it."
+        lead="Open a request to approve it, ask for a change or reject it. Nothing runs on your site or app until you approve."
       />
 
       {decided && DECIDED[decided] ? <Notice tone="info">{DECIDED[decided]}</Notice> : null}
@@ -112,6 +112,7 @@ export default async function PartnerRequestsPage({
                   <th>Budget</th>
                   <th>Status</th>
                   <th>Decision due</th>
+                  <th aria-label="Open" />
                 </tr>
               </thead>
               <tbody>
@@ -149,6 +150,21 @@ export default async function PartnerRequestsPage({
                       <td className={urgent ? 'badge badge-warn' : 'muted'}>
                         {r.expires_at ? relative(r.expires_at) : '—'}
                       </td>
+                      <td>
+                        {/* The decision is made on the request itself, beside
+                            everything §41 says to read first. The name alone,
+                            as a link, did not say there was anything to open. */}
+                        <Link
+                          className={
+                            r.status === 'PARTNER_REVIEW'
+                              ? 'btn btn-primary btn-sm'
+                              : 'btn btn-secondary btn-sm'
+                          }
+                          href={`/partner/requests/${r.request_id}`}
+                        >
+                          {r.status === 'PARTNER_REVIEW' ? 'Review' : 'Open'}
+                        </Link>
+                      </td>
                     </tr>
                   );
                 })}
@@ -158,10 +174,9 @@ export default async function PartnerRequestsPage({
         )}
       </Card>
 
-      <Notice tone="plain">
-        If a request expires without a decision it becomes <strong>expired</strong> — not approved
-        and not rejected. The Buyer may resubmit, and nothing runs in the meantime.
-      </Notice>
+      <p className="faint small">
+        A request not decided in time expires: not approved, not rejected, and nothing runs.
+      </p>
     </Shell>
   );
 }

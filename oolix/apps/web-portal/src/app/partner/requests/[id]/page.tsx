@@ -79,6 +79,8 @@ interface RequestDetail {
       required: boolean;
       weight: number;
     }[];
+    /** The attributes this Partner publishes as available (v6 §10 coverage). */
+    covered_attributes?: string[];
     reach_estimate: {
       status: string;
       reach_bucket: string | null;
@@ -134,19 +136,18 @@ export default async function PartnerRequestDetailPage({
 
   // v6 §10 asks the review to show "field coverage" — whether THIS Partner can
   // actually evaluate each rule. That answer comes from their own published
-  // capabilities, not from anything the Buyer sent.
-  const [taxonomy, capabilities] = await Promise.all([
-    req.audience
-      ? apiOptional<{ items: { key: string; display_name: string }[] }>('/v1/audiences/taxonomy')
-      : Promise.resolve(null),
-    req.audience
-      ? apiOptional<{ attributes: { attribute_key: string }[] }>('/v1/partner/capabilities')
-      : Promise.resolve(null),
-  ]);
+  // capabilities, not from anything the Buyer sent, and the request carries it:
+  // reading the capability list directly takes segment:manage, which the
+  // approver deciding here does not hold.
+  const taxonomy = req.audience
+    ? await apiOptional<{ items: { key: string; display_name: string }[] }>(
+        '/v1/audiences/taxonomy',
+      )
+    : null;
 
   const attributeName = (key: string) =>
     taxonomy?.items.find((a) => a.key === key)?.display_name ?? key;
-  const coveredKeys = new Set((capabilities?.attributes ?? []).map((a) => a.attribute_key));
+  const coveredKeys = new Set(req.audience?.covered_attributes ?? []);
   const uncoveredRequired = (req.audience?.rules ?? [])
     .filter((r) => r.required && !coveredKeys.has(r.attribute))
     .map((r) => r.attribute);
@@ -177,6 +178,29 @@ export default async function PartnerRequestDetailPage({
               <span className="faint"> · decision due {relative(req.expires_at)}</span>
             ) : null}
           </>
+        }
+        // The forms stay at the end, after everything §41 says to read first;
+        // these say from the top that the decision is here, and go to it.
+        actions={
+          open ? (
+            <>
+              {mayApprove && !req.viewer_created_this_campaign ? (
+                <a className="btn btn-primary" href="#approve">
+                  Approve
+                </a>
+              ) : null}
+              {mayChange ? (
+                <a className="btn btn-secondary" href="#change">
+                  Ask for a change
+                </a>
+              ) : null}
+              {mayReject ? (
+                <a className="btn btn-danger" href="#reject">
+                  Reject
+                </a>
+              ) : null}
+            </>
+          ) : null
         }
       />
 
@@ -537,26 +561,32 @@ export default async function PartnerRequestDetailPage({
           ) : null}
 
           {mayApprove && !req.viewer_created_this_campaign ? (
-            <Card title="Approve">
-              <ApproveForm
-                requestId={id}
-                channels={req.channels}
-                creatives={req.creatives}
-                expansionRequested={req.audience_expansion_requested}
-              />
-            </Card>
+            <div id="approve" className="anchor">
+              <Card title="Approve">
+                <ApproveForm
+                  requestId={id}
+                  channels={req.channels}
+                  creatives={req.creatives}
+                  expansionRequested={req.audience_expansion_requested}
+                />
+              </Card>
+            </div>
           ) : null}
 
           {mayChange ? (
-            <Card title="Request a change">
-              <RequestChangeForm requestId={id} />
-            </Card>
+            <div id="change" className="anchor">
+              <Card title="Request a change">
+                <RequestChangeForm requestId={id} />
+              </Card>
+            </div>
           ) : null}
 
           {mayReject ? (
-            <Card title="Reject">
-              <RejectForm requestId={id} />
-            </Card>
+            <div id="reject" className="anchor">
+              <Card title="Reject">
+                <RejectForm requestId={id} />
+              </Card>
+            </div>
           ) : null}
 
           {mayExtend ? (

@@ -203,6 +203,23 @@ export class ApprovalService {
       orderBy: { version: 'desc' },
     });
 
+    // v6 §10's field coverage -- which of the rules this Partner can evaluate
+    // -- worked out here, from its active capabilities. The approver deciding
+    // needs it most, and reading the capability list itself takes
+    // segment:manage, which an approver does not hold: the review page asked,
+    // was refused, and showed every rule as "not declared".
+    const capability = request.audienceGroup
+      ? await this.prisma.partnerCapability.findFirst({
+          where: { partnerOrgId: principal.orgId, status: 'ACTIVE' },
+          orderBy: { capabilityVersion: 'desc' },
+        })
+      : null;
+    const coveredAttributes = (
+      (capability?.attributesJson ?? []) as Array<{ attribute_key: string; status?: string }>
+    )
+      .filter((a) => (a.status ?? 'AVAILABLE') === 'AVAILABLE')
+      .map((a) => a.attribute_key);
+
     return {
       request_id: request.id,
       status: request.status,
@@ -268,6 +285,9 @@ export class ApprovalService {
               required: boolean;
               weight: number;
             }>,
+            // The attributes this Partner publishes as available: a rule on
+            // any other one is a rule its Agent cannot evaluate.
+            covered_attributes: coveredAttributes,
             // §8: the safe estimate this Partner's own Agent produced. A bucket
             // or nothing -- Oolix never held a count to show.
             reach_estimate: request.reachEstimate
