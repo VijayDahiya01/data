@@ -21,7 +21,7 @@ import {
   signUp,
   type AuthState,
 } from '@/lib/actions-auth';
-import { ActionForm, FieldError, SubmitButton } from './FormState';
+import { ActionForm, CheckedForm, FieldError, SubmitButton } from './FormState';
 
 const PASSWORD_HINT =
   'At least 12 characters. A few unrelated words make a strong one. Common and leaked passwords are refused.';
@@ -112,7 +112,7 @@ export function SignInForm({ returnTo }: { returnTo: string }) {
   const [shown, setShown] = useState(false);
   return (
     <>
-      <form action={formAction}>
+      <CheckedForm action={formAction}>
         {state.error ? (
           <div className="notice notice-danger" role="alert">
             {state.error}
@@ -142,7 +142,7 @@ export function SignInForm({ returnTo }: { returnTo: string }) {
           <ShowPassword shown={shown} onChange={setShown} />
         </div>
         <SubmitButton pendingLabel="Signing in…">Sign in</SubmitButton>
-      </form>
+      </CheckedForm>
       {state.unverified && state.email ? <ResendVerificationForm email={state.email} /> : null}
     </>
   );

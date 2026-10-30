@@ -111,6 +111,7 @@ export function PartnerPicker({
                             min="1"
                             step="0.01"
                             disabled={!on}
+                            required={on}
                             value={on ? (budgets[p.partner_org_id] ?? '') : ''}
                             onChange={(e) => {
                               setTyped(true);

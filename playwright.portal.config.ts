@@ -33,7 +33,7 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
   testMatch:
-    '**/{portal,campaign-flow,segment-publish,all-screens,v6-partner-forms,screenshots,dark-check,session-expiry,audience-lifecycle,submit-gate}.e2e.ts',
+    '**/{portal,campaign-flow,segment-publish,all-screens,v6-partner-forms,screenshots,dark-check,session-expiry,audience-lifecycle,submit-gate,required-fields}.e2e.ts',
   fullyParallel: false,
   workers: 1,
   retries: 0,

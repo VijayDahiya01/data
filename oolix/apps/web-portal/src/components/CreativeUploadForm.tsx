@@ -36,7 +36,7 @@ export function CreativeUploadForm({
         id="destination_url"
         name="destination_url"
         type="url"
-        required={!landingUrl}
+        required
         defaultValue={landingUrl ?? ''}
       />
       <div className="field-hint">

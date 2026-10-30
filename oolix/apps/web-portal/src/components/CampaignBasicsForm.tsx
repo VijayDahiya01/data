@@ -18,9 +18,10 @@
  * forbids paying a Partner on unverified clicks, so a CPQL campaign with no
  * definition of "qualified" has no settleable basis and the API rejects it.
  *
- * Nothing inside "More options" is `required`: a browser cannot focus an
- * invalid field inside a closed <details>, and the submit would silently do
- * nothing. Every one has a default, and the server answers for the rest.
+ * Fields under "More options" are required like the rest. A browser cannot
+ * point at an empty field inside a closed <details>, but ActionForm's
+ * CheckedForm does: it opens the section, moves to the field and says what to
+ * fill in.
  */
 import { useState } from 'react';
 import Link from 'next/link';
@@ -237,6 +238,7 @@ export function CampaignBasicsForm({
                 <input
                   id="category"
                   name="category"
+                  required
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                 />
@@ -254,6 +256,7 @@ export function CampaignBasicsForm({
                   id="landing_url"
                   name="landing_url"
                   type="url"
+                  required
                   defaultValue={brand ? `https://${brand.landing_domain}/` : ''}
                 />
                 <div className="field-hint">
@@ -269,6 +272,8 @@ export function CampaignBasicsForm({
               <input
                 id="purpose_id"
                 name="purpose_id"
+                required
+                minLength={2}
                 value={purpose ?? purposeFor(category, objective)}
                 onChange={(e) => setPurpose(e.target.value)}
               />
@@ -289,7 +294,7 @@ export function CampaignBasicsForm({
               </div>
               <div className="field">
                 <label htmlFor="geographies">Countries</label>
-                <input id="geographies" name="geographies" defaultValue="IN" />
+                <input id="geographies" name="geographies" required defaultValue="IN" />
                 <div className="field-hint">Country codes, comma separated.</div>
                 <FieldError state={state} name="geographies" />
               </div>

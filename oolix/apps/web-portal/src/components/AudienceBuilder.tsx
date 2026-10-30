@@ -493,8 +493,16 @@ export function AudienceBuilder({
     );
   };
 
+  // Said under the button before anything is sent, rather than refused by the
+  // server and shown at the top of the form.
+  const short = MIN_CONDITIONS - complete.length;
+  const validate = () =>
+    short > 0
+      ? `Add ${short} more condition${short === 1 ? '' : 's'} to continue: a Partner needs at least four.`
+      : null;
+
   return (
-    <ActionForm action={action}>
+    <ActionForm action={action} validate={validate}>
       {(state: ActionState) => (
         <>
           <input type="hidden" name="rules" value={payload} />

@@ -1060,6 +1060,19 @@ details.advanced > summary {
   color: var(--text-muted);
 }
 
+/* A field the form is waiting for, and what it says under the button
+ * (CheckedForm). */
+[aria-invalid='true'],
+[aria-invalid='true']:focus {
+  border-color: var(--danger) !important;
+  /* Over the focus ring: the first missing field is the focused one. */
+  box-shadow: 0 0 0 3px rgb(179 38 30 / 22%) !important;
+}
+
+.form-missing {
+  margin: 0.9rem 0 0;
+}
+
 /* Long lists: the search row above, the pager below. */
 .list-search {
   display: flex;
