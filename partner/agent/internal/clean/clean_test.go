@@ -142,7 +142,8 @@ func mapper(t *testing.T, key string, overrides map[string]string) *EnumMapper {
 func TestEnumMapsCommonSpellingsToCodes(t *testing.T) {
 	cases := map[string]map[any]string{
 		"gender": {"M": "MALE", "male": "MALE", " Female ": "FEMALE", "F": "FEMALE",
-			int64(1): "MALE", "2": "FEMALE", "Prefer not to say": "UNDISCLOSED", "MALE": "MALE"},
+			int64(1): "MALE", "2": "FEMALE", "Prefer not to say": "UNDISCLOSED", "MALE": "MALE",
+			"पुरुष": "MALE", "महिला": "FEMALE", "स्त्री": "FEMALE", "अन्य": "OTHER"},
 		"city": {"Bombay": "MUMBAI", "mumbai": "MUMBAI", "Bangalore": "BENGALURU",
 			"Gurgaon": "GURUGRAM", "Calcutta": "KOLKATA", "new-delhi": "DELHI"},
 		"payment_method": {"UPI": "UPI", "gpay": "UPI", "Credit Card": "CREDIT_CARD",

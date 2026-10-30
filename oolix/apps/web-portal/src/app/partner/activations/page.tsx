@@ -10,8 +10,10 @@ import Link from 'next/link';
 import { requireContext, can } from '@/lib/nav-entry';
 import { apiOptional } from '@/lib/api';
 import { Shell } from '@/components/Shell';
+import { pageOf, readListQuery } from '@/lib/list';
 import { Card, Empty, Money, Notice, PageHeader, StatusBadge, dateTime } from '@/components/ui';
 import { KillSwitchForm, ReleaseKillSwitchForm } from '@/components/KillSwitchForms';
+import { ListSearch, Pager } from '@/components/ListControls';
 
 interface QueueItem {
   request_id: string;
@@ -44,8 +46,13 @@ interface KillSwitch {
   activated_at: string;
 }
 
-export default async function ActivationsPage() {
+export default async function ActivationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const ctx = await requireContext('/partner/activations');
+  const query = readListQuery(await searchParams);
 
   const [approved, switches] = await Promise.all([
     apiOptional<{ items: QueueItem[] }>('/v1/partner-requests?status=APPROVED'),
@@ -53,14 +60,15 @@ export default async function ActivationsPage() {
   ]);
 
   const live = approved?.items ?? [];
+  const list = pageOf(live, query, (r) => `${r.campaign_name} ${r.buyer_name}`);
   const active = (switches?.items ?? []).filter((k) => k.active);
   const mayOperate = can(ctx, 'killswitch:operate');
 
   return (
     <Shell ctx={ctx}>
       <PageHeader
-        title="Active activations"
-        lead="What is approved to run on your property, and how to stop it."
+        title="Running"
+        lead="Campaigns approved to run on your site or app, and how to stop them."
       />
 
       {active.length ? (
@@ -72,10 +80,10 @@ export default async function ActivationsPage() {
 
       <Card title="Approved campaigns">
         <p className="faint small">
-          <strong>Local audience</strong> is what your own Agent has compiled from the approved
-          rules, and when. Oolix holds this status, version and timestamp — and nothing about who
-          matched. The members live only in your database.
+          <strong>Local audience</strong> is what your Agent built from the approved rules, and
+          when. Who matched stays in your database.
         </p>
+        <ListSearch query={query} count={live.length} placeholder="Search campaigns or Buyers" />
         {live.length === 0 ? (
           <Empty>Nothing approved yet.</Empty>
         ) : (
@@ -93,7 +101,7 @@ export default async function ActivationsPage() {
                 </tr>
               </thead>
               <tbody>
-                {live.map((r) => (
+                {list.items.map((r) => (
                   <tr key={r.request_id}>
                     <td>
                       <Link href={`/partner/requests/${r.request_id}`}>{r.campaign_name}</Link>
@@ -146,6 +154,7 @@ export default async function ActivationsPage() {
             </table>
           </div>
         )}
+        <Pager list={list} query={query} />
       </Card>
 
       {mayOperate ? (

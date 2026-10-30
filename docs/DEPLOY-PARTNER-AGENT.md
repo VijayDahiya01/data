@@ -69,8 +69,10 @@ curl -fsSLo docker-compose.yml https://<oolix-api>/agent/v1/compose
 docker compose up -d
 ```
 
-The portal shows this command with your Oolix address filled in, under **Data
-Partner → Integrations → Connect your data**. The file starts the Agent and a
+The portal shows this command with your Oolix address filled in, under **Your
+data → Connection → Get install command**, ending in
+`OOLIX_BOOTSTRAP_TOKEN=<one-time code> docker compose up -d`: with the code, the
+Agent registers itself as it starts. The file starts the Agent and a
 small PostgreSQL of its own (the _local store_). Nothing in it needs editing,
 and you can read it first: it is
 [`partner/pack/docker-compose.partner.yml`](../partner/pack/docker-compose.partner.yml)
@@ -90,8 +92,9 @@ database login. To choose the password yourself, set `OOLIX_SETUP_PASSWORD`
 
 ### 3. Follow the page
 
-1. **Connect to Oolix.** Paste a one-time code from the same portal page. It
-   works once and expires after 15 minutes.
+1. **Connect to Oolix.** Done already if you used the install command.
+   Otherwise paste a one-time code from the same portal page. A code works
+   once and expires after 15 minutes.
 2. **Connect your database.** Give it a read-only login; the page shows the
    statements that create one on each kind of database. Inside Docker,
    `localhost` is the Agent itself — use the database server's address, or
@@ -157,7 +160,7 @@ database login. To choose the password yourself, set `OOLIX_SETUP_PASSWORD`
 The Agent then copies the table, tells Oolix which attributes it can answer,
 and refreshes the copy every night at the hour you chose. Readiness in the
 portal turns green once the Agent has checked in and published. After each
-full refresh the portal's **Audience capabilities** page shows how complete
+full refresh the portal's **Your data → What Buyers can ask** page shows how complete
 your data is — per attribute, the share of customers with a value — so you
 can see what is worth fixing. Only those percentages reach Oolix, and only
 you see them.
@@ -478,7 +481,7 @@ docker run --rm -v /srv/oolix-agent:/state \
 
 The token is read from `OOLIX_BOOTSTRAP_TOKEN`, not a flag — a flag would put
 it in the process list and the shell history. Your **Partner security admin**
-mints it in the Oolix portal under *Integrations → Register a new Agent*; §92
+mints it in the Oolix portal under *Your data → Connection → Advanced*; §92
 makes that deliberately a different role from the commercial admin. It is
 single-use and expires in 15 minutes.
 

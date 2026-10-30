@@ -47,6 +47,7 @@ type harness struct {
 	t          *testing.T
 	store      *localstore.Store
 	runner     *managed.Runner
+	ui         *Server
 	server     *httptest.Server
 	client     *http.Client
 	published  []managed.Capabilities
@@ -106,6 +107,7 @@ func newHarness(t *testing.T) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
+	h.ui = s
 	h.server = httptest.NewServer(s.Handler())
 	t.Cleanup(h.server.Close)
 	jar, _ := cookiejar.New(nil)

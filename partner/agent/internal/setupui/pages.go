@@ -381,18 +381,50 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request, sess *session)
 		s.render(w, "register.html", v)
 		return
 	}
-	res, err := s.opts.Register(ctx, s.opts.HTTPClient, s.opts.APIBaseURL, code, s.opts.KeyPath,
-		[]string{"PARTNER_WEB", "PARTNER_APP"})
+	refused, err := s.registerWith(ctx, code, "from the setup page")
 	if err != nil {
-		v.Error = "Oolix did not accept the code: " + err.Error()
+		s.fail(w, err)
+		return
+	}
+	if refused != "" {
+		v.Error = refused
 		s.render(w, "register.html", v)
 		return
 	}
+	redirect(w, r, "/?notice=registered")
+}
+
+// RegisterAtStart registers the Agent with the one-time code the portal's
+// install command passes in OOLIX_BOOTSTRAP_TOKEN, so its setup page opens at
+// connecting the database rather than asking for a code. An Agent registered
+// already -- started again with the same command, say -- is left as it is.
+func (s *Server) RegisterAtStart(ctx context.Context, code string) error {
+	st, err := s.state(ctx)
+	if err != nil || st.identity != nil {
+		return err
+	}
+	refused, err := s.registerWith(ctx, strings.TrimSpace(code), "with the install command's code")
+	if err != nil {
+		return err
+	}
+	if refused != "" {
+		return errors.New(refused)
+	}
+	return nil
+}
+
+// registerWith registers this Agent with a one-time code and keeps who it now
+// is. refused says, for whoever brought the code, why Oolix would not take
+// it; err is a failure of the Agent's own, keeping the identity.
+func (s *Server) registerWith(ctx context.Context, code, how string) (refused string, err error) {
+	res, err := s.opts.Register(ctx, s.opts.HTTPClient, s.opts.APIBaseURL, code, s.opts.KeyPath,
+		[]string{"PARTNER_WEB", "PARTNER_APP"})
+	if err != nil {
+		return "Oolix did not accept the code: " + err.Error(), nil
+	}
 	if res.PartnerOrgID == "" || res.ManifestIssuer == "" {
-		v.Error = "Oolix accepted the code but did not say which organisation this Agent belongs to. " +
-			"The Oolix control plane is older than this Agent; ask Oolix support to update it."
-		s.render(w, "register.html", v)
-		return
+		return "Oolix accepted the code but did not say which organisation this Agent belongs to. " +
+			"The Oolix control plane is older than this Agent; ask Oolix support to update it.", nil
 	}
 	id := managed.Identity{
 		AgentID: res.AgentID, ClientID: res.ClientID, PartnerOrgID: res.PartnerOrgID,
@@ -400,14 +432,13 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request, sess *session)
 		TokenAudience: res.Audience, RegisteredAt: s.opts.Now().UTC(),
 	}
 	if err := s.settings.SaveIdentity(ctx, id); err != nil {
-		s.fail(w, err)
-		return
+		return "", err
 	}
-	s.opts.Logger.Info("registered with Oolix from the setup page", "agent_id", id.AgentID)
+	s.opts.Logger.Info("registered with Oolix "+how, "agent_id", id.AgentID)
 	if s.opts.OnRegistered != nil {
 		s.opts.OnRegistered(id)
 	}
-	redirect(w, r, "/?notice=registered")
+	return "", nil
 }
 
 // --- database ----------------------------------------------------------------

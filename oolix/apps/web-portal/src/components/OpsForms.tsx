@@ -298,6 +298,45 @@ export function OneTimeCodeForm() {
   );
 }
 
+/**
+ * Partner Connect in one paste: the install commands with a one-time code in
+ * them, so the Agent registers itself as it starts and its setup page opens
+ * at connecting the database. Pasting a code into the setup page by hand
+ * (OneTimeCodeForm) still works.
+ *
+ * §92.1 is unchanged: the code works once and for 15 minutes, and Oolix keeps
+ * only its SHA-256, so it is shown once. Left in the server's shell history it
+ * is harmless -- spent, or expired.
+ */
+export function InstallCommandForm({ composeUrl }: { composeUrl: string }) {
+  return (
+    <ActionForm action={createBootstrapToken}>
+      {(state: TokenState) => (
+        <>
+          {state.token ? (
+            <>
+              <p style={{ marginTop: 0 }}>On a server in your network that has Docker, run:</p>
+              <pre className="code-block">
+                {`mkdir oolix-agent && cd oolix-agent
+curl -fsSLo docker-compose.yml ${composeUrl}
+OOLIX_BOOTSTRAP_TOKEN=${state.token} docker compose up -d`}
+              </pre>
+              <p className="faint small">
+                It works once, within 15 minutes, and is shown only now.
+              </p>
+            </>
+          ) : null}
+          <div className="btn-row">
+            <SubmitButton pendingLabel="Creating…">
+              {state.token ? 'Get a new command' : 'Get install command'}
+            </SubmitButton>
+          </div>
+        </>
+      )}
+    </ActionForm>
+  );
+}
+
 export function RevokeBootstrapTokensForm() {
   return (
     <ActionForm action={revokeBootstrapTokens}>

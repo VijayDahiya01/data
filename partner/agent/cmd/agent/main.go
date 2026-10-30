@@ -852,6 +852,16 @@ func runManaged(ctx context.Context, cfg *config.Config, logger *slog.Logger) er
 		_ = setupServer.Shutdown(shutdownCtx)
 	}()
 
+	// The portal's install command passes a one-time code, so the Agent
+	// registers itself instead of waiting for it on the setup page. A hosted
+	// Agent is claimed on its page instead (the code proves the claimant).
+	if code := os.Getenv("OOLIX_BOOTSTRAP_TOKEN"); code != "" && hosted == nil {
+		if err := ui.RegisterAtStart(ctx, code); err != nil {
+			logger.Warn("the install command's one-time code was not accepted: "+
+				"get a new one in the portal and paste it on the setup page", "error", err)
+		}
+	}
+
 	id, err := managed.Settings{Store: store}.Identity(ctx)
 	if err != nil {
 		return err

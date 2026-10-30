@@ -179,7 +179,7 @@ whatever that Partner actually stores lives in the Agent's own config file —
 §17 keeps Partner local field names out of Oolix entirely.
 
 The v5 path still works: a Partner with an existing CDP audience publishes it
-under Partner → **Prebuilt segments**, and a campaign targets either an Audience
+under **Your data → Segments**, and a campaign targets either an Audience
 Group or a segment, never both (§19).
 
 The access token never reaches the browser: every API call is made by the Next

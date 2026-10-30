@@ -25,6 +25,9 @@ var synonyms = map[string]map[string]string{
 		"not disclosed": "UNDISCLOSED", "na": "UNDISCLOSED", "n a": "UNDISCLOSED",
 		// ISO/IEC 5218, the usual numeric coding.
 		"0": "UNDISCLOSED", "1": "MALE", "2": "FEMALE", "9": "UNDISCLOSED",
+		// Hindi, as sign-up forms in Devanagari write it. Whole words only: a
+		// lone "म" could as well be the English "M" written in Devanagari.
+		"पुरुष": "MALE", "महिला": "FEMALE", "स्त्री": "FEMALE", "अन्य": "OTHER",
 	},
 	"country": {
 		"in": "IN", "ind": "IN", "india": "IN", "bharat": "IN", "republic of india": "IN",

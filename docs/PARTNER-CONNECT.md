@@ -23,25 +23,26 @@ ever sees counts.
 
 ## 1. Setup — once, about 15 minutes
 
-1. In the Oolix portal: **Data Partner → Integrations → Connect your data**.
-   Copy the command shown there.
+1. In the Oolix portal: **Your data → Connection → Get install command**.
+   Copy the command shown there. It carries a one-time code, so the Agent
+   connects itself to Oolix as it starts.
 2. On any server in their network that has Docker, run it:
 
    ```sh
    mkdir oolix-agent && cd oolix-agent
    curl -fsSLo docker-compose.yml https://<oolix-api>/agent/v1/compose
-   docker compose up -d
+   OOLIX_BOOTSTRAP_TOKEN=<one-time code> docker compose up -d
    ```
 
    Two containers start: the Agent, and a small database of its own.
 
 3. Open the setup page on that server (`http://localhost:8083`; the password
-   is in `docker compose logs agent | grep setup_password`) and follow six
+   is in `docker compose logs agent | grep setup_password`) and follow the
    steps:
 
    | Step                      | What the Partner does                                                                                                                                                                         |
    | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-   | Connect to Oolix          | Paste a one-time code from the portal                                                                                                                                                         |
+   | Connect to Oolix          | Done already by the install command; otherwise paste a one-time code from the portal                                                                                                                                                         |
    | Connect your database     | Give a **read-only** login: PostgreSQL, MySQL/MariaDB, SQL Server, Oracle, MongoDB, BigQuery, Snowflake; a Shopify store; a Google Sheet; or exports (CSV, Excel, JSON lines, Parquet) in a folder, on SFTP, or in S3, Cloud Storage or Azure |
    | Choose the customer table | Pick the table with one row per customer. A WooCommerce store gets its layout filled in, to confirm                                                                                         |
    | Check the matches         | Confirm what the tool found. It shows real rows cleaned: `14/04/1992` → 14 Apr 1992 (age 34), `Bombay` → MUMBAI, `25-45` → age 25 to 45. An age, an age group or a number of days is asked about once: kept up to date, or true on another date such as sign-up. Values it cannot place are listed for the Partner to answer, never guessed |
@@ -75,7 +76,7 @@ refresh once a week to notice customers deleted from the table.
 2. Oolix finds the Partners whose attribute list fits. It uses the list only,
    never the data, and only Partners this advertiser may see: those in a
    Network with them, and those who chose **List me for all verified
-   advertisers** in the portal (**Audience capabilities → Who can find you**).
+   advertisers** in the portal (**Your data → What Buyers can ask → Who can find you**).
    A Partner who connected through the setup page and is in no Network must
    turn that on to be found.
 3. Oolix asks the Agent how many customers match. The Agent counts on the

@@ -1,22 +1,24 @@
 /**
- * Partner Agent and connector (§69, §92).
+ * Partner Agent and connector (§69, §92) -- "Connection" under Your data.
  *
  * This is the screen where a Partner takes physical control of the thing that
  * touches their customer data. The Agent runs in their infrastructure, mints
  * its own private key, and can be cut off from Oolix immediately — all three
- * facts are visible here rather than buried in a runbook.
+ * facts are here, and the second and third are folded away until wanted.
  *
- * "Connect your data" (Partner Connect) is the path shown first: one Compose
- * file, fetched straight onto the Partner's server, then a setup page on that
- * server does the rest. The hand-configured Agent stays available below it.
+ * With no Agent running, "Connect your data" leads: one command with a
+ * one-time code in it, and the Agent's own setup page does the rest. Once one
+ * is running, its status leads. The config-file Agent, revocation and how the
+ * Agent proves who it is sit under closed sections at the bottom.
  */
 import { requireContext, can } from '@/lib/nav-entry';
 import { apiOptional } from '@/lib/api';
 import { env } from '@/lib/env';
 import { Shell } from '@/components/Shell';
-import { Card, Empty, Notice, PageHeader, StatusBadge, duration, relative } from '@/components/ui';
+import { Card, Empty, Notice, PageHeader, relative } from '@/components/ui';
 import {
   BootstrapTokenForm,
+  InstallCommandForm,
   OneTimeCodeForm,
   RevokeAgentForm,
   RevokeBootstrapTokensForm,
@@ -44,13 +46,13 @@ function health(agent: Agent): { tone: string; text: string } {
   if (!agent.last_heartbeat_at) return { tone: 'badge badge-warn', text: 'never seen' };
 
   const ageSeconds = (Date.now() - Date.parse(agent.last_heartbeat_at)) / 1000;
-  if (ageSeconds > 300) return { tone: 'badge badge-danger', text: 'heartbeat stale' };
+  if (ageSeconds > 300) return { tone: 'badge badge-danger', text: 'not heard from' };
 
   const configAge = agent.config_age_seconds ?? 0;
-  if (configAge > 900) return { tone: 'badge badge-danger', text: 'config critically stale' };
-  if (configAge > 300) return { tone: 'badge badge-warn', text: 'config lagging' };
+  if (configAge > 900) return { tone: 'badge badge-danger', text: 'settings out of date' };
+  if (configAge > 300) return { tone: 'badge badge-warn', text: 'settings lagging' };
 
-  return { tone: 'badge badge-ok', text: 'healthy' };
+  return { tone: 'badge badge-ok', text: 'running' };
 }
 
 export default async function IntegrationsPage() {
@@ -73,49 +75,35 @@ export default async function IntegrationsPage() {
 
   const mayRegister = can(ctx, 'agent:register');
   const mayRevoke = can(ctx, 'agent:revoke');
-  const hasLiveAgent = all.some((a) => a.status === 'ACTIVE');
+  const active = agents.filter((a) => a.status === 'ACTIVE');
   const composeUrl = `${env().API_PUBLIC_URL.replace(/\/+$/, '')}/agent/v1/compose`;
 
   const connect = mayRegister ? (
     <Card title="Connect your data">
       <p className="muted" style={{ marginTop: 0 }}>
-        About fifteen minutes, on any server in your network that has Docker. Nothing is created in
-        your database, and your customers&rsquo; details never leave your server.
+        About fifteen minutes. Nothing is created in your database, and your customers&rsquo;
+        details never leave your server.
       </p>
-      <ol style={{ paddingLeft: '1.15rem' }}>
-        <li>
-          On that server, run:
-          <pre className="code-block">
-            {`mkdir oolix-agent && cd oolix-agent
-curl -fsSLo docker-compose.yml ${composeUrl}
-docker compose up -d`}
-          </pre>
-          <span className="faint small">
-            Or <a href={composeUrl}>download docker-compose.yml</a> and copy it there.
-          </span>
-        </li>
-        <li>
-          Open the setup page on that server at <code>http://localhost:8083</code>. From your
-          laptop, run <code>ssh -L 8083:localhost:8083 you@that-server</code> first. The password is
-          in <code>docker compose logs agent | grep setup_password</code>.
-        </li>
-        <li>
-          Get a one-time code and paste it into the setup page:
-          <div style={{ marginTop: '0.6rem' }}>
-            <OneTimeCodeForm />
-          </div>
-        </li>
-        <li>
-          Follow the setup page: give it a read-only login to your database (PostgreSQL, MySQL, SQL
-          Server, MongoDB, or CSV and Excel files), pick your customer table, check the matches it
-          found, add your orders or bookings table if you have one, and publish. It refreshes the
-          copy by itself every night.
-        </li>
-      </ol>
+      <InstallCommandForm composeUrl={composeUrl} />
+      <p className="muted">
+        Then open the setup page on that server, <code>http://localhost:8083</code>, and follow it:
+        a read-only login to your database or a folder of exports, your customer table, the matches
+        it found, and publish. From your laptop, run{' '}
+        <code>ssh -L 8083:localhost:8083 you@that-server</code> first. The password is in{' '}
+        <code>docker compose logs agent | grep setup_password</code>.
+      </p>
+      <details className="more" style={{ marginBottom: 0 }}>
+        <summary>Started the Agent without a code?</summary>
+        <p className="faint small" style={{ marginTop: 0 }}>
+          Get one here and paste it into its setup page. Or{' '}
+          <a href={composeUrl}>download docker-compose.yml</a> to copy to the server yourself.
+        </p>
+        <OneTimeCodeForm />
+      </details>
     </Card>
   ) : (
     <Notice tone="warn">
-      Registering an Agent needs your security admin, not your commercial admin. The two are kept
+      Connecting an Agent needs your security admin, not your commercial admin. The two are kept
       separate on purpose.
     </Notice>
   );
@@ -123,32 +111,24 @@ docker compose up -d`}
   return (
     <Shell ctx={ctx}>
       <PageHeader
-        title="Integrations"
-        lead="The Agent that runs inside your infrastructure and decides every ad locally."
+        title="Connection"
+        lead="The Agent runs on your server, reads your data there, and decides every ad there."
       />
 
-      {hasLiveAgent ? null : connect}
+      {active.length === 0 ? connect : null}
 
-      <Card
-        title={
-          all.length > agents.length
-            ? `Agents (${agents.length} of ${all.length}, most recent first)`
-            : `Agents (${all.length})`
-        }
-      >
+      <Card title="Your Agent">
         {agents.length === 0 ? (
-          <Empty>No Agent registered yet. Connect your data above to set one up.</Empty>
+          <Empty>No Agent yet.</Empty>
         ) : (
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
                   <th>Agent</th>
-                  <th>Version</th>
-                  <th>Health</th>
-                  <th>Last heartbeat</th>
-                  <th>Config age</th>
                   <th>Status</th>
+                  <th>Last heard from</th>
+                  <th>Version</th>
                 </tr>
               </thead>
               <tbody>
@@ -158,25 +138,14 @@ docker compose up -d`}
                     <tr key={a.agent_id}>
                       <td>
                         <code>{shortId(a.agent_id)}</code>
-                        {a.capabilities?.length ? (
-                          <div className="faint">
-                            {a.capabilities
-                              .map((c) => c.replace('PARTNER_', '').toLowerCase())
-                              .join(', ')}
-                          </div>
-                        ) : null}
                       </td>
-                      <td className="muted">{a.version}</td>
                       <td>
                         <span className={h.tone}>{h.text}</span>
                       </td>
                       <td className="muted">
                         {a.last_heartbeat_at ? relative(a.last_heartbeat_at) : 'never'}
                       </td>
-                      <td className="muted">{duration(a.config_age_seconds)}</td>
-                      <td>
-                        <StatusBadge status={a.status} />
-                      </td>
+                      <td className="muted">{a.version}</td>
                     </tr>
                   );
                 })}
@@ -186,74 +155,68 @@ docker compose up -d`}
         )}
       </Card>
 
-      {hasLiveAgent ? connect : null}
+      {active.length > 0 && mayRegister ? (
+        <details className="more">
+          <summary>Connect another Agent</summary>
+          {connect}
+        </details>
+      ) : null}
+
+      {mayRevoke && active.length > 0 ? (
+        <details className="more">
+          <summary>Disconnect an Agent</summary>
+          <p className="faint small" style={{ marginTop: 0 }}>
+            At once: the Agent is refused at its next check-in and stops serving, rather than
+            carrying on with old instructions.
+          </p>
+          {active.map((a) => (
+            <details key={a.agent_id} style={{ marginBottom: '0.6rem' }}>
+              <summary style={{ cursor: 'pointer' }} className="muted">
+                Disconnect <code>{shortId(a.agent_id)}</code>
+              </summary>
+              <div style={{ marginTop: '0.75rem' }}>
+                <RevokeAgentForm agentId={a.agent_id} />
+              </div>
+            </details>
+          ))}
+        </details>
+      ) : null}
 
       {mayRegister ? (
-        <Card title="Advanced: an Agent with your own configuration file">
-          <p className="muted" style={{ marginTop: 0 }}>
+        <details className="more">
+          <summary>Advanced: an Agent with your own configuration file</summary>
+          <p className="faint small" style={{ marginTop: 0 }}>
             For teams that run the Agent from a hand-written config against tables they prepare
-            themselves (see the integration guide). Most Partners should use Connect your data.
+            themselves (see the integration guide).
           </p>
           <BootstrapTokenForm />
-          <div
-            style={{
-              marginTop: '1rem',
-              paddingTop: '0.9rem',
-              borderTop: '1px solid var(--border)',
-            }}
-          >
+          <div style={{ marginTop: '1rem' }}>
             <RevokeBootstrapTokensForm />
             <div className="field-hint" style={{ marginTop: '0.4rem' }}>
-              Invalidates every token that has been generated but not yet used.
+              Cancels every code that has been created but not used.
             </div>
           </div>
-        </Card>
+        </details>
       ) : null}
 
-      {mayRevoke && agents.some((a) => a.status === 'ACTIVE') ? (
-        <Card title="Emergency revocation">
-          <p className="muted" style={{ marginTop: 0 }}>
-            Revocation takes effect <strong>immediately</strong> — not whenever the Agent&rsquo;s
-            current credentials would have run out. The Agent is refused on its very next check-in
-            and reports itself unhealthy, so it drops out of service instead of carrying on with old
-            instructions.
-          </p>
-          {agents
-            .filter((a) => a.status === 'ACTIVE')
-            .map((a) => (
-              <details key={a.agent_id} style={{ marginBottom: '0.6rem' }}>
-                <summary style={{ cursor: 'pointer' }} className="muted">
-                  Revoke <code>{shortId(a.agent_id)}</code>
-                </summary>
-                <div style={{ marginTop: '0.75rem' }}>
-                  <RevokeAgentForm agentId={a.agent_id} />
-                </div>
-              </details>
-            ))}
-        </Card>
-      ) : null}
-
-      <Card title="How the Agent gets its identity">
+      <details className="more">
+        <summary>How the Agent proves who it is</summary>
         <ol className="muted" style={{ margin: 0, paddingLeft: '1.15rem' }}>
+          <li>The one-time code works once, for 15 minutes, and Oolix keeps only its SHA-256.</li>
           <li>
-            You get a one-time code (a bootstrap token) above. It is single-use, expires in 15
-            minutes, and Oolix keeps only its SHA-256.
+            The Agent makes a <strong>P-256 key pair on your server</strong> and registers with the
+            code and its <em>public</em> key. The private key never leaves your server.
           </li>
           <li>
-            The Agent starts, generates a <strong>P-256 keypair inside your infrastructure</strong>,
-            and registers with the token plus its <em>public</em> key. The private key never leaves
-            your infrastructure.
-          </li>
-          <li>
-            From then on it proves possession of that key to get a 15-minute access token. Oolix
-            cannot produce a signature that appears to come from your Agent.
+            From then on it proves it holds that key to get a 15-minute access token. Oolix cannot
+            produce a signature that appears to come from your Agent.
           </li>
         </ol>
-        <p className="faint" style={{ marginBottom: 0, marginTop: '0.7rem' }}>
-          Which database the Agent reads is chosen on its own setup page (or in your config file,
-          for the advanced setup) — never here. Nothing Oolix sends can widen what it reads.
+        <p className="faint small" style={{ marginBottom: 0 }}>
+          Which data the Agent reads is chosen on its own setup page, or in its config file — never
+          here. Nothing Oolix sends can widen what it reads.
         </p>
-      </Card>
+      </details>
     </Shell>
   );
 }

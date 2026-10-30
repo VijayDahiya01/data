@@ -12,9 +12,11 @@
  */
 import { requireContext, can } from '@/lib/nav-entry';
 import { apiOptional } from '@/lib/api';
+import { pageOf, readListQuery } from '@/lib/list';
 import { Shell } from '@/components/Shell';
-import { Card, Empty, Money, Notice, PageHeader, StatusBadge } from '@/components/ui';
+import { Card, Empty, Money, PageHeader, StatusBadge } from '@/components/ui';
 import { ReconcileForm } from '@/components/OpsForms';
+import { ListSearch, Pager } from '@/components/ListControls';
 
 interface Row {
   activation_id: string;
@@ -39,10 +41,16 @@ interface Row {
   };
 }
 
-export default async function PartnerReportsPage() {
+export default async function PartnerReportsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const ctx = await requireContext('/partner/reports');
+  const query = readListQuery(await searchParams);
   const data = await apiOptional<{ items: Row[] }>('/v1/reports/partner');
   const rows = data?.items ?? [];
+  const list = pageOf(rows, query, (r) => `${r.campaign_name} ${r.buyer_name}`);
 
   const mayReconcile = can(ctx, 'reconciliation:manage');
   const currency = rows[0]?.revenue?.currency ?? 'INR';
@@ -60,8 +68,8 @@ export default async function PartnerReportsPage() {
   return (
     <Shell ctx={ctx}>
       <PageHeader
-        title="Reports"
-        lead="What you delivered, what the Buyer verified, and what you earned."
+        title="Results"
+        lead="What you delivered, what the Buyer verified, and what you earned. Only you see these."
       />
 
       <div className="grid" style={{ marginBottom: '1.4rem' }}>
@@ -88,7 +96,8 @@ export default async function PartnerReportsPage() {
         </div>
       </div>
 
-      <Card title={`Activations (${rows.length})`}>
+      <Card title="By campaign">
+        <ListSearch query={query} count={rows.length} placeholder="Search campaigns or Buyers" />
         {rows.length === 0 ? (
           <Empty>Nothing has run yet.</Empty>
         ) : (
@@ -107,7 +116,7 @@ export default async function PartnerReportsPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {list.items.map((r) => (
                   <tr key={r.activation_id}>
                     <td>{r.campaign_name}</td>
                     <td className="muted">{r.buyer_name}</td>
@@ -133,15 +142,17 @@ export default async function PartnerReportsPage() {
             </table>
           </div>
         )}
+        <Pager list={list} query={query} />
       </Card>
 
       {mayReconcile && rows.length > 0 ? (
-        <Card title="Reconcile your counts against ours">
-          <p className="muted" style={{ marginTop: 0 }}>
-            Compare what your Agent recorded against what Oolix received. A difference beyond
-            tolerance raises a review — it never silently changes what you are owed.
+        <details className="more">
+          <summary>Check your counts against ours</summary>
+          <p className="faint small" style={{ marginTop: 0 }}>
+            A difference beyond tolerance raises a review — it never silently changes what you are
+            owed.
           </p>
-          {rows.slice(0, 5).map((r) => (
+          {list.items.map((r) => (
             <details key={r.activation_id} style={{ marginBottom: '0.6rem' }}>
               <summary style={{ cursor: 'pointer' }} className="muted">
                 {r.campaign_name} <span className="faint">· {r.channel.toLowerCase()}</span>
@@ -151,13 +162,8 @@ export default async function PartnerReportsPage() {
               </div>
             </details>
           ))}
-        </Card>
+        </details>
       ) : null}
-
-      <Notice tone="plain">
-        These figures are yours alone. There is no view here — or anywhere — that would show you
-        another Data Partner&rsquo;s, and no way to ask for one.
-      </Notice>
     </Shell>
   );
 }

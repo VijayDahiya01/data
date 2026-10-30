@@ -1,5 +1,5 @@
 /**
- * Partner capabilities and local mapping health — v6 §5.1, §5.2, §18.2.
+ * What Buyers can ask a Partner about — v6 §5.1, §5.2, §18.2.
  *
  * §18.2 asks for two things on this screen: the standardized attributes the
  * Partner can evaluate, and "local mapping health: mapping version, connector
@@ -11,6 +11,12 @@
  * Partner's own schema calls it lives with the Agent -- on its setup page
  * (Partner Connect) or in its config file -- on the Partner's own
  * infrastructure, and does not appear anywhere in Oolix.
+ *
+ * A Partner who connected through the setup page has an Agent that publishes
+ * this list by itself after each refresh, so for them the page is the list,
+ * with how complete each attribute is, and who can find them. Publishing by
+ * hand, the mapping and capability versions and the operators are for
+ * config-file Agents, and are folded under "Advanced" for everyone else.
  */
 import { requireContext } from '@/lib/nav-entry';
 import { apiOptional } from '@/lib/api';
@@ -106,98 +112,78 @@ export default async function CapabilitiesPage() {
   ]);
 
   const attributes = taxonomy?.items ?? [];
-  const declared = capabilities?.attributes ?? [];
+  const declared = (capabilities?.attributes ?? []).filter((a) => a.status !== 'UNAVAILABLE');
   const declaredKeys = declared.map((a) => a.attribute_key);
   const agent = agents?.items?.[0];
+  // An Agent that reports quality was set up on its setup page and publishes
+  // this list by itself.
+  const managed = Boolean(quality?.reported_at);
+  const nameOf = (key: string) => attributes.find((t) => t.key === key)?.display_name ?? key;
+  const coverage = new Map((quality?.attributes ?? []).map((q) => [q.attribute_key, q]));
+  const anyInexact = declared.some((a) => a.precision);
 
   return (
     <Shell ctx={ctx}>
-      <PageHeader title="Audience capabilities" lead="What Buyers can ask you about." />
+      <PageHeader
+        title="What Buyers can ask"
+        lead="Buyers are matched to you on this list alone. No Buyer sees your data or your customers."
+      />
 
-      <Notice tone="info">
-        Buyers are matched to you on this list alone.{' '}
-        <strong>No Buyer sees your data or your customers.</strong> If you connected your data with
-        the setup page, your Agent publishes this list itself after each nightly refresh, offering
-        only attributes your customer table actually holds.
-      </Notice>
-
-      <Card title="Local mapping health">
-        <dl className="kv">
-          <dt>Capability version</dt>
-          <dd>
-            {capabilities?.capability_version ? (
-              <>
-                v{capabilities.capability_version}
-                <span className="faint small">
-                  {' '}
-                  published {relative(capabilities.published_at)}
-                </span>
-              </>
-            ) : (
-              <span className="faint">not published yet</span>
-            )}
-          </dd>
-
-          <dt>Mapping version</dt>
-          <dd>
-            {capabilities?.mapping_version ?? <span className="faint">not declared</span>}
-            <div className="faint small">Must match your Agent&apos;s setting.</div>
-          </dd>
-
-          <dt>Agent</dt>
-          <dd>
-            {agent ? (
-              <>
-                <StatusBadge status={agent.status} />
-                <span className="faint small">
-                  {' '}
-                  {agent.agent_version ?? 'unknown version'} · last heartbeat{' '}
-                  {relative(agent.last_heartbeat_at)}
-                </span>
-              </>
-            ) : (
-              <span className="faint">No Agent connected yet</span>
-            )}
-          </dd>
-
-          <dt>Attributes declared</dt>
-          <dd>{declared.length}</dd>
-        </dl>
-      </Card>
-
-      {quality?.reported_at ? (
-        <Card title="How complete your data is">
-          <p className="muted" style={{ marginTop: 0 }}>
-            From your Agent&rsquo;s last full refresh, {relative(quality.synced_at)}:{' '}
-            {BUCKET_LABELS[quality.customers_bucket ?? ''] ?? 'an unknown number of'} customers who
-            agreed to marketing. Only these percentages reach Oolix, and only you see them.
-          </p>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Attribute</th>
-                <th>Customers with a value</th>
-                <th>Values that could not be read</th>
-              </tr>
-            </thead>
-            <tbody>
-              {quality.attributes.map((q) => {
-                const def = attributes.find((t) => t.key === q.attribute_key);
-                return (
-                  <tr key={q.attribute_key}>
-                    <td>{def?.display_name ?? q.attribute_key}</td>
-                    <td>{q.coverage_pct}%</td>
-                    <td className="faint">{q.unreadable_pct}%</td>
+      <Card title="Attributes">
+        {declared.length === 0 ? (
+          <Empty>
+            Nothing published yet, so Buyers cannot find you.{' '}
+            {managed ? null : 'Connect your data, or publish by hand under Advanced below.'}
+          </Empty>
+        ) : (
+          <>
+            {managed ? (
+              <p className="muted" style={{ marginTop: 0 }}>
+                From your Agent&rsquo;s last refresh, {relative(quality?.synced_at ?? null)}:{' '}
+                {BUCKET_LABELS[quality?.customers_bucket ?? ''] ?? 'an unknown number of'} customers
+                who agreed to marketing.
+              </p>
+            ) : null}
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Attribute</th>
+                    {managed ? <th>Customers with a value</th> : null}
+                    {anyInexact ? <th>How exactly</th> : null}
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          <p className="faint small" style={{ marginBottom: 0 }}>
-            To raise these, answer the unknown values on your Agent&rsquo;s setup page.
-          </p>
-        </Card>
-      ) : null}
+                </thead>
+                <tbody>
+                  {declared.map((a) => {
+                    const q = coverage.get(a.attribute_key);
+                    return (
+                      <tr key={a.attribute_key}>
+                        <td>{nameOf(a.attribute_key)}</td>
+                        {managed ? (
+                          <td>
+                            {q ? `${q.coverage_pct}%` : '—'}
+                            {q && q.unreadable_pct > 0 ? (
+                              <span className="faint small"> · {q.unreadable_pct}% unreadable</span>
+                            ) : null}
+                          </td>
+                        ) : null}
+                        {anyInexact ? (
+                          <td className="muted">{precisionText(a.precision)}</td>
+                        ) : null}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="faint small" style={{ marginBottom: 0 }}>
+              {managed
+                ? 'Only these percentages reach Oolix, and only you see them. To raise them, answer the open questions on your Agent’s setup page.'
+                : 'Advertisers are matched only with customers who certainly fit their rules.'}
+            </p>
+          </>
+        )}
+      </Card>
 
       {listing ? (
         <Card title="Who can find you">
@@ -208,48 +194,50 @@ export default async function CapabilitiesPage() {
         </Card>
       ) : null}
 
-      <Card title="What Buyers can ask you">
-        {declared.length === 0 ? (
-          <Empty>Nothing published yet, so Buyers cannot find you.</Empty>
-        ) : (
-          <>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Attribute</th>
-                  <th>How exactly</th>
-                  <th>Operators</th>
-                </tr>
-              </thead>
-              <tbody>
-                {declared.map((a) => {
-                  const def = attributes.find((t) => t.key === a.attribute_key);
-                  return (
-                    <tr key={a.attribute_key}>
-                      <td>
-                        {def?.display_name ?? a.attribute_key}
-                        <div className="faint small">{a.attribute_key}</div>
-                      </td>
-                      <td>{precisionText(a.precision)}</td>
-                      <td className="faint">{a.operators.join(', ')}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            <p className="faint small" style={{ marginBottom: 0 }}>
-              Advertisers are matched only with customers who certainly fit their rules. Where you
-              hold an attribute less exactly -- ages as groups, say -- a narrower rule reaches none
-              of your customers, and the advertiser is told how to widen it.
-            </p>
-          </>
-        )}
-      </Card>
+      <details className="more" open={!managed || undefined}>
+        <summary>Advanced: publish by hand</summary>
+        <p className="faint small" style={{ marginTop: 0 }}>
+          For an Agent run from its own config file. An Agent set up on its setup page publishes by
+          itself.
+        </p>
 
-      {attributes.length === 0 ? (
-        <Notice tone="danger">The attribute taxonomy could not be loaded.</Notice>
-      ) : (
-        <Card title="Publish capabilities">
+        <dl className="kv">
+          <dt>Published</dt>
+          <dd>
+            {capabilities?.capability_version ? (
+              <>
+                version {capabilities.capability_version}
+                <span className="faint small"> · {relative(capabilities.published_at)}</span>
+              </>
+            ) : (
+              <span className="faint">not yet</span>
+            )}
+          </dd>
+          <dt>Mapping version</dt>
+          <dd>
+            {capabilities?.mapping_version ?? <span className="faint">not declared</span>}
+            <span className="faint small"> · must match your Agent&apos;s setting</span>
+          </dd>
+          <dt>Agent</dt>
+          <dd>
+            {agent ? (
+              <>
+                <StatusBadge status={agent.status} />
+                <span className="faint small">
+                  {' '}
+                  {agent.agent_version ?? 'unknown version'} · last heard from{' '}
+                  {relative(agent.last_heartbeat_at)}
+                </span>
+              </>
+            ) : (
+              <span className="faint">none connected</span>
+            )}
+          </dd>
+        </dl>
+
+        {attributes.length === 0 ? (
+          <Notice tone="danger">The attribute list could not be loaded.</Notice>
+        ) : (
           <CapabilitiesForm
             attributes={attributes}
             selectedKeys={declaredKeys}
@@ -257,8 +245,8 @@ export default async function CapabilitiesPage() {
             channels={capabilities?.channels ?? ['PARTNER_WEB']}
             mappingVersion={capabilities?.mapping_version ?? null}
           />
-        </Card>
-      )}
+        )}
+      </details>
     </Shell>
   );
 }

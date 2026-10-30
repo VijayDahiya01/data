@@ -73,6 +73,9 @@ services:
       OOLIX_IMPORT_FOLDER: /data/import
       # Optional: choose the setup page password yourself (12+ characters).
       OOLIX_SETUP_PASSWORD: ${OOLIX_SETUP_PASSWORD:-}
+      # The one-time code from the portal's install command. With it the Agent
+      # registers itself as it starts; without it, paste a code on the setup page.
+      OOLIX_BOOTSTRAP_TOKEN: ${OOLIX_BOOTSTRAP_TOKEN:-}
     volumes:
       - agent-state:/var/lib/oolix-agent
       - secrets:/run/oolix:ro

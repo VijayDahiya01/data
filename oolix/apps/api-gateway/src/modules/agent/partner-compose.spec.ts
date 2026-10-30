@@ -39,6 +39,8 @@ describe('Partner Connect Compose bundle', () => {
     expect(agent.ports).toContain('127.0.0.1:8083:8083');
     // Interpolation is left for Docker Compose, not eaten by the template.
     expect(out).toContain('${OOLIX_SETUP_PASSWORD:-}');
+    // The portal's install command sets it, and the Agent registers itself.
+    expect(out).toContain('${OOLIX_BOOTSTRAP_TOKEN:-}');
   });
 });
 
