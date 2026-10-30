@@ -651,12 +651,14 @@ export class AudienceService {
     const nextVersion = (current?.capabilityVersion ?? 0) + 1;
 
     const capability = await this.prisma.$transaction(async (tx) => {
-      if (current) {
-        await tx.partnerCapability.update({
-          where: { id: current.id },
-          data: { status: 'SUPERSEDED' },
-        });
-      }
+      // Every version still ACTIVE, not just the newest: one made active again
+      // by hand (the verify scripts restore Partner A's this way) would
+      // otherwise stay ACTIVE beside the new one, and the Partner would match
+      // every audience twice.
+      await tx.partnerCapability.updateMany({
+        where: { partnerOrgId: orgId, status: 'ACTIVE' },
+        data: { status: 'SUPERSEDED' },
+      });
       return tx.partnerCapability.create({
         data: {
           partnerOrgId: orgId,

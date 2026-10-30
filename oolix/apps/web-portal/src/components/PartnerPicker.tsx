@@ -66,7 +66,11 @@ export function PartnerPicker({
 
   const totalMajor = ticked.reduce((s, id) => s + (Number(budgets[id]) || 0), 0);
   const sending = ticked.length + alreadyAdded;
-  const fmt = new Intl.NumberFormat('en-IN', { style: 'currency', currency });
+  const fmt = new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 0,
+  });
 
   return (
     <ActionForm action={action}>
@@ -141,7 +145,9 @@ export function PartnerPicker({
             {sending === 0
               ? 'Tick at least one Partner.'
               : `Sending to ${sending} Partner${sending === 1 ? '' : 's'}` +
-                (ticked.length ? ` · ${fmt.format(totalMajor)} for the new ones` : '') +
+                (ticked.length
+                  ? ` · ${fmt.format(totalMajor)}${alreadyAdded ? ' more' : ' in total'}`
+                  : '') +
                 ` · paid ${payment}. Each decides on its own within 7 days.`}
           </p>
           <p className="faint small" style={{ marginTop: 0 }}>

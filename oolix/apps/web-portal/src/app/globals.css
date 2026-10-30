@@ -506,6 +506,12 @@ details.card[open] > summary::before {
   width: calc(100% + 2.5rem);
 }
 
+/* Bled to the card's bottom edge only when it ends the card: a note or a
+ * pager after it would otherwise be pulled up over the last row. */
+.card .table-wrap:not(:last-child) {
+  margin-bottom: 0.9rem;
+}
+
 table {
   width: 100%;
   border-collapse: separate;
@@ -1001,6 +1007,14 @@ button:disabled:hover,
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
+}
+
+/* Inputs are full width by default; a radio here is a mark, as in .check. */
+.choice-card input {
+  width: auto;
+  margin-top: 0.22rem;
+  accent-color: var(--accent);
+  flex: 0 0 auto;
 }
 
 .choice-card:has(input:checked) {

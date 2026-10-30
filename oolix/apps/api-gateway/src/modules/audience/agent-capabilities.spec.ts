@@ -35,9 +35,9 @@ function serviceFor(verificationStatus: string | null) {
   const recorded: Recorded = { created: [], superseded: [], audits: [] };
   const tx = {
     partnerCapability: {
-      update: async (args: unknown) => {
+      updateMany: async (args: unknown) => {
         recorded.superseded.push(args);
-        return {};
+        return { count: 1 };
       },
       create: async (args: { data: Record<string, unknown> }) => {
         recorded.created.push(args);
@@ -84,7 +84,12 @@ describe('AudienceService.publishCapabilitiesFromAgent', () => {
     const out = await service.publishCapabilitiesFromAgent(agent, input);
 
     expect(out.capability_version).toBe(2);
-    expect(recorded.superseded).toHaveLength(1);
+    // Every ACTIVE version of this Partner is retired, not only the newest:
+    // an older one made active again would otherwise stay beside the new one,
+    // and the Partner would match each audience twice.
+    expect(recorded.superseded).toEqual([
+      { where: { partnerOrgId: 'partner-1', status: 'ACTIVE' }, data: { status: 'SUPERSEDED' } },
+    ]);
     expect(recorded.created[0]?.data.partnerOrgId).toBe('partner-1');
     expect(recorded.audits[0]).toMatchObject({
       action: 'PARTNER_CAPABILITIES_PUBLISHED',

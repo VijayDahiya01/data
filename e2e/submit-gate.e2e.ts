@@ -39,7 +39,11 @@ test('a campaign with nobody to send to says so instead of just greying out Subm
   await page.getByLabel('Audience').selectOption(await options.first().getAttribute('value'));
   await page.getByRole('button', { name: /link audience/i }).click();
 
+  // Linked when either answer is on the page: Partners to tick, or nobody.
   const boxes = page.locator('input[name="partner_org_ids"]');
+  await expect(
+    boxes.first().or(page.getByText(/No Partner can reach this audience yet/i)),
+  ).toBeVisible({ timeout: 20_000 });
   if ((await boxes.count()) === 0) {
     // Nobody can reach it: said, with the Partners left out and why.
     await expect(page.getByText(/No Partner can reach this audience yet/i)).toBeVisible({

@@ -28,13 +28,13 @@ test('a session that dies mid-form sends the user to sign in, not to an error', 
   // Fill the form while signed in, so the submit itself is valid and the ONLY
   // thing wrong is the session.
   await page.getByLabel('Campaign name').fill(`Session expiry ${Date.now()}`);
-  await page.getByLabel(/what should this campaign achieve/i).selectOption('QUALIFIED_LEADS');
+  await page.getByRole('radio', { name: /qualified leads/i }).check();
 
   // Drop the session cookie without touching the page — exactly what an expired
   // or revoked session looks like to the next server action.
   await context.clearCookies();
 
-  await page.getByRole('button', { name: /create draft/i }).click();
+  await page.getByRole('button', { name: /continue to the ad/i }).click();
 
   await page.waitForURL(/\/login/, { timeout: 20_000 });
   await expect(page.getByText(/your session ended/i)).toBeVisible();

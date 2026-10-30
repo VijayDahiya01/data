@@ -46,8 +46,10 @@ async function switchOrg(page: Page, name: RegExp) {
 
 /** Every distinct in-app link the sidebar offers for the active organization. */
 async function navLinks(page: Page): Promise<string[]> {
+  // The rail first: a page can still be rendering, in dev mode especially.
+  await page.getByRole('navigation', { name: 'Primary' }).getByRole('link').first().waitFor();
   const hrefs = await page
-    .locator('nav a[href^="/"]')
+    .locator('nav[aria-label="Primary"] a[href^="/"]')
     .evaluateAll((links) => links.map((a) => a.getAttribute('href') ?? ''));
   return [...new Set(hrefs.filter((h) => h && !h.startsWith('//')))];
 }
