@@ -19,36 +19,38 @@ const PORTAL = process.env.PORTAL_URL ?? 'http://localhost:3000';
 test.describe('Portal', () => {
   test('a Buyer signs in and sees Buyer navigation, not Partner navigation', async ({ page }) => {
     await signIn(page, 'buyer.admin@example.test');
+    const rail = page.getByRole('navigation', { name: 'Primary' });
 
-    await expect(page.getByRole('navigation')).toContainText('Campaigns');
+    await expect(rail).toContainText('Campaigns');
     // v6 §18.1: Audiences is the Buyer's route to describing who they want.
-    await expect(page.getByRole('navigation')).toContainText('Audiences');
+    await expect(rail).toContainText('Audiences');
 
     // And it is the ONLY route. The prebuilt-segment path is no longer offered
     // as an alternative way to do the same job — §19 still exists in the API
     // for campaigns already running on it, but a Buyer is not asked to choose
     // between describing an audience and shopping through someone else's list.
-    await expect(page.getByRole('navigation').getByText(/Prebuilt/i)).toHaveCount(0);
+    await expect(rail.getByText(/Prebuilt|Segments/i)).toHaveCount(0);
 
     // §34: navigation is per persona. A Buyer must not be offered a Partner's
     // approval queue, and §4.2 means that follows from permissions rather than
-    // from a hard-coded role check.
-    await expect(page.getByRole('navigation')).not.toContainText('Campaign requests');
-    await expect(page.getByRole('navigation')).not.toContainText('Payouts');
+    // from a hard-coded role check. Asserted on where links lead, not on their
+    // words, which change.
+    await expect(rail.locator('a[href^="/partner"]')).toHaveCount(0);
+    await expect(rail).not.toContainText('Payouts');
+    // At most six items: twelve is what made the rail hard to read.
+    expect(await rail.locator('a.nav-link').count()).toBeLessThanOrEqual(6);
   });
 
   test('a Partner approver sees the review queue and no campaign builder', async ({ page }) => {
     await signIn(page, 'partner.approver@example.test');
+    const rail = page.getByRole('navigation', { name: 'Primary' });
 
-    await expect(page.getByRole('navigation')).toContainText('Campaign requests');
-    // §66: this role approves and nothing else. Both supply-publishing entries
+    await expect(rail.locator('a[href="/partner/requests"]')).toHaveCount(1);
+    // §66: this role approves and nothing else. Both supply-publishing pages
     // need `segment:manage`, which an approver does not hold.
-    //
-    // Named against the CURRENT labels: this asserted 'Audience segments', a
-    // label that no longer exists for any persona, so it had become a check
-    // that could not fail.
-    await expect(page.getByRole('navigation')).not.toContainText('Prebuilt segments');
-    await expect(page.getByRole('navigation')).not.toContainText('Audience capabilities');
+    await expect(rail.locator('a[href="/partner/capabilities"]')).toHaveCount(0);
+    await expect(rail.locator('a[href="/partner/segments"]')).toHaveCount(0);
+    await expect(rail.locator('a[href="/campaigns"]')).toHaveCount(0);
   });
 
   test('the access token never reaches the browser (§82)', async ({ page }) => {

@@ -20,7 +20,7 @@ const AUDIENCE = `Lifecycle ${Date.now()}`;
 test.describe.configure({ mode: 'serial' });
 
 test.describe('An audience as the Buyer sees it', () => {
-  test('draft becomes ready through Finalize, in Buyer words throughout', async ({ page }) => {
+  test('a draft is finished in one press, in Buyer words throughout', async ({ page }) => {
     await signIn(page, 'buyer.admin@example.test');
     await buildShoeAudience(page, PORTAL, AUDIENCE);
 
@@ -31,19 +31,19 @@ test.describe('An audience as the Buyer sees it', () => {
     await expect(page.getByText(/\bVersion \d|\bv\d\b/)).toHaveCount(0);
     await expect(page.getByText(/SUPERSEDED/i)).toHaveCount(0);
 
-    // The structure a Buyer reads down.
-    await expect(page.getByRole('heading', { name: 'Audience Conditions' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Partner Matches' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Reach Estimates' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Linked Campaigns' })).toBeVisible();
+    // The structure a Buyer reads down: who, then who can reach them.
+    await expect(page.getByRole('heading', { name: 'Who', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Partners who can reach them' })).toBeVisible();
 
     // Required conditions carry a tick; all four of this audience's do.
     await expect(page.locator('.rule-list .rule-tick')).toHaveCount(4);
 
-    // Finalize, with the wording that says what it actually does.
-    await expect(body).toContainText(/Finalizing locks these audience settings/i);
-    await page.getByRole('button', { name: /finalize audience/i }).click();
-    await expect(body).toContainText(/audience finalized|can be used in a campaign/i, {
+    // A draft says no Partner sees it, and finishing it is one press -- which
+    // also asks the Partners that can evaluate it, so there is no separate
+    // page of checkboxes for that.
+    await expect(body).toContainText(/no Partner sees it yet/i);
+    await page.getByRole('button', { name: /finish and find partners/i }).click();
+    await expect(page.getByRole('link', { name: /use in a campaign/i })).toBeVisible({
       timeout: 20_000,
     });
 
@@ -73,8 +73,13 @@ test.describe('An audience as the Buyer sees it', () => {
     const name = `All optional ${Date.now()}`;
     await buildShoeAudience(page, PORTAL, name);
 
-    // Reopen for editing and demote every condition to Optional.
-    await page.getByText('Edit audience conditions', { exact: true }).click();
+    // Reopen for editing and demote every condition to Optional. Required is
+    // the default, so each condition's choice is folded until opened.
+    await page.getByText('Edit conditions', { exact: true }).click();
+    const folds = page.locator('details.advanced');
+    for (let i = 0; i < (await folds.count()); i += 1) {
+      await folds.nth(i).evaluate((d) => ((d as HTMLDetailsElement).open = true));
+    }
     const optionalButtons = page.getByRole('button', { name: 'Optional', exact: true });
     const count = await optionalButtons.count();
     for (let i = 0; i < count; i += 1) {
@@ -83,9 +88,11 @@ test.describe('An audience as the Buyer sees it', () => {
     await page.getByRole('button', { name: /save rules/i }).click();
     await page.waitForLoadState('networkidle');
 
-    await expect(page.getByText(/No Required conditions are configured/i)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(page.getByText(/Nothing is required, so almost any Partner matches/i)).toBeVisible(
+      {
+        timeout: 20_000,
+      },
+    );
     // And the Required list really is empty, not merely captioned as such.
     await expect(page.locator('.rule-list .rule-tick')).toHaveCount(0);
   });

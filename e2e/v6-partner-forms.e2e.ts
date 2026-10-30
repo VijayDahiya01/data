@@ -13,6 +13,7 @@
  */
 import { expect, test } from '@playwright/test';
 import { buildShoeAudience } from './lib/audience-builder';
+import { linkAudience, startCampaign, submitToPartner } from './lib/campaign-builder';
 import { signIn, signOut } from './lib/auth';
 
 const PORTAL = process.env.PORTAL_URL ?? 'http://localhost:3000';
@@ -20,20 +21,18 @@ const PORTAL = process.env.PORTAL_URL ?? 'http://localhost:3000';
 const CAMPAIGN = `Change request flow ${Date.now()}`;
 const AUDIENCE = `Change request audience ${Date.now()}`;
 
-/** A tiny valid PNG, so the upload exercises §93.3's magic-byte check. */
-const PNG_1PX = Buffer.from(
-  '89504e470d0a1a0a0000000d4948445200000001000000010806000000' +
-    '1f15c4890000000a49444154789c6360000002000100ffff0300000600' +
-    '0557bfabd40000000049454e44ae426082',
-  'hex',
-);
-
 test.describe.configure({ mode: 'serial' });
 
 test.describe('v6 §5.1 publishing capabilities from the portal', () => {
   test('a Partner publishes capabilities and the version advances', async ({ page }) => {
     await signIn(page, 'partner.admin@example.test');
     await page.goto(`${PORTAL}/partner/capabilities`);
+
+    // Publishing by hand is for config-file Agents, folded under Advanced --
+    // open already unless an Agent publishes by itself. Opened either way.
+    await page
+      .locator('details', { hasText: 'Advanced: publish by hand' })
+      .evaluate((d) => ((d as HTMLDetailsElement).open = true));
 
     const before = await page.locator('dl.kv').innerText();
 
@@ -67,45 +66,14 @@ test.describe('v6 §10 / §41 requesting an audience-rule change', () => {
     await signIn(page, 'buyer.admin@example.test');
 
     await buildShoeAudience(page, PORTAL, AUDIENCE);
-    await page.getByRole('button', { name: /finalize audience/i }).click();
-    await expect(page.locator('body')).toContainText(
-      /audience finalized|can be used in a campaign/i,
-      {
-        timeout: 20_000,
-      },
-    );
+    await page.getByRole('button', { name: /finish and find partners/i }).click();
+    await expect(page.getByRole('link', { name: /use in a campaign/i })).toBeVisible({
+      timeout: 20_000,
+    });
 
-    await page.goto(`${PORTAL}/campaigns/new`);
-    await page.getByLabel('Campaign name').fill(CAMPAIGN);
-    await page.getByLabel(/what should this campaign achieve/i).selectOption('QUALIFIED_LEADS');
-    await page.getByRole('button', { name: /create draft/i }).click();
-    await page.waitForURL(/\/campaigns\/[0-9a-f-]+\/creative/, { timeout: 20_000 });
-    const url = page.url().replace(/\/creative$/, '');
-
-    await page.getByLabel('Headline').fill('Protect your trip');
-    await page.getByLabel('Body').fill('Travel insurance in minutes.');
-    await page
-      .getByLabel('Image file')
-      .setInputFiles({ name: 'creative.png', mimeType: 'image/png', buffer: PNG_1PX });
-    await page.getByRole('button', { name: /upload creative/i }).click();
-    await expect(page.getByText(/^v1$/).first()).toBeVisible({ timeout: 30_000 });
-
-    await page.goto(`${url}/audience`);
-    const option = page.locator('#audience_group_id option').filter({ hasText: AUDIENCE }).first();
-    await page.getByLabel('Audience').selectOption(await option.getAttribute('value'));
-    await page.getByRole('button', { name: /link audience/i }).click();
-    await expect(page.locator('body')).toContainText(/frozen/i, { timeout: 20_000 });
-
-    const match = page.locator('details', { hasText: 'Travel A' }).first();
-    await expect(match).toBeVisible({ timeout: 20_000 });
-    await match.click();
-    await match.getByLabel(/budget for this partner/i).fill('100000');
-    await match.getByRole('button', { name: /^Add /i }).click();
-    await expect(page.locator('table')).toBeVisible({ timeout: 20_000 });
-
-    await page.goto(`${url}/review`);
-    await page.getByRole('button', { name: /submit for partner review/i }).click();
-    await page.waitForURL(url, { timeout: 30_000 });
+    const url = await startCampaign(page, PORTAL, CAMPAIGN);
+    await linkAudience(page, url, AUDIENCE);
+    await submitToPartner(page, url, 'Travel A');
 
     // --- Partner pushes back on the RULES ----------------------------------
     await signOut(page);

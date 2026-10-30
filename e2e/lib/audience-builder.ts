@@ -37,12 +37,12 @@ export async function buildShoeAudience(page: Page, portal: string, name: string
   await add('Purchased within');
   await page.getByLabel('Purchased within value', { exact: true }).fill('90');
 
-  // Four required conditions is the floor, and all four default to Required.
-  await expect(page.getByText('4 required')).toBeVisible({ timeout: 10_000 });
+  // Four conditions is the floor (§20), counted as they are filled in; all four
+  // default to Required.
+  await expect(page.getByText('4 of 4')).toBeVisible({ timeout: 10_000 });
 
-  // "Save draft" rather than the primary CTA: the primary one goes straight to
-  // Partner matches, which is right for a Buyer but skips the audience page
-  // these tests need in order to publish the version.
+  // "Save draft" rather than the primary "Save and find Partners": the tests
+  // that use this read the draft back before finishing it.
   await page.getByRole('button', { name: /save draft/i }).click();
   await page.waitForURL(/\/audiences\/[0-9a-f-]+$/, { timeout: 20_000 });
 }

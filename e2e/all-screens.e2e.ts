@@ -55,7 +55,11 @@ async function navLinks(page: Page): Promise<string[]> {
 async function sweep(page: Page, routes: string[]) {
   expect(routes.length, 'the sidebar offered no links at all').toBeGreaterThan(0);
 
-  for (const route of routes) {
+  // A rail item's other pages are offered as tabs on it, so the tabs found on
+  // each page are swept as well.
+  const queue = [...routes];
+  const seen = new Set(queue);
+  for (let route = queue.shift(); route !== undefined; route = queue.shift()) {
     const response = await page.goto(`${PORTAL}${route}`, { waitUntil: 'domcontentloaded' });
     const status = response?.status();
 
@@ -75,6 +79,16 @@ async function sweep(page: Page, routes: string[]) {
     const html = await page.content();
     expect(html, `${route} leaked partner_user_id`).not.toContain('partner_user_id');
     expect(html, `${route} leaked a fixture identity`).not.toMatch(/U123|U456/);
+
+    const tabs = await page
+      .locator('nav[aria-label="Section"] a[href^="/"]')
+      .evaluateAll((links) => links.map((a) => a.getAttribute('href') ?? ''));
+    for (const tab of tabs) {
+      if (tab && !seen.has(tab)) {
+        seen.add(tab);
+        queue.push(tab);
+      }
+    }
   }
 }
 
@@ -122,17 +136,22 @@ test.describe('All screens, as the all-access user', () => {
 
     // As the Buyer: a campaign builder and the audience library, no approval
     // queue. v6 §18.1 makes Audiences the Buyer's primary route.
-    await expect(page.getByRole('navigation')).toContainText('Campaigns');
-    await expect(page.getByRole('navigation')).toContainText('Audiences');
+    const rail = page.getByRole('navigation', { name: 'Primary' });
+    await expect(rail).toContainText('Campaigns');
+    await expect(rail).toContainText('Audiences');
+    await expect(rail.locator('a[href="/partner/requests"]')).toHaveCount(0);
 
     await switchOrg(page, /Travel A/);
 
     // As the Partner: supply and approvals appear, because the PERMISSIONS
     // changed — not because the portal recognised a role name (§4.2).
-    await expect(page.getByRole('navigation')).toContainText('Campaign requests');
+    await expect(rail.locator('a[href="/partner/requests"]')).toHaveCount(1);
     // v6 §18.2: what a Partner publishes is now their CAPABILITIES — which
-    // standardized attributes they can evaluate — with prebuilt segments kept
-    // as the legacy path beside it.
-    await expect(page.getByRole('navigation')).toContainText('Audience capabilities');
+    // standardized attributes they can evaluate — under "Your data", where it
+    // leads.
+    await expect(rail.getByRole('link', { name: 'Your data' })).toHaveAttribute(
+      'href',
+      '/partner/capabilities',
+    );
   });
 });

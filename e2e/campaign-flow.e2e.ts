@@ -11,6 +11,7 @@
  */
 import { expect, test } from '@playwright/test';
 import { buildShoeAudience } from './lib/audience-builder';
+import { linkAudience, startCampaign, submitToPartner } from './lib/campaign-builder';
 import { signIn, signOut } from './lib/auth';
 
 const PORTAL = process.env.PORTAL_URL ?? 'http://localhost:3000';
@@ -19,49 +20,28 @@ const PORTAL = process.env.PORTAL_URL ?? 'http://localhost:3000';
 const CAMPAIGN = `Portal flow ${Date.now()}`;
 const AUDIENCE = `Portal audience ${Date.now()}`;
 
-/** A tiny valid PNG, so the upload exercises §93.3's magic-byte check for real. */
-const PNG_1PX = Buffer.from(
-  '89504e470d0a1a0a0000000d4948445200000001000000010806000000' +
-    '1f15c4890000000a49444154789c6360000002000100ffff0300000600' +
-    '0557bfabd40000000049454e44ae426082',
-  'hex',
-);
-
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Build and approve a campaign through the portal', () => {
   let campaignUrl: string;
 
-  test('a Buyer builds a campaign across the §40 steps', async ({ page }) => {
+  test('a Buyer builds a campaign in three screens', async ({ page }) => {
     await signIn(page, 'buyer.admin@example.test');
 
-    // --- Steps 1, 2 and 8 --------------------------------------------------
+    // §40.8 is there for outcome objectives, because §50 will not settle a
+    // campaign that never defined its outcome -- with a working default, under
+    // "More options".
     await page.goto(`${PORTAL}/campaigns/new`);
-    await expect(page.getByRole('heading', { name: 'New campaign' })).toBeVisible();
+    await page.getByRole('radio', { name: /qualified leads/i }).check();
+    await page.getByText('More options').click();
+    await expect(page.getByText(/which leads count/i)).toBeVisible();
+    // The three screens, numbered in order -- not §9's section numbers.
+    await expect(page.getByRole('list', { name: /campaign builder steps/i })).toHaveText(
+      /1\. Campaign\s*2\. Ad\s*3\. Partners & submit/,
+    );
 
-    await page.getByLabel('Campaign name').fill(CAMPAIGN);
-    await page.getByLabel(/what should this campaign achieve/i).selectOption('QUALIFIED_LEADS');
-
-    // §40.8 appears only for outcome objectives, because §50 will not settle a
-    // campaign that never defined its outcome.
-    await expect(page.getByText(/which lead states count as payable/i)).toBeVisible();
-
-    await page.getByRole('button', { name: /create draft/i }).click();
-
-    // Lands on step 7: §70 binds approval to a creative version, so one has to
-    // exist before a Partner can be asked anything.
-    await page.waitForURL(/\/campaigns\/[0-9a-f-]+\/creative/, { timeout: 20_000 });
-    campaignUrl = page.url().replace(/\/creative$/, '');
-
-    // --- Step 7 ------------------------------------------------------------
-    await page.getByLabel('Headline').fill('Protect your trip');
-    await page.getByLabel('Body').fill('Travel insurance in minutes.');
-    await page
-      .getByLabel('Image file')
-      .setInputFiles({ name: 'creative.png', mimeType: 'image/png', buffer: PNG_1PX });
-    await page.getByRole('button', { name: /upload creative/i }).click();
-
-    await expect(page.getByText(/^v1$/).first()).toBeVisible({ timeout: 30_000 });
+    // Screens 1 and 2: the campaign, then its ad.
+    campaignUrl = await startCampaign(page, PORTAL, CAMPAIGN);
 
     // --- v6 §9 step 3: build the audience ----------------------------------
     //
@@ -94,54 +74,21 @@ test.describe('Build and approve a campaign through the portal', () => {
     // looked like a deliberate choice and would have shipped unnoticed.
     await expect(page.getByText('13–120')).toHaveCount(0);
 
-    // §6: only a READY version can be linked to a campaign.
-    await page.getByRole('button', { name: /finalize audience/i }).click();
-    await expect(page.locator('body')).toContainText(
-      /audience finalized|can be used in a campaign/i,
-      {
-        timeout: 20_000,
-      },
-    );
+    // §6: only a READY version can be linked to a campaign. Finishing it also
+    // asks the Partners that can evaluate it for an estimate.
+    await page.getByRole('button', { name: /finish and find partners/i }).click();
+    await expect(page.getByRole('link', { name: /use in a campaign/i })).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByRole('heading', { name: /partners who can reach them/i })).toBeVisible();
 
-    // --- v6 §9 steps 3 to 7 -------------------------------------------------
-    await page.goto(`${campaignUrl}/audience`);
+    // --- Screen 3: the audience, the Partners, submit -----------------------
+    await linkAudience(page, campaignUrl, AUDIENCE);
 
-    // The option carries a version suffix, so match on the visible text rather
-    // than an exact label.
-    const audienceOption = page
-      .locator('#audience_group_id option')
-      .filter({ hasText: AUDIENCE })
-      .first();
-    await page.getByLabel('Audience').selectOption(await audienceOption.getAttribute('value'));
-    await page.getByRole('button', { name: /link audience/i }).click();
-    await expect(page.locator('body')).toContainText(/frozen/i, { timeout: 20_000 });
-
-    // A SPECIFIC Partner is chosen rather than whichever happens to be first.
-    // Both seeded Partners can evaluate this audience, and picking blindly
-    // sends the request to one of them at random -- correct behaviour (§67
-    // gives each Partner only its own request) but it would leave the approval
-    // half of this test unable to know who to sign in as.
-    const match = page.locator('details', { hasText: 'Travel A' }).first();
-    await expect(match).toBeVisible({ timeout: 20_000 });
-    await match.click();
-
-    await match.getByLabel(/budget for this partner/i).fill('100000');
-    await match.getByRole('button', { name: /^Add /i }).click();
-
-    // The Partner now appears in the selected-Partners table.
-    await expect(page.locator('table')).toBeVisible({ timeout: 20_000 });
-
-    // --- Step 9 ------------------------------------------------------------
-    await page.getByRole('link', { name: /continue to review/i }).click();
-    await page.waitForURL(/\/review$/, { timeout: 20_000 });
-
-    await expect(page.getByRole('heading', { name: CAMPAIGN })).toBeVisible();
-    await expect(page.getByText(/partner requests/i)).toBeVisible();
-
-    await page.getByRole('button', { name: /submit for partner review/i }).click();
-
-    // §40.9 freezes the version and starts each Partner's clock.
-    await page.waitForURL(campaignUrl, { timeout: 30_000 });
+    // A SPECIFIC Partner is kept rather than every one that can evaluate the
+    // audience: §67 gives each Partner only its own request, and the approval
+    // half of this test has to know who to sign in as.
+    await submitToPartner(page, campaignUrl, 'Travel A');
     await expect(page.locator('body')).toContainText(/partner review|review/i);
   });
 
