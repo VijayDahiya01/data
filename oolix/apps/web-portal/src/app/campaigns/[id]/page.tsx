@@ -89,7 +89,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
         }
         actions={
           isDraft ? (
-            <Link className="btn btn-primary" href={`/campaigns/${id}/review`}>
+            <Link className="btn btn-primary" href={`/campaigns/${id}/audience`}>
               Continue building
             </Link>
           ) : null

@@ -75,7 +75,10 @@ export function CapabilitiesForm({
                   <label key={a.key} className="check">
                     <input
                       type="checkbox"
-                      name="attributes"
+                      // Not "attributes": a control by that name shadows the
+                      // form element's own .attributes, which React reads
+                      // when hydrating, and every load logged a mismatch.
+                      name="attribute_keys"
                       // The operators ride along so a Partner cannot claim one
                       // the taxonomy does not define for that attribute.
                       value={`${a.key}|${a.operators.join(',')}`}

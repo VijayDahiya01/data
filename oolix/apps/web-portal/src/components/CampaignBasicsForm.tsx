@@ -1,33 +1,85 @@
 'use client';
 
 /**
- * Campaign builder steps 1, 2 and 8 (§40.1, §40.2, §40.8).
+ * Campaign builder screen 1: objective, basics, audience and the outcome
+ * definition (§40.1, §40.2, §40.8; v6 §9 step 3).
  *
- * These three are one form rather than three screens because the API creates
- * the draft in a single call, and because §40.8's lead definition is only
- * meaningful once the objective is known — splitting them would mean asking
- * for the objective, navigating away, and coming back to define its outcome.
+ * These are one form rather than several screens because the API creates the
+ * draft in a single call, and because §40.8's lead definition is only
+ * meaningful once the objective is known.
+ *
+ * A Buyer decides five things here: a name, the goal, who it is for, the
+ * budget and the dates. Everything else -- brand, landing page, category,
+ * purpose, currency, countries, what counts as a qualified lead -- has a
+ * working default under "More options". Showing all sixteen fields up front
+ * made the first screen read like a contract.
  *
  * The outcome fields appear only for objectives that settle on outcomes. §50
  * forbids paying a Partner on unverified clicks, so a CPQL campaign with no
  * definition of "qualified" has no settleable basis and the API rejects it.
+ *
+ * Nothing inside "More options" is `required`: a browser cannot focus an
+ * invalid field inside a closed <details>, and the submit would silently do
+ * nothing. Every one has a default, and the server answers for the rest.
  */
 import { useState } from 'react';
+import Link from 'next/link';
 import { createCampaign, type ActionState } from '@/lib/actions';
 import { ActionForm, FieldError, SubmitButton } from './FormState';
 
 export interface BrandOption {
   id: string;
   name: string;
+  category?: string;
   landing_domain: string;
 }
 
+export interface AudienceOption {
+  id: string;
+  name: string;
+}
+
 const OBJECTIVES = [
-  { value: 'QUALIFIED_LEADS', label: 'Qualified leads', outcome: true, landing: true },
-  { value: 'CONVERSIONS', label: 'Conversions', outcome: true, landing: true },
-  { value: 'CLICKS', label: 'Clicks / traffic', outcome: false, landing: true },
-  { value: 'AWARENESS', label: 'Awareness', outcome: false, landing: false },
+  {
+    value: 'QUALIFIED_LEADS',
+    label: 'Qualified leads',
+    hint: 'Pay for leads your CRM confirms',
+    outcome: true,
+    landing: true,
+  },
+  {
+    value: 'CONVERSIONS',
+    label: 'Conversions',
+    hint: 'Pay for completed sales',
+    outcome: true,
+    landing: true,
+  },
+  {
+    value: 'CLICKS',
+    label: 'Website visits',
+    hint: 'Send people to your site',
+    outcome: false,
+    landing: true,
+  },
+  {
+    value: 'AWARENESS',
+    label: 'Awareness',
+    hint: 'Be seen by the right people',
+    outcome: false,
+    landing: false,
+  },
 ] as const;
+
+/** Fields under "More options" -- open it when the server objects to one. */
+const MORE = [
+  'brand_id',
+  'landing_url',
+  'category',
+  'purpose_id',
+  'currency',
+  'geographies',
+  'lead_definition',
+];
 
 function isoLocal(daysFromNow: number): string {
   const d = new Date(Date.now() + daysFromNow * 86_400_000);
@@ -35,49 +87,125 @@ function isoLocal(daysFromNow: number): string {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 }
 
-export function CampaignBasicsForm({ brands }: { brands: BrandOption[] }) {
+/** "insurance" + QUALIFIED_LEADS -> "insurance_qualified_leads". */
+function purposeFor(category: string, objective: string): string {
+  const slug = category
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '');
+  return `${slug || 'general'}_${objective.toLowerCase()}`;
+}
+
+export function CampaignBasicsForm({
+  brands,
+  audiences,
+  audienceId,
+}: {
+  brands: BrandOption[];
+  audiences: AudienceOption[];
+  /** Preselected when the Buyer came from an audience's "Use in a campaign". */
+  audienceId?: string;
+}) {
   const [objective, setObjective] = useState<string>('QUALIFIED_LEADS');
   const [brandId, setBrandId] = useState<string>(brands[0]?.id ?? '');
+  const brand = brands.find((b) => b.id === brandId);
+  const [category, setCategory] = useState<string>(brand?.category ?? 'general');
+  // The purpose follows the goal and category until the Buyer writes their own.
+  const [purpose, setPurpose] = useState<string | null>(null);
 
   const selected = OBJECTIVES.find((o) => o.value === objective);
-  const brand = brands.find((b) => b.id === brandId);
 
   return (
     <ActionForm action={createCampaign}>
       {(state: ActionState) => (
         <>
-          <fieldset>
-            <legend>Step 1 · Objective</legend>
-            <div className="field">
-              <label htmlFor="objective">What should this campaign achieve?</label>
-              <select
-                id="objective"
-                name="objective"
-                value={objective}
-                onChange={(e) => setObjective(e.target.value)}
-              >
-                {OBJECTIVES.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-              <div className="field-hint">
-                {selected?.outcome
-                  ? 'Settles on outcomes your CRM confirms, so you will define what counts as qualified in step 8.'
-                  : 'Settles on delivery. A frequency cap and Partner approval still apply.'}
-              </div>
-            </div>
-          </fieldset>
+          <div className="field">
+            <label htmlFor="name">Campaign name</label>
+            <input id="name" name="name" required minLength={3} maxLength={120} />
+            <FieldError state={state} name="name" />
+          </div>
 
-          <fieldset>
-            <legend>Step 2 · Campaign basics</legend>
-
-            <div className="field">
-              <label htmlFor="name">Campaign name</label>
-              <input id="name" name="name" required minLength={3} maxLength={120} />
-              <FieldError state={state} name="name" />
+          <div className="field">
+            <label>Goal</label>
+            <div className="choice-cards">
+              {OBJECTIVES.map((o) => (
+                <label key={o.value} className="choice-card">
+                  <input
+                    type="radio"
+                    name="objective"
+                    value={o.value}
+                    checked={objective === o.value}
+                    onChange={() => setObjective(o.value)}
+                  />
+                  <span>
+                    <strong>{o.label}</strong>
+                    <span className="faint small">{o.hint}</span>
+                  </span>
+                </label>
+              ))}
             </div>
+          </div>
+
+          <div className="field">
+            <label htmlFor="audience_group_id">Who it is for</label>
+            <select id="audience_group_id" name="audience_group_id" defaultValue={audienceId ?? ''}>
+              <option value="">Choose later</option>
+              {audiences.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+            <div className="field-hint">
+              {audiences.length === 0 ? 'You have no audiences yet. ' : null}
+              <Link href="/audiences/new">Build a new audience</Link>
+            </div>
+          </div>
+
+          <div className="field-row">
+            <div className="field">
+              <label htmlFor="budget_major">Total budget</label>
+              <input
+                id="budget_major"
+                name="budget_major"
+                type="number"
+                min="1"
+                step="0.01"
+                required
+                defaultValue="500000"
+              />
+              <FieldError state={state} name="budget_major" />
+            </div>
+            <div className="field">
+              <label htmlFor="start_at">Starts</label>
+              <input
+                type="datetime-local"
+                id="start_at"
+                name="start_at"
+                /* Starts now, not tomorrow. A campaign dated a day ahead is
+                   approved, activated, and still serves nothing -- which reads
+                   as a broken integration rather than as a campaign that has
+                   not begun. */
+                required
+                defaultValue={isoLocal(0)}
+              />
+              <FieldError state={state} name="start_at" />
+            </div>
+            <div className="field">
+              <label htmlFor="end_at">Ends</label>
+              <input
+                type="datetime-local"
+                id="end_at"
+                name="end_at"
+                required
+                defaultValue={isoLocal(60)}
+              />
+              <FieldError state={state} name="end_at" />
+            </div>
+          </div>
+
+          <details className="more" open={MORE.some((f) => state.fieldErrors?.[f]) || undefined}>
+            <summary>More options</summary>
 
             <div className="field-row">
               <div className="field">
@@ -85,9 +213,12 @@ export function CampaignBasicsForm({ brands }: { brands: BrandOption[] }) {
                 <select
                   id="brand_id"
                   name="brand_id"
-                  required
                   value={brandId}
-                  onChange={(e) => setBrandId(e.target.value)}
+                  onChange={(e) => {
+                    setBrandId(e.target.value);
+                    const next = brands.find((b) => b.id === e.target.value);
+                    if (next?.category) setCategory(next.category);
+                  }}
                 >
                   {brands.map((b) => (
                     <option key={b.id} value={b.id}>
@@ -96,7 +227,7 @@ export function CampaignBasicsForm({ brands }: { brands: BrandOption[] }) {
                   ))}
                 </select>
                 <div className="field-hint">
-                  The Partner sees this when deciding whether to accept.
+                  Partners see it when they decide. <Link href="/connections">Add a brand</Link>
                 </div>
                 <FieldError state={state} name="brand_id" />
               </div>
@@ -106,79 +237,48 @@ export function CampaignBasicsForm({ brands }: { brands: BrandOption[] }) {
                 <input
                   id="category"
                   name="category"
-                  required
-                  placeholder="insurance"
-                  defaultValue="insurance"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
                 />
-                <div className="field-hint">Checked against each Partner&rsquo;s policy.</div>
+                <div className="field-hint">Checked against each Partner&rsquo;s rules.</div>
                 <FieldError state={state} name="category" />
               </div>
             </div>
 
+            {selected?.landing ? (
+              <div className="field">
+                <label htmlFor="landing_url">Landing page</label>
+                <input
+                  // Remounted per brand, so the default follows the brand.
+                  key={brandId}
+                  id="landing_url"
+                  name="landing_url"
+                  type="url"
+                  defaultValue={brand ? `https://${brand.landing_domain}/` : ''}
+                />
+                <div className="field-hint">
+                  On <code>{brand?.landing_domain ?? 'your verified domain'}</code>, with no
+                  personal data in the address.
+                </div>
+                <FieldError state={state} name="landing_url" />
+              </div>
+            ) : null}
+
             <div className="field">
-              <label htmlFor="purpose_id">Purpose</label>
+              <label htmlFor="purpose_id">What is this campaign for?</label>
               <input
                 id="purpose_id"
                 name="purpose_id"
-                required
-                placeholder="travel_insurance_offer"
-                defaultValue="travel_insurance_offer"
+                value={purpose ?? purposeFor(category, objective)}
+                onChange={(e) => setPurpose(e.target.value)}
               />
               <div className="field-hint">
-                Say what this campaign is for. Each Data Partner checks their customers&rsquo;
-                consent against that stated purpose — nobody is marked permanently
-                &ldquo;eligible&rdquo;.
+                Partners see this, and check their customers&rsquo; consent against it.
               </div>
               <FieldError state={state} name="purpose_id" />
             </div>
 
             <div className="field-row">
-              <div className="field">
-                <label htmlFor="start_at">Starts</label>
-                <input
-                  type="datetime-local"
-                  id="start_at"
-                  name="start_at"
-                  /* Starts now, not tomorrow. A campaign dated a day ahead is
-                     approved, activated, and still serves nothing — which reads
-                     as a broken integration rather than as a campaign that has
-                     not begun. Anyone planning ahead can move the date; nobody
-                     wants a default that guarantees silence on day one. */
-                  required
-                  defaultValue={isoLocal(0)}
-                />
-                <FieldError state={state} name="start_at" />
-              </div>
-              <div className="field">
-                <label htmlFor="end_at">Ends</label>
-                <input
-                  type="datetime-local"
-                  id="end_at"
-                  name="end_at"
-                  required
-                  defaultValue={isoLocal(60)}
-                />
-                <FieldError state={state} name="end_at" />
-              </div>
-            </div>
-
-            <div className="field-row">
-              <div className="field">
-                <label htmlFor="budget_major">Total budget</label>
-                <input
-                  id="budget_major"
-                  name="budget_major"
-                  type="number"
-                  min="1"
-                  step="0.01"
-                  required
-                  defaultValue="500000"
-                />
-                <div className="field-hint">
-                  The most this campaign may spend in total, across every Data Partner.
-                </div>
-                <FieldError state={state} name="budget_major" />
-              </div>
               <div className="field">
                 <label htmlFor="currency">Currency</label>
                 <select id="currency" name="currency" defaultValue="INR">
@@ -186,106 +286,75 @@ export function CampaignBasicsForm({ brands }: { brands: BrandOption[] }) {
                   <option value="USD">USD</option>
                   <option value="EUR">EUR</option>
                 </select>
-                <div className="field-hint">Fixed for the life of the campaign.</div>
               </div>
               <div className="field">
-                <label htmlFor="geographies">Geographies</label>
-                <input id="geographies" name="geographies" required defaultValue="IN" />
-                <div className="field-hint">Comma separated. Must overlap the segment.</div>
+                <label htmlFor="geographies">Countries</label>
+                <input id="geographies" name="geographies" defaultValue="IN" />
+                <div className="field-hint">Country codes, comma separated.</div>
                 <FieldError state={state} name="geographies" />
               </div>
             </div>
 
-            {selected?.landing ? (
-              <div className="field">
-                <label htmlFor="landing_url">Landing URL</label>
-                <input
-                  id="landing_url"
-                  name="landing_url"
-                  type="url"
-                  required
-                  defaultValue={brand ? `https://${brand.landing_domain}/quote` : ''}
-                />
-                <div className="field-hint">
-                  HTTPS, on <code>{brand?.landing_domain ?? 'your verified domain'}</code>, and with
-                  no personal data in the query string.
+            {selected?.outcome ? (
+              <fieldset>
+                <legend>What you pay for</legend>
+                <div className="field">
+                  <label>Which leads count</label>
+                  <label className="check">
+                    <input type="checkbox" name="qualified_statuses" value="VALID" />
+                    <span>
+                      <strong>Valid</strong> — reachable contact, not a duplicate
+                    </span>
+                  </label>
+                  <label className="check">
+                    <input
+                      type="checkbox"
+                      name="qualified_statuses"
+                      value="QUALIFIED"
+                      defaultChecked
+                    />
+                    <span>
+                      <strong>Qualified</strong> — confirmed interest
+                    </span>
+                  </label>
+                  <label className="check">
+                    <input type="checkbox" name="qualified_statuses" value="CONVERTED" />
+                    <span>
+                      <strong>Converted</strong> — bought
+                    </span>
+                  </label>
+                  <FieldError state={state} name="lead_definition" />
                 </div>
-                <FieldError state={state} name="landing_url" />
-              </div>
+
+                <div className="field-row">
+                  <div className="field">
+                    <label htmlFor="duplicate_window_days">Ignore repeats within (days)</label>
+                    <input
+                      id="duplicate_window_days"
+                      name="duplicate_window_days"
+                      type="number"
+                      min="1"
+                      max="365"
+                      defaultValue="30"
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="qualified_lead_rule">What makes a lead qualified?</label>
+                    <input
+                      id="qualified_lead_rule"
+                      name="qualified_lead_rule"
+                      maxLength={500}
+                      placeholder="Contacted and confirmed interest"
+                    />
+                  </div>
+                </div>
+              </fieldset>
             ) : null}
-          </fieldset>
-
-          {selected?.outcome ? (
-            <fieldset>
-              <legend>Step 8 · Lead and conversion definition</legend>
-              <p className="faint" style={{ marginTop: 0 }}>
-                This is what a Partner is paid on, so it is agreed before the campaign runs rather
-                than argued about afterwards.
-              </p>
-
-              <div className="field">
-                <label>Which lead states count as payable?</label>
-                <label className="check">
-                  <input type="checkbox" name="qualified_statuses" value="VALID" />
-                  <span>
-                    <strong>Valid</strong> — reachable contact, not a duplicate
-                  </span>
-                </label>
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    name="qualified_statuses"
-                    value="QUALIFIED"
-                    defaultChecked
-                  />
-                  <span>
-                    <strong>Qualified</strong> — confirmed interest and product qualification
-                  </span>
-                </label>
-                <label className="check">
-                  <input type="checkbox" name="qualified_statuses" value="CONVERTED" />
-                  <span>
-                    <strong>Converted</strong> — policy purchased or transaction completed
-                  </span>
-                </label>
-                <FieldError state={state} name="lead_definition" />
-              </div>
-
-              <div className="field-row">
-                <div className="field">
-                  <label htmlFor="duplicate_window_days">Duplicate window (days)</label>
-                  <input
-                    id="duplicate_window_days"
-                    name="duplicate_window_days"
-                    type="number"
-                    min="1"
-                    max="365"
-                    defaultValue="30"
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="qualified_lead_rule">What makes a lead qualified?</label>
-                  <input
-                    id="qualified_lead_rule"
-                    name="qualified_lead_rule"
-                    maxLength={500}
-                    placeholder="Contacted and confirmed travel in the next 90 days"
-                  />
-                </div>
-              </div>
-
-              <p className="faint" style={{ marginBottom: 0 }}>
-                Your CRM reports these against an opaque click token. It never receives, and never
-                needs, a Partner&rsquo;s customer identifier.
-              </p>
-            </fieldset>
-          ) : null}
+          </details>
 
           <div className="btn-row">
-            <SubmitButton pendingLabel="Creating draft…">
-              Create draft and choose audiences
-            </SubmitButton>
-            <span className="faint">Steps 3–7 come next. Nothing is submitted yet.</span>
+            <SubmitButton pendingLabel="Saving…">Continue to the ad</SubmitButton>
+            <span className="faint">Nothing is sent to anyone yet.</span>
           </div>
         </>
       )}

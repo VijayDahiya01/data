@@ -19,18 +19,20 @@
  *   rule reachable.
  *
  *   Required vs optional is a business decision, not a checkbox. It decides
- *   which Data Partners can serve the campaign at all, so it is stated in full
- *   on every condition.
+ *   which Data Partners can serve the campaign at all, so every condition says
+ *   which it is, and opening that line explains the choice in full. Required
+ *   is the default, so it stays folded until someone wants otherwise.
+ *
+ * Location is one more condition rather than a section of its own, and the
+ * conditions Buyers reach for most are one click each.
  */
 import { useMemo, useState } from 'react';
 import type { ActionState } from '@/lib/actions';
 import {
   CATEGORY_LABELS,
   CATEGORY_ORDER,
-  GEOGRAPHY_KEYS,
   IMPORTANCE,
   defaultValueFor,
-  describeRule,
   importanceLabel,
   isRuleComplete,
   operatorFor,
@@ -41,6 +43,24 @@ import {
 import { ActionForm, FieldError, SubmitButton } from './FormState';
 
 export type { TaxonomyAttribute };
+
+/**
+ * §20: an audience has at least four conditions. Fewer matches almost every
+ * Partner and tells a Data Partner little about what it is being asked to
+ * serve. The API enforces it; the builder counts towards it.
+ */
+const MIN_CONDITIONS = 4;
+
+/** What Buyers ask for most, one click each. Everything else is under "+ Add condition". */
+const QUICK_ADD = [
+  'age',
+  'gender',
+  'city',
+  'state_region',
+  'purchase_recency_days',
+  'payment_method',
+  'loyalty_tier',
+];
 
 export interface ExistingRule {
   attribute: string;
@@ -376,7 +396,7 @@ export function AudienceBuilder({
   initialName,
   initialDescription,
   showIdentity = true,
-  submitLabel = 'Find Data Partners',
+  submitLabel = 'Save and find Partners',
 }: {
   action: (prev: ActionState, fd: FormData) => Promise<ActionState>;
   attributes: TaxonomyAttribute[];
@@ -414,24 +434,12 @@ export function AudienceBuilder({
   // An attribute already in the audience is not offered again, so a duplicate
   // condition is impossible to create rather than merely rejected afterwards.
   const used = new Set(rows.map((r) => r.attribute));
-
-  const geographyRows = rows
-    .map((r, i) => ({ row: r, index: i }))
-    .filter(({ row }) => (GEOGRAPHY_KEYS as readonly string[]).includes(row.attribute));
-  const conditionRows = rows
-    .map((r, i) => ({ row: r, index: i }))
-    .filter(({ row }) => !(GEOGRAPHY_KEYS as readonly string[]).includes(row.attribute));
-
-  const geographyAvailable = attributes.filter(
-    (a) => (GEOGRAPHY_KEYS as readonly string[]).includes(a.key) && !used.has(a.key),
-  );
-  const conditionAvailable = attributes.filter(
-    (a) => !(GEOGRAPHY_KEYS as readonly string[]).includes(a.key) && !used.has(a.key),
+  const available = attributes.filter((a) => !used.has(a.key));
+  const quick = QUICK_ADD.map((k) => byKey.get(k)).filter(
+    (a): a is TaxonomyAttribute => a !== undefined && !used.has(a.key),
   );
 
   const complete = rows.filter((r) => isRuleComplete(byKey.get(r.attribute), r.value));
-  const requiredCount = complete.filter((r) => r.required).length;
-  const optionalCount = complete.length - requiredCount;
   const incomplete = rows.length - complete.length;
 
   // Only complete conditions are submitted. A half-filled row is a Buyer who
@@ -446,7 +454,7 @@ export function AudienceBuilder({
     })),
   );
 
-  const renderRow = ({ row, index }: { row: Row; index: number }, ordinal: number) => {
+  const renderRow = (row: Row, index: number) => {
     const attr = byKey.get(row.attribute);
     if (!attr) return null;
 
@@ -454,7 +462,7 @@ export function AudienceBuilder({
       <li key={row.attribute} className="condition">
         <div className="condition-head">
           <span className="condition-name">
-            <span className="condition-n">{ordinal}</span>
+            <span className="condition-n">{index + 1}</span>
             {attr.display_name}
           </span>
           <button
@@ -472,7 +480,15 @@ export function AudienceBuilder({
           <ValueEditor attr={attr} value={row.value} onChange={(v) => patch(index, { value: v })} />
         </div>
 
-        <RequirementControl row={row} onChange={(p) => patch(index, p)} />
+        {/* Required is the default and almost always what is meant. Making a
+            condition optional -- and ranking optional ones -- is still a
+            click away, said in full when opened. */}
+        <details className="advanced">
+          <summary>
+            {row.required ? 'Required' : `Optional · ${importanceLabel(row.weight).toLowerCase()}`}
+          </summary>
+          <RequirementControl row={row} onChange={(p) => patch(index, p)} />
+        </details>
       </li>
     );
   };
@@ -484,20 +500,61 @@ export function AudienceBuilder({
           <input type="hidden" name="rules" value={payload} />
 
           {showIdentity ? (
-            <fieldset>
-              <legend>Audience basics</legend>
-              <div className="field">
-                <label htmlFor="name">Audience name</label>
-                <input
-                  id="name"
-                  name="name"
-                  required
-                  minLength={3}
-                  defaultValue={initialName}
-                  placeholder="Urban Shoe Shoppers"
-                />
-                <FieldError state={state} name="name" />
+            <div className="field">
+              <label htmlFor="name">Audience name</label>
+              <input
+                id="name"
+                name="name"
+                required
+                minLength={3}
+                defaultValue={initialName}
+                placeholder="Young shoe shoppers in Mumbai"
+              />
+              <FieldError state={state} name="name" />
+            </div>
+          ) : null}
+
+          <div className="field">
+            <label>Who do you want to reach?</label>
+            {quick.length > 0 ? (
+              <div className="chips" style={{ marginBottom: '0.75rem' }}>
+                {quick.map((a) => (
+                  <button type="button" key={a.key} className="chip" onClick={() => add(a.key)}>
+                    + {a.display_name}
+                  </button>
+                ))}
               </div>
+            ) : null}
+
+            {rows.length > 0 ? (
+              <ol className="conditions">{rows.map((r, i) => renderRow(r, i))}</ol>
+            ) : null}
+
+            <AddCondition available={available} onAdd={add} />
+          </div>
+
+          <p className={complete.length < MIN_CONDITIONS ? 'counter counter-short' : 'counter'}>
+            <strong>
+              {Math.min(complete.length, MIN_CONDITIONS)} of {MIN_CONDITIONS}
+            </strong>{' '}
+            conditions
+            {complete.length < MIN_CONDITIONS
+              ? ' — a Partner needs at least four to know who to show your ad to.'
+              : complete.length > MIN_CONDITIONS
+                ? ` (${complete.length} in all)`
+                : ''}
+            {incomplete > 0 ? (
+              <span className="faint"> · {incomplete} not filled in yet, left out</span>
+            ) : null}
+          </p>
+          <p className="faint small">
+            People must match every required condition. Several values in one condition means any of
+            them.
+          </p>
+
+          {showIdentity ? (
+            <details className="more">
+              <summary>Add a description</summary>
               <div className="field">
                 <label htmlFor="description">Description</label>
                 <input
@@ -507,82 +564,8 @@ export function AudienceBuilder({
                   placeholder="Young online shoppers likely to buy footwear"
                 />
               </div>
-            </fieldset>
+            </details>
           ) : null}
-
-          <fieldset>
-            <legend>Location</legend>
-            <p className="field-hint">Optional. Leave blank to reach everywhere.</p>
-            {geographyRows.length > 0 ? (
-              <ol className="conditions">{geographyRows.map((r, i) => renderRow(r, i + 1))}</ol>
-            ) : null}
-            <AddCondition available={geographyAvailable} onAdd={add} />
-          </fieldset>
-
-          <fieldset>
-            <legend>Audience conditions</legend>
-            <p className="field-hint">Describe the people you want to reach.</p>
-
-            {conditionRows.length === 0 ? (
-              <p className="faint">Add at least four conditions.</p>
-            ) : (
-              <ol className="conditions">
-                {conditionRows.map((r, i) => renderRow(r, geographyRows.length + i + 1))}
-              </ol>
-            )}
-
-            <AddCondition available={conditionAvailable} onAdd={add} />
-
-            <div className="notice notice-info">
-              Matches people who meet <strong>all</strong> Required conditions. Picking several
-              values in one condition means <strong>any</strong> of them.
-            </div>
-          </fieldset>
-
-          <fieldset>
-            <legend>Summary</legend>
-            {complete.length === 0 ? (
-              <p className="faint">Nothing to summarise yet.</p>
-            ) : (
-              <>
-                <div className="summary-counts">
-                  <span>
-                    <strong>{requiredCount}</strong> required
-                  </span>
-                  <span>
-                    <strong>{optionalCount}</strong> optional
-                  </span>
-                  {incomplete > 0 ? (
-                    <span className="faint">{incomplete} unfinished, not included</span>
-                  ) : null}
-                </div>
-
-                <ul className="summary-list">
-                  {complete
-                    .filter((r) => r.required)
-                    .map((r) => (
-                      <li key={r.attribute}>
-                        <span className="tick">✓</span>
-                        {describeRule(byKey.get(r.attribute), r.value, r.attribute)}
-                      </li>
-                    ))}
-                  {complete
-                    .filter((r) => !r.required)
-                    .map((r) => (
-                      <li key={r.attribute} className="faint">
-                        <span className="tick">•</span>
-                        {describeRule(byKey.get(r.attribute), r.value, r.attribute)}
-                        <span className="faint small"> · {importanceLabel(r.weight)}</span>
-                      </li>
-                    ))}
-                </ul>
-              </>
-            )}
-
-            {complete.length < 4 ? (
-              <div className="notice notice-warn">Add at least four conditions to continue.</div>
-            ) : null}
-          </fieldset>
 
           <div className="btn-row">
             <SubmitButton pendingLabel="Saving…">{submitLabel}</SubmitButton>

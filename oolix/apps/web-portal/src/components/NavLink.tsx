@@ -10,31 +10,31 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { NavIcon } from './NavIcon';
+import { bestMatch } from './paths';
 
 export function NavLink({
   href,
+  paths,
   siblings,
   children,
 }: {
   href: string;
-  /** Every href the navigation offers, so the most specific one can win. */
+  /** The pages this link covers: its own, or those of its tabs. */
+  paths: string[];
+  /** Every path the navigation covers, so the most specific one can win. */
   siblings: string[];
   children: ReactNode;
 }) {
   const pathname = usePathname();
 
-  // The MOST SPECIFIC matching link wins, and only that one.
+  // The MOST SPECIFIC matching path wins, and only the link that covers it is
+  // current.
   //
   // A plain prefix test lights up every ancestor: on /partner/requests both
-  // "Dashboard" (/partner) and "Campaign requests" (/partner/requests) matched,
-  // so the rail showed two current pages and neither could be trusted. Asking
-  // whether any sibling is a longer match settles it without per-item flags.
-  const matches = (candidate: string) =>
-    pathname === candidate || (candidate !== '/' && pathname.startsWith(`${candidate}/`));
-
-  const active =
-    matches(href) &&
-    !siblings.some((other) => other !== href && other.length > href.length && matches(other));
+  // "Home" (/partner) and "Campaigns" (/partner/requests) matched, so the rail
+  // showed two current pages and neither could be trusted.
+  const best = bestMatch(pathname, siblings);
+  const active = best !== undefined && paths.includes(best);
 
   return (
     <Link href={href} className="nav-link" aria-current={active ? 'page' : undefined}>

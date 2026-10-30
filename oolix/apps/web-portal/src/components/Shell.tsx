@@ -8,17 +8,24 @@
  */
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { navigationFor, restrictionNotice } from '@/lib/navigation';
+import { itemPaths, navigationFor, restrictionNotice } from '@/lib/navigation';
 import type { MeContext } from '@/lib/context';
 import { OrgSwitcher } from './OrgSwitcher';
 import { NavLink } from './NavLink';
+import { SectionTabs } from './SectionTabs';
 
 export function Shell({ ctx, children }: { ctx: MeContext; children: ReactNode }) {
   const groups = navigationFor(ctx);
   const notice = restrictionNotice(ctx);
-  // Every href on offer, so each link can tell whether a more specific one
-  // also matches the current path.
-  const allHrefs = groups.flatMap((g) => g.items.map((i) => i.href));
+  // Every path the rail covers, so each link can tell whether a more specific
+  // one also matches the current path.
+  const allPaths = groups.flatMap((g) => g.items.flatMap(itemPaths));
+  // A heading per persona only helps someone who has more than one.
+  const labelled = groups.filter((g) => g.persona).length > 1;
+  const tabbed = groups
+    .flatMap((g) => g.items)
+    .filter((i) => (i.tabs?.length ?? 0) > 1)
+    .map((i) => ({ tabs: i.tabs ?? [] }));
 
   return (
     <div className="shell">
@@ -33,10 +40,12 @@ export function Shell({ ctx, children }: { ctx: MeContext; children: ReactNode }
         <OrgSwitcher ctx={ctx} />
 
         {groups.map((group) => (
-          <div className="nav-group" key={group.persona}>
-            <div className="nav-group-label">{group.persona}</div>
+          <div className="nav-group" key={group.persona || 'settings'}>
+            {labelled && group.persona ? (
+              <div className="nav-group-label">{group.persona}</div>
+            ) : null}
             {group.items.map((item) => (
-              <NavLink key={item.href} href={item.href} siblings={allHrefs}>
+              <NavLink key={item.href} href={item.href} paths={itemPaths(item)} siblings={allPaths}>
                 {item.label}
               </NavLink>
             ))}
@@ -47,7 +56,6 @@ export function Shell({ ctx, children }: { ctx: MeContext; children: ReactNode }
           <div className="rail-identity">
             <strong>{ctx.user.name}</strong>
             <span>{ctx.user.email}</span>
-            <Link href="/account">Change password</Link>
           </div>
           <form action="/api/auth/logout" method="post">
             <button type="submit">Sign out</button>
@@ -57,6 +65,7 @@ export function Shell({ ctx, children }: { ctx: MeContext; children: ReactNode }
 
       <main className="content">
         {notice ? <div className="notice notice-warn">{notice}</div> : null}
+        <SectionTabs items={tabbed} />
         {children}
       </main>
     </div>

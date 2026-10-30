@@ -346,6 +346,7 @@ pre.code-block {
   font-weight: 550;
 }
 .rail-identity span {
+  display: block;
   color: var(--rail-text);
   word-break: break-all;
 }
@@ -972,6 +973,124 @@ button:disabled:hover,
   color: var(--ok);
   border-color: transparent;
   background: var(--ok-soft);
+}
+
+/* --- choice cards and "More options" -----------------------------------------
+ * A handful of mutually exclusive choices shown whole (the campaign goal), and
+ * the closed section that holds everything with a working default. */
+
+.choice-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.6rem;
+}
+
+.choice-card {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  padding: 0.7rem 0.8rem;
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  font-weight: 400;
+}
+
+.choice-card > span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.choice-card:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+details.more {
+  margin: 0.4rem 0 1rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+details.more > summary {
+  cursor: pointer;
+  font-weight: 550;
+  color: var(--text-muted);
+}
+
+details.more[open] > summary {
+  margin-bottom: 0.8rem;
+}
+
+/* The audience builder's "3 of 4 conditions", and each condition's folded
+ * Required/Optional line. */
+.counter {
+  margin: 0.9rem 0 0.2rem;
+  color: var(--ok);
+}
+
+.counter-short {
+  color: var(--warn);
+}
+
+details.advanced {
+  margin-top: 0.5rem;
+}
+
+details.advanced > summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.plain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.plain-list > li {
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.plain-list > li:last-child {
+  border-bottom: 0;
+}
+
+/* --- section tabs ------------------------------------------------------------
+ * Sibling pages of one rail item (SectionTabs): an underline row, quieter than
+ * buttons, so the page's own primary action stays the strongest thing on it. */
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem;
+  margin: -0.35rem 0 1.4rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  padding: 0.5rem 0.8rem;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+
+.tab:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.tab[aria-current='page'] {
+  color: var(--accent-hover);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
 }
 
 /* --- login ---------------------------------------------------------------- */

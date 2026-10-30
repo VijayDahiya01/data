@@ -1,45 +1,32 @@
 /**
- * The campaign builder, as v6 §9's ten steps.
+ * The campaign builder's three screens.
  *
- * v6 renumbers the wizard around the inverted flow: audience first, then the
- * Partners who can evaluate it. Step 3 is no longer "audience discovery" but
- * "choose/create Audience Group", and Partner matching becomes its own step
- * between choosing an audience and choosing who serves it.
+ * v6 §9 describes ten steps. They are all still here, grouped by what a Buyer
+ * does rather than numbered by section: §9's numbers, shown out of order
+ * (1, 2, 9, 8, 3...), told nobody where they were.
  *
- * The portal groups them onto four screens because the API creates a draft in
- * one call, attaches Partner requests in another, and submits in a third. The
- * labels stay faithful to §9 so a reader of the spec can find where they are.
+ *   1 Campaign            §9 steps 1, 2, 3 and 9: objective, basics, the
+ *                         audience and the lead definition
+ *   2 Ad                  step 8
+ *   3 Partners & submit   steps 4-7 and 10: matches, selection, channels,
+ *                         budget, review and submit
+ *
+ * The ad comes before the Partners deliberately. §70 binds a Partner's approval
+ * to a specific creative VERSION and its content hash, so a creative has to
+ * exist before a request can be made to a Partner at all.
  */
-const STEPS = [
-  { n: 1, label: 'Objective', screen: 1 },
-  { n: 2, label: 'Campaign basics', screen: 1 },
-  { n: 9, label: 'Lead definition', screen: 1 },
-  // Step 8 is taken out of numerical order deliberately. §70 binds a Partner's
-  // approval to a specific creative VERSION and its content hash, so a
-  // creative has to exist before a request can be made to a Partner at all.
-  { n: 8, label: 'Creative', screen: 2 },
-  { n: 3, label: 'Audience', screen: 3 },
-  { n: 4, label: 'Partner matches', screen: 3 },
-  { n: 5, label: 'Partner selection', screen: 3 },
-  { n: 6, label: 'Channel & placement', screen: 3 },
-  { n: 7, label: 'Budget allocation', screen: 3 },
-  { n: 10, label: 'Review & submit', screen: 4 },
-];
+const STEPS = ['Campaign', 'Ad', 'Partners & submit'];
 
 export function WizardSteps({ current }: { current: number }) {
   return (
     <ol className="steps" aria-label="Campaign builder steps">
-      {STEPS.map((s) => {
-        const cls =
-          s.screen === current
-            ? 'step step-current'
-            : s.screen < current
-              ? 'step step-done'
-              : 'step';
+      {STEPS.map((label, i) => {
+        const n = i + 1;
+        const cls = n === current ? 'step step-current' : n < current ? 'step step-done' : 'step';
         return (
-          <li key={s.n}>
-            <span className={cls}>
-              {s.n}. {s.label}
+          <li key={label}>
+            <span className={cls} aria-current={n === current ? 'step' : undefined}>
+              {n}. {label}
             </span>
           </li>
         );

@@ -43,7 +43,7 @@ export default async function AudiencesPage() {
         title="Audiences"
         lead="Describe who you want to reach. Oolix finds the Data Partners who can evaluate it."
         actions={
-          <Link className="btn-primary" href="/audiences/new">
+          <Link className="btn btn-primary" href="/audiences/new">
             New audience
           </Link>
         }
@@ -56,7 +56,7 @@ export default async function AudiencesPage() {
             who can reach them.
           </Empty>
           <p>
-            <Link className="btn-primary" href="/audiences/new">
+            <Link className="btn btn-primary" href="/audiences/new">
               Build your first audience
             </Link>
           </p>

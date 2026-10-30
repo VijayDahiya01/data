@@ -127,9 +127,49 @@ export async function createAudience(_prev: ActionState, fd: FormData): Promise<
   revalidatePath('/audiences');
 
   // The point of describing an audience is to find out who can serve it, so
-  // that is where the primary action leads. "Save draft" stops at the audience
-  // itself for a Buyer who is still composing.
-  redirect(str(fd, 'intent') === 'draft' ? `/audiences/${id}` : `/audiences/${id}/matches`);
+  // the primary action finishes it and asks every Partner that can evaluate it
+  // for an estimate (§8.1) -- the Buyer arrives at the answers rather than at
+  // a page of checkboxes for requesting them. "Save draft" stops at the
+  // audience for a Buyer who is still composing.
+  if (str(fd, 'intent') !== 'draft') {
+    try {
+      await api(`/v1/audiences/${id}/publish`, { method: 'POST', body: {} });
+      await askCompatiblePartners(id);
+    } catch {
+      // The audience is saved either way; its page shows what is left to do.
+    }
+  }
+  redirect(`/audiences/${id}`);
+}
+
+/** "Ask for estimates" on the audience page: every compatible Partner not yet asked. */
+export async function requestAllEstimates(
+  audienceId: string,
+  _prev: ActionState,
+  _fd: FormData,
+): Promise<ActionState> {
+  try {
+    await askCompatiblePartners(audienceId);
+  } catch (err) {
+    return toState(err);
+  }
+  revalidatePath(`/audiences/${audienceId}`);
+  return { ok: true };
+}
+
+/** §8.1 for every Partner that can evaluate the audience's current version. */
+async function askCompatiblePartners(audienceId: string): Promise<void> {
+  const matches = await api<{
+    items: { partner_org_id: string; status: string; reach_estimate: unknown }[];
+  }>(`/v1/audiences/${audienceId}/partner-matches`);
+  const ids = matches.items
+    .filter((m) => m.status !== 'INCOMPATIBLE' && !m.reach_estimate)
+    .map((m) => m.partner_org_id);
+  if (ids.length === 0) return;
+  await api(`/v1/audiences/${audienceId}/reach-estimates`, {
+    method: 'POST',
+    body: { partner_org_ids: ids },
+  });
 }
 
 export async function updateAudienceRules(
@@ -156,6 +196,7 @@ export async function updateAudienceRules(
   return { ok: true };
 }
 
+/** Finish a draft (§6), and ask the Partners that can evaluate it (§8.1). */
 export async function publishAudience(
   audienceId: string,
   _prev: ActionState,
@@ -166,38 +207,14 @@ export async function publishAudience(
   } catch (err) {
     return toState(err);
   }
-
-  revalidatePath(`/audiences/${audienceId}`);
-  revalidatePath('/audiences');
-  return { ok: true };
-}
-
-/**
- * §8.1: ask selected Partners to evaluate the rules locally.
- *
- * What comes back is a bucket, computed inside each Partner. Oolix never
- * receives the count behind it, which is why this can be offered as a
- * self-serve button at all.
- */
-export async function requestReachEstimates(
-  audienceId: string,
-  _prev: ActionState,
-  fd: FormData,
-): Promise<ActionState> {
-  const partnerIds = fd.getAll('partner_org_ids').map(String).filter(Boolean);
-  if (partnerIds.length === 0) return { error: 'Select at least one Partner.' };
-
   try {
-    await api(`/v1/audiences/${audienceId}/reach-estimates`, {
-      method: 'POST',
-      body: { partner_org_ids: partnerIds },
-    });
-  } catch (err) {
-    return toState(err);
+    await askCompatiblePartners(audienceId);
+  } catch {
+    // Finished either way; the page offers "Ask for estimates" again.
   }
 
   revalidatePath(`/audiences/${audienceId}`);
-  revalidatePath(`/audiences/${audienceId}/matches`);
+  revalidatePath('/audiences');
   return { ok: true };
 }
 
@@ -277,7 +294,7 @@ export async function setMarketplaceListing(
 }
 
 export async function publishCapabilities(_prev: ActionState, fd: FormData): Promise<ActionState> {
-  const selected = fd.getAll('attributes').map(String).filter(Boolean);
+  const selected = fd.getAll('attribute_keys').map(String).filter(Boolean);
   if (selected.length === 0) {
     return { error: 'Select at least one attribute you can evaluate.' };
   }

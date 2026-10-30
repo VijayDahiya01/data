@@ -16,6 +16,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { api, ApiError, NotAuthenticatedError } from './api';
+import { defaultPayout } from './payout-defaults';
 
 export interface ActionState {
   error?: string;
@@ -105,9 +106,16 @@ export async function createOrganization(_prev: ActionState, fd: FormData): Prom
 
 /* --- campaign builder (§40) ------------------------------------------------ */
 
-/** §40.1, §40.2, §40.8 -- objective, basics and the outcome definition. */
+/**
+ * §40.1, §40.2, §40.8 and v6 §9 step 3 -- objective, basics, the outcome
+ * definition and the audience.
+ *
+ * The form keeps everything but five fields under "More options", with
+ * defaults; the same defaults apply here to anything left blank, so a field a
+ * Buyer never opened cannot be the reason a draft fails.
+ */
 export async function createCampaign(_prev: ActionState, fd: FormData): Promise<ActionState> {
-  const objective = str(fd, 'objective');
+  const objective = str(fd, 'objective') || 'QUALIFIED_LEADS';
   const budgetMinor = toMinor(str(fd, 'budget_major'));
   if (!Number.isFinite(budgetMinor) || budgetMinor <= 0) {
     return {
@@ -120,6 +128,16 @@ export async function createCampaign(_prev: ActionState, fd: FormData): Promise<
   // settled or disputed, so the API rejects it. Build it only when it applies.
   const needsLeadDefinition = objective === 'QUALIFIED_LEADS' || objective === 'CONVERSIONS';
   const qualified = all(fd, 'qualified_statuses');
+  const category = str(fd, 'category') || 'general';
+  const geographies = str(fd, 'geographies')
+    .split(',')
+    .map((g) => g.trim().toUpperCase())
+    .filter(Boolean);
+  const startAt = str(fd, 'start_at') ? new Date(str(fd, 'start_at')) : new Date();
+  const endAt = str(fd, 'end_at')
+    ? new Date(str(fd, 'end_at'))
+    : new Date(startAt.getTime() + 60 * 86_400_000);
+  const audienceGroupId = str(fd, 'audience_group_id');
 
   let campaignId: string;
   try {
@@ -130,15 +148,14 @@ export async function createCampaign(_prev: ActionState, fd: FormData): Promise<
         name: str(fd, 'name'),
         objective,
         brand_id: str(fd, 'brand_id'),
-        category: str(fd, 'category'),
-        purpose_id: str(fd, 'purpose_id'),
+        category,
+        purpose_id:
+          str(fd, 'purpose_id') ||
+          `${category.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${objective.toLowerCase()}`,
         budget: { amount_minor: budgetMinor, currency: str(fd, 'currency') || 'INR' },
-        start_at: new Date(str(fd, 'start_at')).toISOString(),
-        end_at: new Date(str(fd, 'end_at')).toISOString(),
-        geographies: str(fd, 'geographies')
-          .split(',')
-          .map((g) => g.trim())
-          .filter(Boolean),
+        start_at: startAt.toISOString(),
+        end_at: endAt.toISOString(),
+        geographies: geographies.length ? geographies : ['IN'],
         ...(opt(fd, 'landing_url') ? { landing_url: opt(fd, 'landing_url') } : {}),
         ...(needsLeadDefinition
           ? {
@@ -159,6 +176,20 @@ export async function createCampaign(_prev: ActionState, fd: FormData): Promise<
     campaignId = created.id;
   } catch (err) {
     return toState(err);
+  }
+
+  if (audienceGroupId) {
+    try {
+      await api(`/v1/campaigns/${campaignId}/audience-link`, {
+        method: 'POST',
+        // §9 freezes the audience's current version and rule hash now.
+        body: { audience_group_id: audienceGroupId },
+        idempotencyKey: `link-${campaignId}-${audienceGroupId}`,
+      });
+    } catch {
+      // Not worth failing a saved draft over: the Partners screen asks for
+      // the audience again whenever none is linked.
+    }
   }
 
   redirect(`/campaigns/${campaignId}/creative`);
@@ -252,6 +283,122 @@ export async function submitCampaign(
   redirect(`/campaigns/${campaignId}`);
 }
 
+interface MatchForRequest {
+  partner_org_id: string;
+  partner_name: string;
+  status: string;
+  channels: { channel: string; status: string }[];
+  reach_estimate: { reach_estimate_id: string; status: string } | null;
+}
+
+/**
+ * v6 §9 steps 5-7 and 10 in one press: a request to every ticked Partner,
+ * then submit.
+ *
+ * Each new request takes the defaults a Buyer would otherwise set one Partner
+ * at a time: the Partner's website if it offers one (else its first open
+ * channel), all its active placements, at most 2 impressions a person a day,
+ * every ready version of the ad, the estimate the Buyer was looking at (§9
+ * freezes it onto the request), no audience expansion, and the payment basis
+ * for the campaign's objective (payout-defaults.ts). The budget is what the
+ * Buyer left in the box.
+ *
+ * Partners already on the campaign are not requested twice, so after a failure
+ * part-way through, pressing again carries on where it stopped.
+ */
+export async function submitWithPartners(
+  campaignId: string,
+  _prev: ActionState,
+  fd: FormData,
+): Promise<ActionState> {
+  const ticked = all(fd, 'partner_org_ids');
+
+  try {
+    const campaign = await api<{
+      objective: string;
+      partner_requests: { partner: { id: string } }[];
+    }>(`/v1/campaigns/${campaignId}`);
+    const already = new Set(campaign.partner_requests.map((r) => r.partner.id));
+    const fresh = ticked.filter((id) => !already.has(id));
+    if (fresh.length === 0 && already.size === 0) return { error: 'Tick at least one Partner.' };
+
+    if (fresh.length > 0) {
+      const link = await api<{
+        audience: { audience_group_id: string; audience_version: number } | null;
+      }>(`/v1/campaigns/${campaignId}/audience-link`);
+      if (!link.audience) return { error: 'Choose who the campaign is for first.' };
+
+      const [matches, creatives] = await Promise.all([
+        api<{ items: MatchForRequest[] }>(
+          `/v1/audiences/${link.audience.audience_group_id}/partner-matches?version=${link.audience.audience_version}`,
+        ),
+        api<{ items: { creative_version_id: string; status: string }[] }>(
+          `/v1/creatives?campaign_id=${campaignId}`,
+        ),
+      ]);
+      const creativeIds = creatives.items
+        .filter((c) => c.status === 'READY')
+        .map((c) => c.creative_version_id);
+      if (creativeIds.length === 0) return { error: 'Add your ad first.' };
+      const payout = defaultPayout(campaign.objective);
+
+      for (const partnerId of fresh) {
+        const match = matches.items.find(
+          (m) => m.partner_org_id === partnerId && m.status !== 'INCOMPATIBLE',
+        );
+        if (!match) {
+          return { error: 'A ticked Partner can no longer reach this audience. Reload the page.' };
+        }
+        const allocationMinor = toMinor(str(fd, `budget_${partnerId}`));
+        if (!Number.isFinite(allocationMinor) || allocationMinor <= 0) {
+          return { error: `Give ${match.partner_name} a budget greater than zero.` };
+        }
+        const open = match.channels.filter((c) => c.status === 'AVAILABLE').map((c) => c.channel);
+        const channel = open.includes('PARTNER_WEB') ? 'PARTNER_WEB' : open[0];
+        if (!channel) return { error: `${match.partner_name} has no channel open to campaigns.` };
+        const placements = await api<{ items: { placement_id: string }[] }>(
+          `/v1/catalogue/partners/${partnerId}/placements`,
+        );
+
+        await api(`/v1/campaigns/${campaignId}/partner-requests`, {
+          method: 'POST',
+          idempotencyKey: randomUUID(),
+          body: {
+            partner_org_id: partnerId,
+            ...(match.reach_estimate?.status === 'READY'
+              ? { reach_estimate_id: match.reach_estimate.reach_estimate_id }
+              : {}),
+            channels: [
+              {
+                channel,
+                placement_ids: placements.items.map((p) => p.placement_id),
+                allocation_minor: allocationMinor,
+                frequency_cap: { max_impressions: 2, window: 'P1D' },
+              },
+            ],
+            creative_version_ids: creativeIds,
+            audience_expansion_allowed: false,
+            partner_payout: payout,
+          },
+        });
+      }
+    }
+
+    await api(`/v1/campaigns/${campaignId}/submit`, {
+      method: 'POST',
+      // §53 makes the key MANDATORY here: a retried submit must not start a
+      // second review.
+      idempotencyKey: randomUUID(),
+      body: {},
+    });
+  } catch (err) {
+    return toState(err);
+  }
+
+  revalidatePath(`/campaigns/${campaignId}`);
+  redirect(`/campaigns/${campaignId}`);
+}
+
 /* --- creative (§40.7, §70, §93) -------------------------------------------- */
 
 /**
@@ -327,7 +474,8 @@ export async function uploadCreative(
   }
 
   revalidatePath(`/campaigns/${campaignId}/creative`);
-  return { ok: true };
+  // The ad was the one thing between the Buyer and their Partners.
+  redirect(`/campaigns/${campaignId}/audience`);
 }
 
 /* --- Partner decisions (§41) ----------------------------------------------- */

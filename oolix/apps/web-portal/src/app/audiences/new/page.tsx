@@ -23,9 +23,9 @@ export default async function NewAudiencePage() {
     <Shell ctx={ctx}>
       <PageHeader
         title="New audience"
-        lead="Pick the attributes that describe who you want to reach."
+        lead="Describe who you want to reach. The Partners who can reach them appear when you save."
         actions={
-          <Link className="btn-secondary" href="/audiences">
+          <Link className="btn btn-secondary" href="/audiences">
             Cancel
           </Link>
         }

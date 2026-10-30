@@ -9,7 +9,7 @@ import type { ActionState } from '@/lib/actions';
 import {
   linkCampaignAudience,
   publishAudience,
-  requestReachEstimates,
+  requestAllEstimates,
   unlinkCampaignAudience,
   updateAudienceRules,
 } from '@/lib/actions-audience';
@@ -31,25 +31,17 @@ export function AudienceVersionActions({
   audienceId: string;
   versionStatus: string;
 }) {
-  if (versionStatus !== 'DRAFT') {
-    return (
-      <p className="faint small">These settings are finalized and can be used in a campaign.</p>
-    );
-  }
+  if (versionStatus !== 'DRAFT') return null;
 
   const action = publishAudience.bind(null, audienceId);
 
   return (
     <ActionForm action={action}>
-      {(state: ActionState) => (
-        <>
-          {state.ok ? <div className="notice notice-info">Audience finalized.</div> : null}
-          <SubmitButton pendingLabel="Finalizing…">Finalize Audience</SubmitButton>
-          <div className="field-hint">
-            Finalizing locks these audience settings so they can be used in a campaign. It does not
-            send anything to a Data Partner.
-          </div>
-        </>
+      {() => (
+        <div className="btn-row">
+          <SubmitButton pendingLabel="Finishing…">Finish and find Partners</SubmitButton>
+          <span className="faint small">This is a draft: no Partner sees it yet.</span>
+        </div>
       )}
     </ActionForm>
   );
@@ -82,7 +74,7 @@ export function EditInUseConfirm({
         campaigns. Existing campaigns will continue using their current audience settings.
       </p>
       <div className="btn-row">
-        <a className="btn-secondary" href="./">
+        <a className="btn btn-secondary" href="./">
           Cancel
         </a>
         <button type="button" className="btn-primary" onClick={() => setConfirmed(true)}>
@@ -117,55 +109,18 @@ export function EditAudienceRulesForm({
 }
 
 /**
- * §8.1: ask compatible Partners to evaluate the rules locally.
- *
- * INCOMPATIBLE Partners are not offered. Asking one would spend their query on
- * a question their data cannot answer, and §7 already knows the answer is no.
+ * §8.1: ask every compatible Partner not yet asked to evaluate the rules
+ * locally. INCOMPATIBLE Partners are never asked: §7 already knows their data
+ * cannot answer.
  */
-export function RequestEstimatesForm({
-  audienceId,
-  partners,
-}: {
-  audienceId: string;
-  partners: { partner_org_id: string; partner_name: string; status: string }[];
-}) {
-  const eligible = partners.filter((p) => p.status !== 'INCOMPATIBLE');
-  const action = requestReachEstimates.bind(null, audienceId);
-
-  if (eligible.length === 0) {
-    return (
-      <p className="faint small">
-        No compatible Partner yet. Relax a required rule, or check back once more Partners publish
-        their capabilities.
-      </p>
-    );
-  }
-
+export function AskPartnersForm({ audienceId }: { audienceId: string }) {
+  const action = requestAllEstimates.bind(null, audienceId);
   return (
     <ActionForm action={action}>
-      {(state: ActionState) => (
-        <>
-          {state.ok ? (
-            <div className="notice notice-info">
-              Requested. Each Partner&apos;s Agent evaluates the rules locally and returns a range;
-              this can take a few minutes.
-            </div>
-          ) : null}
-          <fieldset>
-            <legend>Ask for a reach estimate</legend>
-            {eligible.map((p) => (
-              <label key={p.partner_org_id} className="check">
-                <input type="checkbox" name="partner_org_ids" value={p.partner_org_id} />
-                {p.partner_name}
-              </label>
-            ))}
-          </fieldset>
-          <SubmitButton pendingLabel="Requesting…">Request estimates</SubmitButton>
-          <div className="field-hint">
-            The Partner runs these rules inside their own systems and returns a{' '}
-            <strong>range</strong>. Oolix never receives the number behind it.
-          </div>
-        </>
+      {() => (
+        <SubmitButton className="btn-secondary" pendingLabel="Asking…">
+          Ask for estimates
+        </SubmitButton>
       )}
     </ActionForm>
   );

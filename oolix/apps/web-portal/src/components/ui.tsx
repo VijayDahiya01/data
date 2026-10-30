@@ -7,6 +7,7 @@
  * one place means it is done the same way everywhere.
  */
 import type { ReactNode } from 'react';
+import { REACH_LABELS } from './reach';
 
 export function PageHeader({
   title,
@@ -184,16 +185,6 @@ export function Money({
 }) {
   return <span style={{ fontVariantNumeric: 'tabular-nums' }}>{money(minor, currency)}</span>;
 }
-
-const REACH_LABELS: Record<string, string> = {
-  UNDER_10K: 'under 10K',
-  '10K_50K': '10K – 50K',
-  '50K_100K': '50K – 100K',
-  '100K_250K': '100K – 250K',
-  '250K_500K': '250K – 500K',
-  '500K_1M': '500K – 1M',
-  OVER_1M: 'over 1M',
-};
 
 /**
  * §72: reach is ALWAYS a bucket. There is deliberately no component that

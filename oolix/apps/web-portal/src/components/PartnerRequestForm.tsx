@@ -66,7 +66,7 @@ export function PartnerRequestForm({
           <input type="hidden" name="partner_org_id" value={segment.partner.id} />
 
           <div className="field">
-            <label>Step 5 · Channels</label>
+            <label>Channels</label>
             {selectable.map((c) => (
               <label className="check" key={c.type}>
                 <input
@@ -119,9 +119,7 @@ export function PartnerRequestForm({
 
           <div className="field-row">
             <div className="field">
-              <label htmlFor={`alloc-${segment.segment_id}`}>
-                Step 6 · Budget for this Partner
-              </label>
+              <label htmlFor={`alloc-${segment.segment_id}`}>Budget for this Partner</label>
               <input
                 id={`alloc-${segment.segment_id}`}
                 name="allocation_major"

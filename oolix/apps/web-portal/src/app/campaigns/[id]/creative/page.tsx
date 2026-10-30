@@ -1,16 +1,19 @@
 /**
- * Campaign builder — step 7 (§40.7, §70).
+ * Campaign builder — screen 2 of 3: the ad (§40.7, §70).
  *
  * Placed before Partner selection because §70 binds a Partner's approval to a
  * specific creative version and its content hash: a request cannot name a
  * creative that does not exist yet.
+ *
+ * Once an ad is ready the screen leads with it and "Continue"; uploading
+ * another version is still there, folded away, for the Buyer who wants one.
  */
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireContext } from '@/lib/nav-entry';
 import { apiOptional } from '@/lib/api';
 import { Shell } from '@/components/Shell';
-import { Card, Empty, Notice, PageHeader, StatusBadge } from '@/components/ui';
+import { Card, PageHeader, StatusBadge } from '@/components/ui';
 import { WizardSteps } from '@/components/WizardSteps';
 import { CreativeUploadForm } from '@/components/CreativeUploadForm';
 
@@ -44,60 +47,53 @@ export default async function CreativeStepPage({ params }: { params: Promise<{ i
 
   return (
     <Shell ctx={ctx}>
-      <PageHeader title={campaign.name} lead="Step 7 · Creative" />
+      <PageHeader title={campaign.name} lead="Your ad" />
       <WizardSteps current={2} />
 
-      <Card title="Upload a creative version">
-        <CreativeUploadForm campaignId={id} landingUrl={campaign.landing_url} />
-      </Card>
+      {items.length === 0 ? (
+        <Card>
+          <CreativeUploadForm campaignId={id} landingUrl={campaign.landing_url} />
+        </Card>
+      ) : (
+        <>
+          <Card title="Your ad">
+            <ul className="plain-list">
+              {items.map((c) => (
+                <li key={c.creative_version_id}>
+                  Version {c.version} · {c.type === 'IMAGE' ? 'image' : 'card'}
+                  {c.headline ? <span className="muted"> · {c.headline}</span> : null}{' '}
+                  <StatusBadge status={c.status} />
+                </li>
+              ))}
+            </ul>
+            <div className="btn-row">
+              {ready.length ? (
+                <Link className="btn btn-primary" href={`/campaigns/${id}/audience`}>
+                  Continue to Partners
+                </Link>
+              ) : (
+                <span className="faint">Your ad is still being checked. Reload in a moment.</span>
+              )}
+            </div>
+          </Card>
 
-      <Card title={`Versions (${items.length})`}>
-        {items.length === 0 ? (
-          <Empty>Nothing uploaded yet. A Partner request needs at least one ready version.</Empty>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Version</th>
-                  <th>Format</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((c) => (
-                  <tr key={c.creative_version_id}>
-                    <td>v{c.version}</td>
-                    <td className="muted">{c.type.replaceAll('_', ' ').toLowerCase()}</td>
-                    <td>
-                      <StatusBadge status={c.status} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+          <details className="more">
+            <summary>Upload a new version</summary>
+            <p className="faint small" style={{ marginTop: 0 }}>
+              Partners approve one exact version, so a new one is reviewed again.
+            </p>
+            <CreativeUploadForm
+              campaignId={id}
+              landingUrl={campaign.landing_url}
+              submitLabel="Save new version and continue"
+            />
+          </details>
+        </>
+      )}
 
-      <Notice tone="plain">
-        Each upload is a new version, and a Partner approves a specific one. Replacing an image
-        after approval does not change what runs on their property — it creates a version they have
-        not agreed to.
-      </Notice>
-
-      <div className="btn-row">
-        <Link
-          className={ready.length ? 'btn btn-primary' : 'btn'}
-          href={ready.length ? `/campaigns/${id}/audience` : `/campaigns/${id}/creative`}
-          aria-disabled={ready.length === 0}
-        >
-          Continue to audiences
-        </Link>
-        {ready.length === 0 ? (
-          <span className="faint">Upload at least one creative to continue.</span>
-        ) : null}
-      </div>
+      <p className="faint">
+        <Link href="/campaigns">Save and finish later</Link>
+      </p>
     </Shell>
   );
 }
