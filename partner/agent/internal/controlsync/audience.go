@@ -88,8 +88,24 @@ func (s *Syncer) RunAudienceWorker(
 }
 
 // estimateWait is how long the API may hold a request for estimate work: the
-// long poll. It stays under the client's 30-second timeout.
+// long poll. The API holds one for 25 seconds at most.
 const estimateWait = 20 * time.Second
+
+// longPollClient is the client the long poll goes out on: c with a timeout
+// that outlasts estimateWait. Every other call to Oolix gives up after 10
+// seconds, and a poll cut off there failed whenever nobody asked for an
+// estimate, so the Agent paused before asking again and a Buyer's estimate
+// waited for the pause. It shares c's transport, so it dials the same way --
+// through the enclave's host, for a hosted Agent.
+func longPollClient(c *http.Client) *http.Client {
+	const margin = 10 * time.Second
+	if c.Timeout == 0 || c.Timeout >= estimateWait+margin {
+		return c
+	}
+	poll := *c
+	poll.Timeout = estimateWait + margin
+	return &poll
+}
 
 // pollEstimates asks for estimate requests with a long poll: the API holds the
 // request until one arrives, so a Buyer's estimate takes a second or two
@@ -279,7 +295,7 @@ func (s *Syncer) pullEstimateRequests(ctx context.Context, wait time.Duration) (
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("X-Agent-Id", s.opts.AgentID)
 
-	res, err := s.client.Do(req)
+	res, err := s.pollClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

@@ -69,11 +69,14 @@ type HeartbeatReply struct {
 
 // Syncer maintains the Agent's verified view of what it may serve.
 type Syncer struct {
-	opts     Options
-	client   *http.Client
-	log      *slog.Logger
-	tokens   *tokenSource
-	snapshot atomic.Pointer[addecision.ConfigSnapshot]
+	opts   Options
+	client *http.Client
+	// pollClient carries the estimate long poll, which outlasts client's
+	// timeout (longPollClient).
+	pollClient *http.Client
+	log        *slog.Logger
+	tokens     *tokenSource
+	snapshot   atomic.Pointer[addecision.ConfigSnapshot]
 
 	jwksMu  sync.RWMutex
 	jwks    *jose.JSONWebKeySet
@@ -105,7 +108,7 @@ func New(opts Options) *Syncer {
 		opts.Interval = 30 * time.Second
 	}
 
-	s := &Syncer{opts: opts, client: client, log: log}
+	s := &Syncer{opts: opts, client: client, pollClient: longPollClient(client), log: log}
 	s.tokens = &tokenSource{
 		client:   client,
 		baseURL:  opts.APIBaseURL,
